@@ -77,6 +77,21 @@ function LoginWrapper() {
   return <LoginPage />;
 }
 
+function RoleRouteGuard({ role, children }) {
+  const { currentRole, isAuthenticated } = useERP();
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (currentRole !== role) {
+    return <Navigate to={`/${currentRole}`} replace />;
+  }
+
+  return children;
+}
+
 export default function App() {
   return (
     <ERPProvider>
@@ -89,55 +104,55 @@ export default function App() {
           {/* Default Route redirects to active role */}
           <Route index element={<RoleRedirect />} />
 
-          {/* Student Routes */}
-          <Route path="student" element={<StudentDashboard />} />
-          <Route path="student/attendance" element={<StudentAttendance />} />
-          <Route path="student/timetable" element={<StudentTimetable />} />
-          <Route path="student/assignments" element={<StudentAssignments />} />
-          <Route path="student/requests" element={<StudentRequests />} />
-          <Route path="student/notices" element={<StudentNotices />} />
-          <Route path="student/profile" element={<StudentProfile />} />
+          {/* Student Routes - Only Student Window can open */}
+          <Route path="student" element={<RoleRouteGuard role="student"><StudentDashboard /></RoleRouteGuard>} />
+          <Route path="student/attendance" element={<RoleRouteGuard role="student"><StudentAttendance /></RoleRouteGuard>} />
+          <Route path="student/timetable" element={<RoleRouteGuard role="student"><StudentTimetable /></RoleRouteGuard>} />
+          <Route path="student/assignments" element={<RoleRouteGuard role="student"><StudentAssignments /></RoleRouteGuard>} />
+          <Route path="student/requests" element={<RoleRouteGuard role="student"><StudentRequests /></RoleRouteGuard>} />
+          <Route path="student/notices" element={<RoleRouteGuard role="student"><StudentNotices /></RoleRouteGuard>} />
+          <Route path="student/profile" element={<RoleRouteGuard role="student"><StudentProfile /></RoleRouteGuard>} />
 
-          {/* TG / Mentor Routes */}
-          <Route path="tg" element={<TgDashboard />} />
-          <Route path="tg/students" element={<TgMyStudents />} />
-          <Route path="tg/requests" element={<TgRequests />} />
-          <Route path="tg/attendance" element={<TgRequests />} />
-          <Route path="tg/leave" element={<TgRequests />} />
-          <Route path="tg/notices" element={<TgNotices />} />
+          {/* TG / Mentor Routes - Only TG Window can open */}
+          <Route path="tg" element={<RoleRouteGuard role="tg"><TgDashboard /></RoleRouteGuard>} />
+          <Route path="tg/students" element={<RoleRouteGuard role="tg"><TgMyStudents /></RoleRouteGuard>} />
+          <Route path="tg/requests" element={<RoleRouteGuard role="tg"><TgRequests /></RoleRouteGuard>} />
+          <Route path="tg/attendance" element={<RoleRouteGuard role="tg"><TgRequests /></RoleRouteGuard>} />
+          <Route path="tg/leave" element={<RoleRouteGuard role="tg"><TgRequests /></RoleRouteGuard>} />
+          <Route path="tg/notices" element={<RoleRouteGuard role="tg"><TgNotices /></RoleRouteGuard>} />
 
-          {/* HOD Routes */}
-          <Route path="hod" element={<HodDashboard />} />
-          <Route path="hod/teachers" element={<HodTeacherManagement />} />
-          <Route path="hod/classes" element={<HodClassesSections />} />
-          <Route path="hod/students" element={<HodStudents />} />
-          <Route path="hod/requests" element={<HodRequestsCentral />} />
-          <Route path="hod/approvals" element={<HodAttendanceApproval />} />
-          <Route path="hod/attendance" element={<HodAttendanceApproval />} />
-          <Route path="hod/leave" element={<HodLeaveApproval />} />
-          <Route path="hod/timetable" element={<HodTimetableGenerator />} />
-          <Route path="hod/monitoring" element={<HodTimetableMonitoring />} />
-          <Route path="hod/notices" element={<HodNotices />} />
-          <Route path="hod/reports" element={<HodReports />} />
+          {/* HOD Routes - Only HOD Window can open */}
+          <Route path="hod" element={<RoleRouteGuard role="hod"><HodDashboard /></RoleRouteGuard>} />
+          <Route path="hod/teachers" element={<RoleRouteGuard role="hod"><HodTeacherManagement /></RoleRouteGuard>} />
+          <Route path="hod/classes" element={<RoleRouteGuard role="hod"><HodClassesSections /></RoleRouteGuard>} />
+          <Route path="hod/students" element={<RoleRouteGuard role="hod"><HodStudents /></RoleRouteGuard>} />
+          <Route path="hod/requests" element={<RoleRouteGuard role="hod"><HodRequestsCentral /></RoleRouteGuard>} />
+          <Route path="hod/approvals" element={<RoleRouteGuard role="hod"><HodAttendanceApproval /></RoleRouteGuard>} />
+          <Route path="hod/attendance" element={<RoleRouteGuard role="hod"><HodAttendanceApproval /></RoleRouteGuard>} />
+          <Route path="hod/leave" element={<RoleRouteGuard role="hod"><HodLeaveApproval /></RoleRouteGuard>} />
+          <Route path="hod/timetable" element={<RoleRouteGuard role="hod"><HodTimetableGenerator /></RoleRouteGuard>} />
+          <Route path="hod/monitoring" element={<RoleRouteGuard role="hod"><HodTimetableMonitoring /></RoleRouteGuard>} />
+          <Route path="hod/notices" element={<RoleRouteGuard role="hod"><HodNotices /></RoleRouteGuard>} />
+          <Route path="hod/reports" element={<RoleRouteGuard role="hod"><HodReports /></RoleRouteGuard>} />
 
-          {/* Teacher Routes */}
-          <Route path="teacher" element={<TeacherDashboard />} />
-          <Route path="teacher/attendance" element={<TeacherMarkAttendance />} />
-          <Route path="teacher/lectures" element={<TeacherLectures />} />
-          <Route path="teacher/assignments" element={<TeacherAssignments />} />
-          <Route path="teacher/tests" element={<TeacherTests />} />
-          <Route path="teacher/students" element={<TeacherStudents />} />
-          <Route path="teacher/classes" element={<TeacherClasses />} />
-          <Route path="teacher/timetable" element={<TeacherTimetable />} />
-          <Route path="teacher/notices" element={<TeacherNotices />} />
+          {/* Teacher Routes - Only Teacher Window can open */}
+          <Route path="teacher" element={<RoleRouteGuard role="teacher"><TeacherDashboard /></RoleRouteGuard>} />
+          <Route path="teacher/attendance" element={<RoleRouteGuard role="teacher"><TeacherMarkAttendance /></RoleRouteGuard>} />
+          <Route path="teacher/lectures" element={<RoleRouteGuard role="teacher"><TeacherLectures /></RoleRouteGuard>} />
+          <Route path="teacher/assignments" element={<RoleRouteGuard role="teacher"><TeacherAssignments /></RoleRouteGuard>} />
+          <Route path="teacher/tests" element={<RoleRouteGuard role="teacher"><TeacherTests /></RoleRouteGuard>} />
+          <Route path="teacher/students" element={<RoleRouteGuard role="teacher"><TeacherStudents /></RoleRouteGuard>} />
+          <Route path="teacher/classes" element={<RoleRouteGuard role="teacher"><TeacherClasses /></RoleRouteGuard>} />
+          <Route path="teacher/timetable" element={<RoleRouteGuard role="teacher"><TeacherTimetable /></RoleRouteGuard>} />
+          <Route path="teacher/notices" element={<RoleRouteGuard role="teacher"><TeacherNotices /></RoleRouteGuard>} />
 
-          {/* Admin Routes */}
-          <Route path="admin" element={<AdminDashboard />} />
-          <Route path="admin/students" element={<AdminStudents />} />
-          <Route path="admin/teachers" element={<AdminTeachers />} />
-          <Route path="admin/departments" element={<AdminDepartments />} />
-          <Route path="admin/timetable" element={<HodTimetableGenerator />} />
-          <Route path="admin/settings" element={<AdminSettings />} />
+          {/* Admin Routes - Only Admin Window can open */}
+          <Route path="admin" element={<RoleRouteGuard role="admin"><AdminDashboard /></RoleRouteGuard>} />
+          <Route path="admin/students" element={<RoleRouteGuard role="admin"><AdminStudents /></RoleRouteGuard>} />
+          <Route path="admin/teachers" element={<RoleRouteGuard role="admin"><AdminTeachers /></RoleRouteGuard>} />
+          <Route path="admin/departments" element={<RoleRouteGuard role="admin"><AdminDepartments /></RoleRouteGuard>} />
+          <Route path="admin/timetable" element={<RoleRouteGuard role="admin"><HodTimetableGenerator /></RoleRouteGuard>} />
+          <Route path="admin/settings" element={<RoleRouteGuard role="admin"><AdminSettings /></RoleRouteGuard>} />
 
           {/* Catch-all */}
           <Route path="*" element={<RoleRedirect />} />

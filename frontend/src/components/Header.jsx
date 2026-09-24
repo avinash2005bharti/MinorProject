@@ -100,42 +100,63 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
           </div>
         </div>
 
-        {/* Center: Live Role Switcher (Matching Stitch Pill Bar) */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            backgroundColor: 'var(--surface-low)',
-            padding: '3px',
-            borderRadius: 'var(--radius-full)',
-            border: '1px solid var(--border-subtle)',
-            overflowX: 'auto',
-            maxWidth: '100%'
-          }}
-          id="rolePillContainer"
-        >
-          {rolePills.map((p) => {
-            const isActive = currentRole === p.id;
-            return (
-              <button
-                key={p.id}
-                onClick={() => switchRole(p.id)}
-                style={{
-                  padding: '0.35rem 0.85rem',
-                  borderRadius: 'var(--radius-full)',
-                  fontSize: '12px',
-                  fontWeight: 600,
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.15s ease',
-                  backgroundColor: isActive ? 'var(--primary)' : 'transparent',
-                  color: isActive ? '#FFFFFF' : 'var(--text-secondary)',
-                  boxShadow: isActive ? 'var(--shadow-sm)' : 'none'
-                }}
-              >
-                {p.label}
-              </button>
-            );
-          })}
+        {/* Center: Fixed Role Window Session Indicator (Restricted to Logged-in Role) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div className="fixed-role-window-badge">
+            <span style={{ fontSize: '15px' }}>
+              {currentRole === 'student' && '🎓'}
+              {currentRole === 'teacher' && '👨‍🏫'}
+              {currentRole === 'tg' && '🛡️'}
+              {currentRole === 'hod' && '🏛️'}
+              {currentRole === 'admin' && '⚙️'}
+            </span>
+            <div className="fixed-role-text">
+              <span className="fixed-role-title">
+                {currentRole === 'student' && 'Student Portal'}
+                {currentRole === 'teacher' && 'Faculty Portal'}
+                {currentRole === 'tg' && 'Mentor / TG Desk'}
+                {currentRole === 'hod' && 'HOD Administration'}
+                {currentRole === 'admin' && 'System Administrator'}
+              </span>
+              <span className="fixed-role-sub">
+                {currentRole === 'student' && `${currentUser?.section || 'CSE-3A'} • B.Tech CSE`}
+                {currentRole === 'teacher' && 'Dept. of CSE • Academic Faculty'}
+                {currentRole === 'tg' && 'Teacher Guardian • Section 3A'}
+                {currentRole === 'hod' && 'Dept. of CSE • Head of Dept'}
+                {currentRole === 'admin' && 'CampusFlow ERP Infrastructure'}
+              </span>
+            </div>
+            <span
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '3px',
+                padding: '0.15rem 0.45rem',
+                borderRadius: 'var(--radius-full)',
+                backgroundColor: 'var(--primary-container)',
+                color: 'var(--primary)',
+                fontSize: '10px',
+                fontWeight: 700,
+                marginLeft: '0.25rem'
+              }}
+              title="This window is strictly restricted to your logged in role"
+            >
+              <ShieldCheck size={11} />
+              <span>Role Session</span>
+            </span>
+          </div>
+
+          {/* Switch Role Action -> Redirects to Login with role selection */}
+          <button
+            onClick={() => {
+              logout();
+              navigate('/login');
+            }}
+            className="switch-role-btn"
+            title="Sign out and switch to another role"
+          >
+            <span>Switch Role</span>
+          </button>
         </div>
 
         {/* Right: Quick Telemetry, Notification Bell & Profile */}

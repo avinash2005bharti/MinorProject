@@ -957,3 +957,287 @@ textarea.input-field {
   color: var(--text-primary);
 }
 
+/* ==========================================================================
+   Split-Screen Login Page Styles
+   Left Half: Logos, College Name, Branding & Accreditations
+   Right Half: Authentication Form, Role Selectors & Fast Pass
+   ========================================================================== */
+
+.split-login-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background-color: var(--bg-canvas);
+  position: relative;
+  overflow-x: hidden;
+}
+
+@media (max-width: 1023px) {
+  .split-login-container {
+    flex-direction: column;
+  }
+}
+
+/* Brand Half (Left Half) */
+.split-login-brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 3rem 2.5rem;
+  background: linear-gradient(135deg, #071329 0%, #0c2049 45%, #1d4ed8 100%);
+  color: #FFFFFF;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+@media (min-width: 1024px) {
+  .split-login-brand {
+    width: 50%;
+    min-height: 100vh;
+    padding: 3.5rem 3.5rem;
+    position: sticky;
+    top: 0;
+  }
+}
+
+@media (max-width: 1023px) {
+  .split-login-brand {
+    width: 100%;
+    padding: 2.25rem 1.5rem;
+  }
+}
+
+/* Background Ambient Orbs */
+.split-login-brand::before {
+  content: '';
+  position: absolute;
+  top: -120px;
+  right: -120px;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.35) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.split-login-brand::after {
+  content: '';
+  position: absolute;
+  bottom: -150px;
+  left: -150px;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.25) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+/* Brand Logo Emblem Box */
+.brand-emblem-box {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-2xl);
+  background-color: #FFFFFF;
+  padding: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 16px 32px -8px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.brand-emblem-box:hover {
+  transform: translateY(-2px);
+}
+
+.brand-emblem-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Accreditation Pills */
+.accreditation-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 11px;
+  font-weight: 600;
+  color: #E2E8F0;
+  letter-spacing: 0.02em;
+}
+
+/* Glass Feature Card */
+.brand-feature-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.brand-feature-card:hover {
+  background: rgba(255, 255, 255, 0.11);
+  transform: translateX(4px);
+}
+
+.brand-feature-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #93C5FD;
+  flex-shrink: 0;
+}
+
+/* Form Half (Right Half) */
+.split-login-form-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1.5rem;
+  background-color: var(--bg-canvas);
+  box-sizing: border-box;
+}
+
+@media (min-width: 1024px) {
+  .split-login-form-side {
+    width: 50%;
+    min-height: 100vh;
+    padding: 3.5rem 3rem;
+  }
+}
+
+.split-form-wrapper {
+  max-width: 480px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Smart SSO Role Switcher Buttons on Login */
+.login-role-tab {
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.18s ease;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.login-role-tab.active {
+  background-color: var(--primary);
+  color: #FFFFFF;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.25);
+}
+
+.login-role-tab:not(.active) {
+  background-color: var(--surface);
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
+}
+
+.login-role-tab:not(.active):hover {
+  background-color: var(--surface-high);
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   Fixed Role Window Post-Login Header Indicator
+   ========================================================================== */
+
+.fixed-role-window-badge {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-full);
+  background-color: var(--surface-low);
+  border: 1px solid var(--border-subtle);
+  transition: all 0.2s ease;
+}
+
+.fixed-role-window-badge:hover {
+  border-color: var(--border-focus);
+}
+
+.fixed-role-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--secondary);
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.2);
+}
+
+.fixed-role-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.fixed-role-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.fixed-role-sub {
+  font-size: 10px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  .fixed-role-sub {
+    display: none;
+  }
+  .fixed-role-window-badge {
+    padding: 0.25rem 0.5rem;
+  }
+  .fixed-role-title {
+    font-size: 11px;
+  }
+}
+
+.switch-role-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: var(--radius-full);
+  background-color: var(--surface-low);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.switch-role-btn:hover {
+  background-color: var(--surface-high);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+

@@ -26,7 +26,7 @@ export function ERPProvider({ children }) {
   // Authentication & session state
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     const saved = localStorage.getItem('oist_auth');
-    return saved !== null ? saved === 'true' : true; // Default logged in for seamless initial preview, but fully log-out-able!
+    return saved === 'true'; // Unauthenticated by default so user sees the login page first
   });
 
   // Current active role
@@ -108,6 +108,7 @@ export function ERPProvider({ children }) {
   const switchRole = (newRole) => {
     if (users[newRole]) {
       setCurrentRole(newRole);
+      localStorage.setItem('oist_role', newRole);
       addToast(
         `Switched to ${newRole.toUpperCase()} View`,
         `Logged in as ${users[newRole].name} (${users[newRole].department || 'Administration'})`,
