@@ -294,16 +294,24 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
               backgroundColor: 'var(--surface-low)'
             }}
           >
-            <img
-              src={currentUser.avatar}
-              alt={currentUser.name}
+            <div
               style={{
                 width: '32px',
                 height: '32px',
                 borderRadius: '50%',
-                objectFit: 'cover'
+                backgroundColor: 'var(--primary-container)',
+                color: 'var(--primary)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: '12px',
+                flexShrink: 0
               }}
-            />
+              title={currentUser.name}
+            >
+              <User size={16} />
+            </div>
             <div style={{ display: 'none', flexDirection: 'column', minWidth: '70px' }} className="sm:flex">
               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
                 {currentUser.name}

@@ -14,7 +14,7 @@ export const INITIAL_USERS = {
     section: 'CSE-3A',
     batch: '2021-2025',
     cgpa: 8.42,
-    avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80',
+    avatar: null,
     tgName: 'Prof. K. Sen',
     tgEmail: 'k.sen@oist.ac.in',
     hodName: 'Dr. S. Roy',
@@ -30,7 +30,7 @@ export const INITIAL_USERS = {
     email: 'r.verma@oist.ac.in',
     department: 'Computer Science & Engineering',
     designation: 'Associate Professor',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    avatar: null,
     assignedSubjects: [
       { code: 'CS301', name: 'Data Structures & Algorithms', sections: ['CSE-3A', 'CSE-3B'], hoursPerWeek: 4 },
       { code: 'CS306', name: 'Advanced Algorithms Lab', sections: ['CSE-3A'], hoursPerWeek: 3 }
@@ -48,7 +48,7 @@ export const INITIAL_USERS = {
     designation: 'Assistant Professor & Mentor (TG)',
     assignedSection: 'CSE-3A',
     assignedMenteesCount: 30,
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    avatar: null,
     available: true // Can be toggled to test TG Unavailable fallback routing
   },
   hod: {
@@ -59,7 +59,7 @@ export const INITIAL_USERS = {
     email: 's.roy@oist.ac.in',
     department: 'Computer Science & Engineering',
     designation: 'Head of Department (CSE)',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+    avatar: null,
     pendingApprovalsCount: 4,
     totalFacultyCount: 24,
     totalStudentsCount: 340
@@ -70,7 +70,7 @@ export const INITIAL_USERS = {
     name: 'OIST Central Administration',
     adminId: 'SYS-ADMIN-01',
     email: 'admin.support@oist.ac.in',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    avatar: null,
     systemStatus: 'Optimal',
     activeAgentsCount: 4
   }

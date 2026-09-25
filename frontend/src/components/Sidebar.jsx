@@ -16,6 +16,7 @@ import {
   Award,
   Clock,
   Compass,
+  GraduationCap,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen
@@ -32,7 +33,7 @@ export default function Sidebar({ isOpen, onClose, onToggle, onOpenDemoGuide }) 
           { to: '/admin', label: 'Dashboard', icon: <LayoutDashboard size={19} /> },
           { to: '/admin/students', label: 'Users & Roster', icon: <Users size={19} /> },
           { to: '/admin/teachers', label: 'Faculty Directory', icon: <UserCheck size={19} /> },
-          { to: '/admin/departments', label: 'Departments', icon: <Building2 size={19} /> },
+          { to: '/admin/departments', label: 'Academic Structure', icon: <GraduationCap size={19} /> },
           { to: '/admin/settings', label: 'System Settings', icon: <Settings size={19} /> },
           { to: '/admin/settings', label: 'AI/Agent Settings', icon: <Sparkles size={19} />, badge: 'AI' }
         ];

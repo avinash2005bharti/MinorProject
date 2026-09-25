@@ -6,6 +6,7 @@ import NotificationToast from '../components/NotificationToast';
 import AgentSimulationModal from '../components/AgentSimulationModal';
 import DemoGuideModal from '../components/DemoGuideModal';
 import GlobalModals from '../components/modals/GlobalModals';
+import AIDashboard from '../components/AIDashboard';
 import { ChevronRight } from 'lucide-react';
 
 export default function DashboardLayout() {
@@ -103,6 +104,9 @@ export default function DashboardLayout() {
             <Outlet />
           </div>
         </main>
+
+        {/* Fixed AI Dashboard (stays visible on every page at the bottom of the screen) */}
+        <AIDashboard isSidebarOpen={isSidebarOpen} />
       </div>
 
       {/* Modals & Portals */}

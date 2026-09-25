@@ -63,18 +63,24 @@ export default function StudentProfile() {
               />
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-                <img
-                  src={currentUser.avatar}
-                  alt={currentUser.name}
+                <div
                   style={{
                     width: '92px',
                     height: '92px',
                     borderRadius: 'var(--radius-2xl)',
-                    objectFit: 'cover',
+                    backgroundColor: 'var(--primary-container)',
+                    color: 'var(--primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     boxShadow: 'var(--shadow-md)',
-                    border: '3px solid var(--surface-high)'
+                    border: '3px solid var(--surface-high)',
+                    flexShrink: 0
                   }}
-                />
+                  title={currentUser.name}
+                >
+                  <User size={44} />
+                </div>
 
                 <div style={{ flex: 1, minWidth: '240px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import AttendanceProgress from '../../components/AttendanceProgress';
+import DocumentUploader from '../../components/common/DocumentUploader';
 import {
   Calendar,
   Clock,
@@ -18,7 +19,7 @@ import {
 } from 'lucide-react';
 
 export default function StudentAttendance() {
-  const { currentUser, subjects, submitAttendanceConsideration, submitAttendanceQuery } = useERP();
+  const { currentUser, subjects, submitAttendanceConsideration, submitAttendanceQuery, openModal } = useERP();
 
   // Modals state
   const [considerationModalOpen, setConsiderationModalOpen] = useState(false);
@@ -93,9 +94,10 @@ export default function StudentAttendance() {
           </div>
 
           <button
-            onClick={() => setConsiderationModalOpen(true)}
+            onClick={() => openModal('requestConsideration')}
             className="btn btn-primary"
             style={{ borderRadius: 'var(--radius-full)', padding: '0.65rem 1.25rem' }}
+            id="btn-attendance-request-od"
           >
             <Sparkles size={16} />
             <span>Request Consideration (OD)</span>
@@ -386,25 +388,13 @@ export default function StudentAttendance() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Supporting Document (OD Certificate / Invitation)</label>
-                <div
-                  style={{
-                    border: '1.5px dashed var(--border-subtle)',
-                    padding: '0.85rem',
-                    borderRadius: 'var(--radius-lg)',
-                    textAlign: 'center',
-                    backgroundColor: 'var(--surface-low)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.5rem',
-                    fontSize: '12px',
-                    color: 'var(--text-secondary)'
-                  }}
-                >
-                  <Upload size={16} />
-                  <span>Attached: <strong>{supportingDoc}</strong> (1.2 MB)</span>
-                </div>
+                <DocumentUploader
+                  label="Supporting Document (OD Certificate / Invitation)"
+                  hint="Attach official OD approval or hackathon invitation"
+                  selectedFileName={supportingDoc}
+                  onFileSelect={(fileInfo) => setSupportingDoc(fileInfo.name)}
+                  onFileRemove={() => setSupportingDoc('')}
+                />
               </div>
 
               {/* Simulation projection box */}
@@ -499,25 +489,13 @@ export default function StudentAttendance() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Supporting Proof (Screenshot / Lab Submission Slip)</label>
-                <div
-                  style={{
-                    border: '1.5px dashed var(--border-subtle)',
-                    padding: '0.75rem',
-                    borderRadius: 'var(--radius-lg)',
-                    textAlign: 'center',
-                    backgroundColor: 'var(--surface-low)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.5rem',
-                    fontSize: '12px',
-                    color: 'var(--text-secondary)'
-                  }}
-                >
-                  <Upload size={16} />
-                  <span>Attached: <strong>{queryDoc}</strong></span>
-                </div>
+                <DocumentUploader
+                  label="Supporting Proof (Screenshot / Lab Submission Slip)"
+                  hint="Attach screenshot or lab slip showing attendance attendance activity"
+                  selectedFileName={queryDoc}
+                  onFileSelect={(fileInfo) => setQueryDoc(fileInfo.name)}
+                  onFileRemove={() => setQueryDoc('')}
+                />
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>

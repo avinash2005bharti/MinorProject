@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { X, FileText, Calendar, Layers, BookOpen, Upload, Check } from 'lucide-react';
+import DocumentUploader from '../common/DocumentUploader';
 
 export default function CreateAssignmentModal({ onClose }) {
   const { createAssignment, sections, classes } = useERP();
@@ -12,7 +13,7 @@ export default function CreateAssignmentModal({ onClose }) {
   const [dueDate, setDueDate] = useState('2025-10-15');
   const [totalMarks, setTotalMarks] = useState('20');
   const [description, setDescription] = useState('');
-  const [attachmentUploaded, setAttachmentUploaded] = useState(false);
+  const [attachedFile, setAttachedFile] = useState({ name: '', size: '' });
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -30,7 +31,7 @@ export default function CreateAssignmentModal({ onClose }) {
       dueDate,
       totalMarks,
       description: description || 'Complete the exercises and upload PDF or ZIP.',
-      attachmentName: attachmentUploaded ? `${title.replace(/\s+/g, '_')}_ProblemSet.pdf` : 'Coursework_Spec.pdf'
+      attachmentName: attachedFile.name || (title ? `${title.replace(/\s+/g, '_')}_Spec.pdf` : 'Coursework_Spec.pdf')
     });
 
     onClose();
@@ -151,25 +152,19 @@ export default function CreateAssignmentModal({ onClose }) {
 
           {/* File Attachment */}
           <div className="form-group mb-0">
-            <label className="form-label">Attachment Specification (Problem PDF / Lab Data)</label>
-            <div
-              onClick={() => setAttachmentUploaded(!attachmentUploaded)}
-              className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${
-                attachmentUploaded ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-200 hover:border-indigo-400 bg-slate-50/50'
-              }`}
-            >
-              {attachmentUploaded ? (
-                <div className="flex items-center justify-center gap-2 text-emerald-700 text-xs font-semibold">
-                  <Check size={16} />
-                  <span>Problem Set PDF Attached ({title || 'Assignment_Spec'}.pdf)</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-1 text-slate-500 text-xs">
-                  <Upload size={18} className="text-slate-400" />
-                  <span>Click to attach assignment specification (PDF)</span>
-                </div>
-              )}
-            </div>
+            <DocumentUploader
+              label="Attachment Specification (Problem PDF / Lab Data)"
+              hint="Attach question paper, lab problem statement, or code skeleton (PDF/ZIP/DOCX)"
+              selectedFileName={attachedFile.name}
+              selectedFileSize={attachedFile.size}
+              onFileSelect={(fileInfo) => {
+                setAttachedFile({ name: fileInfo.name, size: fileInfo.size });
+                if (!title.trim()) {
+                  setTitle(fileInfo.name.replace(/\.[^/.]+$/, ''));
+                }
+              }}
+              onFileRemove={() => setAttachedFile({ name: '', size: '' })}
+            />
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
