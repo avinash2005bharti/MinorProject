@@ -3,6 +3,8 @@
 // Handles section-wise automated propagation, recalculation, and query tracking
 // ==========================================================================
 
+import { apiClient } from './api';
+
 export const attendanceService = {
   // Recalculates student's overall attendance %
   calculatePercentage(attended, total) {
@@ -12,7 +14,6 @@ export const attendanceService = {
 
   // Identifies affected classes for a student's section within a date range
   identifyAffectedClasses(section, startDate, endDate) {
-    // Simulated class discovery across section timetable
     return [
       { subject: 'Data Structures & Algorithms', code: 'CS301', date: '10 Sept', faculty: 'Dr. Rajesh Verma' },
       { subject: 'Database Management Systems', code: 'CS302', date: '11 Sept', faculty: 'Prof. Anita Sharma' },
@@ -50,5 +51,36 @@ export const attendanceService = {
         isSafe: false
       };
     }
+  },
+
+  // Real Backend API Integrations
+  async fetchStudentAttendance(studentId) {
+    try {
+      const res = await apiClient.get(`/attendance/student/${studentId || ''}`);
+      return res.data;
+    } catch (e) {
+      console.warn('[attendanceService] Falling back to local state:', e.message);
+      return null;
+    }
+  },
+
+  async markAttendanceApi(data) {
+    return apiClient.post('/attendance/mark', data);
+  },
+
+  async bulkRollCallApi(data) {
+    return apiClient.post('/attendance/bulk', data);
+  },
+
+  async overrideAttendanceApi(studentRoll, newPercentage, reason) {
+    return apiClient.post('/attendance/override', { studentRoll, newPercentage, reason });
+  },
+
+  async generateQrApi(data) {
+    return apiClient.post('/attendance/qr/generate', data);
+  },
+
+  async scanQrApi(sessionId, token, rollNo) {
+    return apiClient.post('/attendance/qr/scan', { sessionId, token, rollNo });
   }
 };

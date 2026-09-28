@@ -1,22 +1,25 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { X, Upload, FileText, CheckCircle2, ShieldCheck } from 'lucide-react';
+import DocumentUploader from '../common/DocumentUploader';
 
 export default function SubmitAssignmentModal({ data, onClose }) {
   const { submitAssignment, currentUser, assignments } = useERP();
 
   const targetAssignment = data?.assignment || assignments[0];
   const [comment, setComment] = useState('');
-  const [fileName, setFileName] = useState(`${currentUser.name.replace(/\s+/g, '_')}_${targetAssignment?.subjectCode || 'Solution'}.pdf`);
-  const [fileAttached, setFileAttached] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState({
+    name: `${currentUser.name.replace(/\s+/g, '_')}_${targetAssignment?.subjectCode || 'Solution'}.pdf`,
+    size: '1.8 MB'
+  });
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!targetAssignment) return;
 
     submitAssignment(targetAssignment.id, {
-      fileName: fileAttached ? fileName : 'Student_Solution_Archive.pdf',
-      fileSize: '1.8 MB',
+      fileName: uploadedFile.name || 'Student_Solution_Archive.pdf',
+      fileSize: uploadedFile.size || '1.8 MB',
       comment
     });
 
@@ -56,29 +59,18 @@ export default function SubmitAssignmentModal({ data, onClose }) {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 mt-2">
-          {/* File Upload simulator */}
+          {/* Workable Document Upload */}
           <div className="form-group mb-0">
-            <label className="form-label">Attach Solution Document (PDF, ZIP, or Code)</label>
-            <div
-              onClick={() => setFileAttached(!fileAttached)}
-              className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-all ${
-                fileAttached ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-200 hover:border-blue-400 bg-slate-50/50'
-              }`}
-            >
-              {fileAttached ? (
-                <div className="flex flex-col items-center gap-1 text-emerald-700 text-xs font-semibold">
-                  <CheckCircle2 size={24} className="text-emerald-600" />
-                  <span>Ready to upload: {fileName} (1.8 MB)</span>
-                  <span className="text-[10px] text-emerald-600 font-normal">Click to change file</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-1.5 text-slate-500 text-xs">
-                  <Upload size={22} className="text-blue-500" />
-                  <span className="font-semibold text-slate-700">Click to select solution file</span>
-                  <span className="text-[11px] text-slate-400">PDF, ZIP, IPYNB up to 25MB</span>
-                </div>
-              )}
-            </div>
+            <DocumentUploader
+              label="Attach Solution Document"
+              hint="PDF, ZIP, IPYNB, DOCX, or Code archive up to 25 MB"
+              selectedFileName={uploadedFile.name}
+              selectedFileSize={uploadedFile.size}
+              accept=".pdf,.zip,.ipynb,.py,.java,.cpp,.doc,.docx"
+              onFileSelect={(fileInfo) => setUploadedFile({ name: fileInfo.name, size: fileInfo.size })}
+              onFileRemove={() => setUploadedFile({ name: '', size: '' })}
+              required={true}
+            />
           </div>
 
           {/* Submission Note */}

@@ -3,6 +3,8 @@
 // AI Timetable Generation, constraint analysis, collision checks & autonomous healing
 // ==========================================================================
 
+import { apiClient } from './api';
+
 export const timetableService = {
   // Simulates AI constraint evaluation and conflict discovery
   analyzeConstraints(params) {
@@ -35,5 +37,38 @@ export const timetableService = {
       optimizationScore: '98.4%',
       generatedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
+  },
+
+  // Real Backend API Integrations
+  async fetchTimetableApi(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    try {
+      const res = await apiClient.get(`/timetable?${query}`);
+      return res.data;
+    } catch (e) {
+      console.warn('[timetableService] Falling back to local timetable:', e.message);
+      return null;
+    }
+  },
+
+  async analyzeConstraintsApi(params = {}) {
+    try {
+      const query = new URLSearchParams(params).toString();
+      const res = await apiClient.get(`/timetable/analyze?${query}`);
+      return res.data;
+    } catch (e) {
+      console.warn('[timetableService] Fallback constraint analysis:', e.message);
+      return this.analyzeConstraints(params);
+    }
+  },
+
+  async resolveTimetableApi(section = 'CSE-3A') {
+    try {
+      const res = await apiClient.post('/timetable/resolve', { section });
+      return res.data;
+    } catch (e) {
+      console.warn('[timetableService] Fallback resolve:', e.message);
+      return this.getResolvedTimetable();
+    }
   }
 };

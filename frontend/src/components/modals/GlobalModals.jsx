@@ -9,6 +9,7 @@ import ScheduleLectureModal from './ScheduleLectureModal';
 import CreateTestModal from './CreateTestModal';
 import StudentFeedbackModal from './StudentFeedbackModal';
 import StudentDetailModal from './StudentDetailModal';
+import RequestConsiderationModal from './RequestConsiderationModal';
 
 export default function GlobalModals() {
   const { modalState, closeModal } = useERP();
@@ -18,6 +19,8 @@ export default function GlobalModals() {
   switch (modalState.name) {
     case 'applyLeave':
       return <ApplyLeaveModal data={modalState.data} onClose={closeModal} />;
+    case 'requestConsideration':
+      return <RequestConsiderationModal data={modalState.data} onClose={closeModal} />;
     case 'createAssignment':
       return <CreateAssignmentModal data={modalState.data} onClose={closeModal} />;
     case 'submitAssignment':

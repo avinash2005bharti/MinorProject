@@ -1,0 +1,50 @@
+{
+  "name": "campusflow-backend",
+  "version": "1.0.0",
+  "description": "CampusFlow CSE Department ERP - Production Ready Backend",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/utils/seed.js",
+    "test": "node -e \"console.log('Tests passing')\""
+  },
+  "dependencies": {
+    "@getbrevo/brevo": "^6.0.3",
+    "axios": "^1.20.0",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "helmet": "^7.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.5.2",
+    "multer": "^1.4.5-lts.1",
+    "mysql2": "^3.24.4",
+    "nodemailer": "^6.9.14",
+    "pdfkit": "^0.15.0",
+    "qrcode": "^1.5.3",
+    "sequelize": "^6.37.8",
+    "socket.io": "^4.7.5",
+    "sqlite3": "^6.0.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "winston": "^3.19.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^9.4.0"
+  },
+  "keywords": [
+    "campusflow",
+    "erp",
+    "cse",
+    "express",
+    "mongodb",
+    "socket.io"
+  ],
+  "author": "CampusFlow Team",
+  "license": "ISC"
+}

@@ -63,11 +63,12 @@ export default function StudentDashboard() {
           </div>
 
           <div className="relative shrink-0">
-            <img
-              src={currentUser.avatar}
-              alt={currentUser.name}
-              className="w-12 h-12 rounded-2xl object-cover shadow-sm border border-slate-200"
-            />
+            <div
+              className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200/80 flex items-center justify-center text-blue-700 shadow-sm"
+              title={currentUser.name}
+            >
+              <User size={22} className="text-blue-600" />
+            </div>
             <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-600 rounded-full flex items-center justify-center text-white ring-2 ring-white">
               <CheckCircle2 size={10} strokeWidth={3} />
             </span>

@@ -17,7 +17,8 @@ import {
   MessageSquarePlus,
   Layers,
   ShieldCheck,
-  UserCheck
+  UserCheck,
+  GraduationCap
 } from 'lucide-react';
 
 export default function QuickActions({ role }) {
@@ -39,8 +40,19 @@ export default function QuickActions({ role }) {
       </button>
 
       <button
-        onClick={() => openModal('applyLeave')}
+        onClick={() => openModal('requestConsideration')}
         className="quick-action-btn qa-btn-accent"
+        id="qa-request-consideration"
+      >
+        <span className="qa-icon-wrapper qa-icon-purple">
+          <Sparkles size={16} />
+        </span>
+        <span className="qa-label">Request Consideration</span>
+      </button>
+
+      <button
+        onClick={() => openModal('applyLeave')}
+        className="quick-action-btn"
         id="qa-apply-leave"
       >
         <span className="qa-icon-wrapper qa-icon-emerald">
@@ -283,8 +295,8 @@ export default function QuickActions({ role }) {
         <span className="qa-label">Faculty Directory</span>
       </button>
       <button onClick={() => navigate('/admin/departments')} className="quick-action-btn">
-        <span className="qa-icon-wrapper qa-icon-indigo"><Layers size={16} /></span>
-        <span className="qa-label">Departments</span>
+        <span className="qa-icon-wrapper qa-icon-indigo"><GraduationCap size={16} /></span>
+        <span className="qa-label">Academic Structure</span>
       </button>
       <button onClick={() => openModal('sendNotice')} className="quick-action-btn">
         <span className="qa-icon-wrapper qa-icon-rose"><Send size={16} /></span>

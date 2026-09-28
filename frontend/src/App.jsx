@@ -151,6 +151,7 @@ export default function App() {
           <Route path="admin/students" element={<RoleRouteGuard role="admin"><AdminStudents /></RoleRouteGuard>} />
           <Route path="admin/teachers" element={<RoleRouteGuard role="admin"><AdminTeachers /></RoleRouteGuard>} />
           <Route path="admin/departments" element={<RoleRouteGuard role="admin"><AdminDepartments /></RoleRouteGuard>} />
+          <Route path="admin/structure" element={<RoleRouteGuard role="admin"><AdminDepartments /></RoleRouteGuard>} />
           <Route path="admin/timetable" element={<RoleRouteGuard role="admin"><HodTimetableGenerator /></RoleRouteGuard>} />
           <Route path="admin/settings" element={<RoleRouteGuard role="admin"><AdminSettings /></RoleRouteGuard>} />
 

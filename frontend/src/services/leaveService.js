@@ -3,6 +3,8 @@
 // Handles leave submission, TG availability telemetry, and direct HOD routing
 // ==========================================================================
 
+import { apiClient } from './api';
+
 export const leaveService = {
   // Routes leave request based on mentor availability
   evaluateLeaveRouting(isTgAvailable) {
@@ -34,5 +36,18 @@ export const leaveService = {
       default:
         return { label: 'Personal Leave', class: 'badge-amber' };
     }
+  },
+
+  // Backend API calls
+  async applyLeaveApi(formData) {
+    return apiClient.post('/requests/leave', formData);
+  },
+
+  async tgReviewLeaveApi(leaveId, approved = true) {
+    return apiClient.put(`/requests/leave/${leaveId}/tg-review`, { approved });
+  },
+
+  async hodApproveLeaveApi(leaveId) {
+    return apiClient.put(`/requests/leave/${leaveId}/hod-approve`, {});
   }
 };

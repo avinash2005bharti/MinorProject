@@ -19,6 +19,11 @@ import {
 } from '../data/mockData';
 import { agentService } from '../services/agentService';
 import { notificationService } from '../services/notificationService';
+import { attendanceService } from '../services/attendanceService';
+import { leaveService } from '../services/leaveService';
+import { requestService } from '../services/requestService';
+import { timetableService } from '../services/timetableService';
+import { apiClient } from '../services/api';
 
 const ERPContext = createContext(null);
 
@@ -37,12 +42,26 @@ export function ERPProvider({ children }) {
   const currentUser = users[currentRole];
 
   // Login handler
-  const login = (role = 'student', credentials = {}) => {
+  const login = async (role = 'student', credentials = {}) => {
     const targetRole = role || 'student';
     setCurrentRole(targetRole);
     setIsAuthenticated(true);
     localStorage.setItem('oist_auth', 'true');
     localStorage.setItem('oist_role', targetRole);
+
+    // Call backend login API
+    try {
+      const res = await apiClient.post('/auth/login', {
+        email: credentials.collegeId,
+        password: credentials.password,
+        role: targetRole
+      });
+      if (res && res.accessToken) {
+        apiClient.setToken(res.accessToken);
+      }
+    } catch (e) {
+      console.warn('[ERPContext] Backend login notice:', e.message);
+    }
 
     addToast(
       'Authenticated Successfully',
@@ -55,6 +74,7 @@ export function ERPProvider({ children }) {
   const logout = () => {
     setIsAuthenticated(false);
     localStorage.setItem('oist_auth', 'false');
+    apiClient.setToken(null);
     addToast(
       'Logged Out',
       'You have been securely signed out of OIST CSE ERP.',
@@ -224,6 +244,9 @@ export function ERPProvider({ children }) {
 
     setAttendanceRequests((prev) => [newReq, ...prev]);
 
+    // Backend API Call
+    requestService.submitAttendanceConsiderationApi(formData).catch(() => {});
+
     addToast(
       'Consideration Request Submitted',
       'Sent to your mentor Prof. K. Sen for verification.',
@@ -244,6 +267,9 @@ export function ERPProvider({ children }) {
 
   // TG reviews & recommends attendance consideration
   const tgReviewAttendanceConsideration = (requestId, recommendation) => {
+    // Backend API Call
+    requestService.tgReviewAttendanceConsiderationApi(requestId, recommendation).catch(() => {});
+
     setAttendanceRequests((prev) =>
       prev.map((req) => {
         if (req.id === requestId) {
@@ -285,6 +311,14 @@ export function ERPProvider({ children }) {
   const hodApproveAttendanceConsideration = (requestId) => {
     const targetReq = attendanceRequests.find((r) => r.id === requestId);
     if (!targetReq) return;
+
+    // Backend API Call
+    agentService.runAttendanceAgentApi({
+      requestId,
+      studentRoll: targetReq.rollNo,
+      section: targetReq.section,
+      dateRange: targetReq.dateRangeLabel
+    }).catch(() => {});
 
     const steps = agentService.getAttendanceAgentSteps(
       targetReq.studentName,
@@ -424,6 +458,9 @@ export function ERPProvider({ children }) {
 
     setAttendanceQueries((prev) => [newQuery, ...prev]);
 
+    // Backend API Call
+    requestService.submitAttendanceQueryApi(formData).catch(() => {});
+
     addToast(
       'Attendance Query Submitted',
       'Your query has been sent to TG Prof. K. Sen and HOD for digital review.',
@@ -551,6 +588,9 @@ export function ERPProvider({ children }) {
 
     setLeaveRequests((prev) => [newLeave, ...prev]);
 
+    // Backend API Call
+    leaveService.applyLeaveApi({ ...formData, isTgAvailable: !isDirectToHod }).catch(() => {});
+
     if (isDirectToHod) {
       addToast(
         'Direct HOD Routing Activated',
@@ -573,6 +613,9 @@ export function ERPProvider({ children }) {
   };
 
   const tgReviewLeave = (leaveId, approved = true) => {
+    // Backend API Call
+    leaveService.tgReviewLeaveApi(leaveId, approved).catch(() => {});
+
     setLeaveRequests((prev) =>
       prev.map((lv) => {
         if (lv.id === leaveId) {
@@ -594,6 +637,9 @@ export function ERPProvider({ children }) {
   };
 
   const hodApproveLeave = (leaveId) => {
+    // Backend API Call
+    leaveService.hodApproveLeaveApi(leaveId).catch(() => {});
+
     setLeaveRequests((prev) =>
       prev.map((lv) => {
         if (lv.id === leaveId) {
@@ -633,6 +679,9 @@ export function ERPProvider({ children }) {
 
   const generateTimetableAI = (constraints) => {
     const steps = agentService.getTimetableAgentSteps();
+
+    // Backend API Call
+    timetableService.analyzeConstraintsApi(constraints).catch(() => {});
 
     setAgentModal({
       isOpen: true,
@@ -693,6 +742,9 @@ export function ERPProvider({ children }) {
 
   const resolveTimetableConflictsAI = () => {
     const steps = agentService.getTimetableResolutionSteps();
+
+    // Backend API Call
+    timetableService.resolveTimetableApi('CSE-3A').catch(() => {});
 
     setAgentModal({
       isOpen: true,

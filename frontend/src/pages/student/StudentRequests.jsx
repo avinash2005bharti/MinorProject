@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import RequestCard from '../../components/RequestCard';
+import DocumentUploader from '../../components/common/DocumentUploader';
 import {
   FileText,
   PlusCircle,
@@ -427,25 +428,13 @@ export default function StudentRequests() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Supporting Document (Certificate / Prescription)</label>
-                <div
-                  style={{
-                    border: '1.5px dashed var(--border-subtle)',
-                    padding: '0.75rem',
-                    borderRadius: 'var(--radius-lg)',
-                    textAlign: 'center',
-                    backgroundColor: 'var(--surface-low)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.5rem',
-                    fontSize: '12px',
-                    color: 'var(--text-secondary)'
-                  }}
-                >
-                  <Upload size={16} />
-                  <span>Attached: <strong>{supportingDoc}</strong></span>
-                </div>
+                <DocumentUploader
+                  label="Supporting Document (Certificate / Prescription)"
+                  hint="Attach official hospital slip, medical certificate, or OD approval"
+                  selectedFileName={supportingDoc}
+                  onFileSelect={(fileInfo) => setSupportingDoc(fileInfo.name)}
+                  onFileRemove={() => setSupportingDoc('')}
+                />
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>

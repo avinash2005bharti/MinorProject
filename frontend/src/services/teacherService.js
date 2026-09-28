@@ -2,6 +2,8 @@
 // CampusFlow – Teacher Management Service
 // ==========================================================================
 
+import { apiClient } from './api';
+
 export const teacherService = {
   getDepartmentFaculty() {
     return [
@@ -71,5 +73,26 @@ export const teacherService = {
         attendanceResponsibility: 'CS305, Mentorship Cell'
       }
     ];
+  },
+
+  // Backend API Call
+  async fetchDepartmentFacultyApi() {
+    try {
+      const res = await apiClient.get('/teachers');
+      return res.data;
+    } catch (e) {
+      console.warn('[teacherService] Falling back to local data:', e.message);
+      return this.getDepartmentFaculty();
+    }
+  },
+
+  async fetchTeacherProfileApi(id) {
+    try {
+      const res = await apiClient.get(`/teachers/${id || 'me'}`);
+      return res.data;
+    } catch (e) {
+      console.warn('[teacherService] Profile fetch warning:', e.message);
+      return null;
+    }
   }
 };

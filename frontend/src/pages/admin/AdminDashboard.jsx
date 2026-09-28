@@ -1,6 +1,8 @@
 import React from 'react';
 import { useERP } from '../../context/ERPContext';
+import { Link } from 'react-router-dom';
 import AgentActivity from '../../components/AgentActivity';
+import QuickActions from '../../components/QuickActions';
 import {
   Users,
   UserCheck,
@@ -9,7 +11,10 @@ import {
   Activity,
   ShieldCheck,
   Server,
-  Sparkles
+  Sparkles,
+  GraduationCap,
+  ChevronRight,
+  BookOpen
 } from 'lucide-react';
 
 export default function AdminDashboard() {
@@ -20,31 +25,47 @@ export default function AdminDashboard() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-              Central Institutional Administration
-            </h1>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              OIST CSE Enterprise ERP • Autonomous College Infrastructure
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Department of Computer Science & Engineering
+              </h1>
+              <span className="badge badge-indigo">CSE Administration</span>
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              OIST CSE Institutional ERP • Exclusively Provisioned for Computer Science Engineering
             </p>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.4rem 0.85rem',
-              backgroundColor: 'var(--secondary-container)',
-              borderRadius: 'var(--radius-full)',
-              color: 'var(--on-secondary-container)',
-              fontSize: '12px',
-              fontWeight: 600
-            }}
-          >
-            <span className="agent-pulse" />
-            <span>ERP Cloud Core: 99.98% Uptime</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <Link
+              to="/admin/departments"
+              className="btn btn-primary text-xs py-2 px-3.5 shadow-sm"
+            >
+              <GraduationCap size={15} />
+              <span>Academic Structure (Year → Section)</span>
+            </Link>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.4rem 0.85rem',
+                backgroundColor: 'var(--secondary-container)',
+                borderRadius: 'var(--radius-full)',
+                color: 'var(--on-secondary-container)',
+                fontSize: '12px',
+                fontWeight: 600
+              }}
+            >
+              <span className="agent-pulse" />
+              <span>Core Uptime: 99.98%</span>
+            </div>
           </div>
         </div>
+
+        {/* Quick Actions Bar */}
+        <QuickActions role="admin" />
 
         {/* Global Statistics */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: '1rem' }} className="sm:grid-cols-4">
@@ -64,11 +85,11 @@ export default function AdminDashboard() {
               <Users size={20} />
             </div>
             <div>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Total Students</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Enrolled CSE Students</span>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                1,420
+                340
               </div>
-              <span style={{ fontSize: '10px', color: 'var(--secondary)' }}>Active across 5 branches</span>
+              <span style={{ fontSize: '10px', color: 'var(--secondary)' }}>Active across 8 semesters</span>
             </div>
           </div>
 
@@ -88,15 +109,19 @@ export default function AdminDashboard() {
               <UserCheck size={20} />
             </div>
             <div>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Teaching Faculty</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>CSE Teaching Faculty</span>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                84
+                24
               </div>
               <span style={{ fontSize: '10px', color: 'var(--secondary)' }}>100% verified</span>
             </div>
           </div>
 
-          <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <Link
+            to="/admin/departments"
+            className="card card-interactive"
+            style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', textDecoration: 'none' }}
+          >
             <div
               style={{
                 width: '42px',
@@ -109,16 +134,18 @@ export default function AdminDashboard() {
                 justifyContent: 'center'
               }}
             >
-              <Building2 size={20} />
+              <GraduationCap size={20} />
             </div>
-            <div>
-              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Academic Depts</span>
+            <div style={{ flex: 1 }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>CSE Academic Scope</span>
               <div style={{ fontFamily: 'var(--font-heading)', fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                5
+                4 Years
               </div>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>CSE, ECE, ME, CE, EE</span>
+              <span style={{ fontSize: '10px', color: 'var(--primary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '2px' }}>
+                8 Semesters • Section A & B <ChevronRight size={10} />
+              </span>
             </div>
-          </div>
+          </Link>
 
           <div className="card" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
             <div

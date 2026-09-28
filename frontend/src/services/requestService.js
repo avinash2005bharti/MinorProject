@@ -3,6 +3,8 @@
 // Handles filtering, status tracking, and clearance lifecycle
 // ==========================================================================
 
+import { apiClient } from './api';
+
 export const requestService = {
   getStatusDisplay(status) {
     switch (status) {
@@ -22,5 +24,35 @@ export const requestService = {
       default:
         return { label: status, badgeClass: 'badge-slate', stepIndex: 0 };
     }
+  },
+
+  // Backend API calls
+  async fetchAllRequestsApi(status) {
+    const query = status ? `?status=${status}` : '';
+    return apiClient.get(`/requests${query}`);
+  },
+
+  async submitAttendanceConsiderationApi(formData) {
+    return apiClient.post('/requests/attendance/consideration', formData);
+  },
+
+  async tgReviewAttendanceConsiderationApi(id, recommendation) {
+    return apiClient.put(`/requests/attendance/consideration/${id}/tg-review`, { recommendation });
+  },
+
+  async hodApproveAttendanceConsiderationApi(id) {
+    return apiClient.put(`/requests/attendance/consideration/${id}/hod-approve`, {});
+  },
+
+  async submitAttendanceQueryApi(formData) {
+    return apiClient.post('/requests/attendance/query', formData);
+  },
+
+  async tgReviewAttendanceQueryApi(id) {
+    return apiClient.put(`/requests/attendance/query/${id}/tg-review`, {});
+  },
+
+  async hodApproveAttendanceQueryApi(id) {
+    return apiClient.put(`/requests/attendance/query/${id}/hod-approve`, {});
   }
 };

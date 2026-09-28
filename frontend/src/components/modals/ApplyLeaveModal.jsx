@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { X, Calendar, FileText, Upload, AlertTriangle, ShieldCheck, Check } from 'lucide-react';
+import DocumentUploader from '../common/DocumentUploader';
 
 export default function ApplyLeaveModal({ onClose }) {
   const { applyLeave, currentUser, tgAvailable } = useERP();
@@ -9,7 +10,7 @@ export default function ApplyLeaveModal({ onClose }) {
   const [startDate, setStartDate] = useState('2025-09-28');
   const [endDate, setEndDate] = useState('2025-09-30');
   const [reason, setReason] = useState('');
-  const [fileUploaded, setFileUploaded] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState({ name: '', size: '' });
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -24,7 +25,7 @@ export default function ApplyLeaveModal({ onClose }) {
       endDate,
       dateRangeLabel: `${startDate} to ${endDate}`,
       reason,
-      supportingDoc: fileUploaded ? 'Medical_Prescription_Document.pdf' : 'student_declaration.pdf'
+      supportingDoc: uploadedFile.name || 'student_declaration.pdf'
     });
 
     onClose();
@@ -133,25 +134,14 @@ export default function ApplyLeaveModal({ onClose }) {
 
           {/* Supporting Document */}
           <div className="form-group mb-0">
-            <label className="form-label">Supporting Document (Medical certificate / OD approval)</label>
-            <div
-              onClick={() => setFileUploaded(!fileUploaded)}
-              className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-all ${
-                fileUploaded ? 'border-emerald-500 bg-emerald-50/50' : 'border-slate-200 hover:border-blue-400 bg-slate-50/50'
-              }`}
-            >
-              {fileUploaded ? (
-                <div className="flex items-center justify-center gap-2 text-emerald-700 text-xs font-semibold">
-                  <Check size={16} />
-                  <span>Document Attached: Medical_Prescription_Document.pdf</span>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-1 text-slate-500 text-xs">
-                  <Upload size={18} className="text-slate-400" />
-                  <span>Click to attach document (PDF/PNG)</span>
-                </div>
-              )}
-            </div>
+            <DocumentUploader
+              label="Supporting Document (Medical certificate / OD approval)"
+              hint="Attach doctor prescription, hospital slip, or proof (PDF/PNG/JPG)"
+              selectedFileName={uploadedFile.name}
+              selectedFileSize={uploadedFile.size}
+              onFileSelect={(fileInfo) => setUploadedFile({ name: fileInfo.name, size: fileInfo.size })}
+              onFileRemove={() => setUploadedFile({ name: '', size: '' })}
+            />
           </div>
 
           {/* Action Buttons */}
