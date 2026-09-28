@@ -8,7 +8,7 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "seed": "node src/utils/seed.js",
-    "test": "node -e \"console.log('Tests passing')\""
+    "test": "node tests/erp_backend.test.js"
   },
   "dependencies": {
     "@getbrevo/brevo": "^6.0.3",

@@ -59,10 +59,26 @@ const ConversationSchema = new mongoose.Schema({
 // 3. Short Term Memory (Fast working memory & active session context with auto-expiry)
 const ShortTermMemorySchema = new mongoose.Schema({
   sessionId: { type: String, required: true, unique: true, index: true },
+  conversationId: { type: String, index: true },
   userId: { type: String, required: true, index: true },
   activeSubject: { type: String },
   activeAssignment: { type: String },
+  activeDepartment: { type: String, default: 'CSE' },
+  activeSemester: { type: Number },
+  activeSection: { type: String },
+  activeAcademicYear: { type: String, default: '2026-27' },
+  activeTimetableId: { type: Number },
   pendingIntent: { type: String },
+  taskContext: { type: mongoose.Schema.Types.Mixed, default: {} },
+  recentConstraints: [{ type: String }],
+  lastProposedAction: { type: mongoose.Schema.Types.Mixed },
+  pendingApprovalAction: { type: mongoose.Schema.Types.Mixed },
+  recentToolCalls: [{
+    tool: String,
+    args: mongoose.Schema.Types.Mixed,
+    output: mongoose.Schema.Types.Mixed,
+    timestamp: { type: Date, default: Date.now }
+  }],
   contextWindow: [{
     role: String,
     text: String,
@@ -96,7 +112,17 @@ const AiPreferenceSchema = new mongoose.Schema({
 const AgentLogSchema = new mongoose.Schema({
   agentName: {
     type: String,
-    enum: ['StudentAssistant', 'FacultyAssistant', 'AdminAssistant', 'RAGAgent', 'MemoryAgent', 'EmailAgent', 'Orchestrator'],
+    enum: [
+      'StudentAssistant',
+      'FacultyAssistant',
+      'AdminAssistant',
+      'RAGAgent',
+      'MemoryAgent',
+      'EmailAgent',
+      'Orchestrator',
+      'TimetableAgent',
+      'TeacherSchedulerAgent'
+    ],
     required: true,
     index: true
   },
@@ -128,12 +154,52 @@ const ToolExecutionLogSchema = new mongoose.Schema({
   collection: 'tool_execution_logs'
 });
 
+// 7. Generated File Metadata Schema (Cloud Object Storage Metadata)
+const GeneratedFileMetadataSchema = new mongoose.Schema({
+  fileId: { type: String, required: true, unique: true, index: true },
+  fileName: { type: String, required: true },
+  fileType: { type: String, enum: ['pdf', 'xlsx'], required: true },
+  filePath: { type: String, required: true },
+  fileSize: { type: Number, default: 0 },
+  department: { type: String, default: 'CSE' },
+  semester: { type: Number },
+  section: { type: String },
+  timetableId: { type: Number },
+  cloudUrl: { type: String },
+  createdBy: { type: String, default: 'AI Agent' },
+  createdAt: { type: Date, default: Date.now }
+}, {
+  collection: 'generated_files',
+  timestamps: true
+});
+
+// 8. Application Notification Schema
+const AppNotificationSchema = new mongoose.Schema({
+  recipientId: { type: String, index: true },
+  recipientRole: { type: String, enum: ['student', 'faculty', 'hod', 'admin', 'all'], default: 'all' },
+  type: {
+    type: String,
+    enum: ['TIMETABLE_UPDATE', 'TEACHER_SUBSTITUTION', 'ABSENCE_ALERT', 'GENERAL'],
+    default: 'GENERAL'
+  },
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  metadata: { type: mongoose.Schema.Types.Mixed },
+  isRead: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now }
+}, {
+  collection: 'app_notifications',
+  timestamps: true
+});
+
 const UserMemory = mongoose.model('UserMemory', UserMemorySchema);
 const Conversation = mongoose.model('Conversation', ConversationSchema);
 const ShortTermMemory = mongoose.model('ShortTermMemory', ShortTermMemorySchema);
 const AiPreference = mongoose.model('AiPreference', AiPreferenceSchema);
 const AgentLog = mongoose.model('AgentLog', AgentLogSchema);
 const ToolExecutionLog = mongoose.model('ToolExecutionLog', ToolExecutionLogSchema);
+const GeneratedFileMetadata = mongoose.model('GeneratedFileMetadata', GeneratedFileMetadataSchema);
+const AppNotification = mongoose.model('AppNotification', AppNotificationSchema);
 
 module.exports = {
   UserMemory,
@@ -141,5 +207,7 @@ module.exports = {
   ShortTermMemory,
   AiPreference,
   AgentLog,
-  ToolExecutionLog
+  ToolExecutionLog,
+  GeneratedFileMetadata,
+  AppNotification
 };

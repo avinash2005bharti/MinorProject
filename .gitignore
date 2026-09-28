@@ -57,3 +57,16 @@ build/
 *.sw?
 .DS_Store
 Thumbs.db
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.pytest_cache/
+
+# Local Vector Storage & Temporary Upload Deliverables
+ai-service/qdrant_data/
+backend/uploads/*.xlsx
+backend/uploads/*.pdf
+backend/uploads/*.docx

@@ -1,27 +1,24 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from loguru import logger
-from rag.pinecone_manager import pinecone_manager
+from rag.qdrant_manager import qdrant_manager
 
 class RAGAgent:
     """
     RAG Agent responsible for:
-    - Multi-collection semantic retrieval using Pinecone (768 dimensions)
-    - Context building
-    - Citation generation with similarity scoring
+    - Departmental policy and document retrieval from Qdrant erp_documents
+    - Strict department/tenant isolation filtering
+    - Context building and citation scoring
     """
     def __init__(self):
-        self.vector_db = pinecone_manager
+        self.qdrant = qdrant_manager
 
-    def retrieve_context(self, query: str, collection: str = None, top_k: int = 4) -> Dict[str, Any]:
+    def retrieve_context(self, query: str, collection: str = None, department: str = "CSE", top_k: int = 4) -> Dict[str, Any]:
         """
-        Retrieves top relevant passages from Pinecone (768-dim) and constructs formatted context + citations.
+        Retrieves top relevant passages from Qdrant erp_documents and constructs formatted context + citations.
         """
-        logger.info(f"[RAG Agent] Retrieving 768-dim context from Pinecone for: '{query}'")
+        logger.info(f"[RAG Agent] Retrieving context from Qdrant for: '{query}' (Department: {department})")
 
-        if collection:
-            results = self.vector_db.hybrid_search(category=collection, query=query, top_k=top_k)
-        else:
-            results = self.vector_db.multi_collection_search(query=query, top_k=top_k)
+        results = self.qdrant.search_rag(query=query, department=department, category=collection, top_k=top_k)
 
         citations = []
         context_snippets = []

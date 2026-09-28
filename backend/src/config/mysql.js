@@ -2,18 +2,30 @@ const { Sequelize } = require('sequelize');
 const path = require('path');
 const fs = require('fs');
 
+const dbUrl = process.env.MYSQL_DATABASE_URL;
 const host = process.env.MYSQL_HOST;
 const port = process.env.MYSQL_PORT || 3306;
 const database = process.env.MYSQL_DATABASE || 'cse_erp';
 const username = process.env.MYSQL_USER || 'root';
 const password = process.env.MYSQL_PASSWORD || '';
 
-// If USE_MYSQL is true or MYSQL_HOST is not localhost/127.0.0.1, connect to MySQL
-const useRealMySQL = process.env.USE_MYSQL === 'true' || (host && host !== 'localhost' && host !== '127.0.0.1');
+// If MYSQL_DATABASE_URL is provided, USE_MYSQL is true, or MYSQL_HOST is set, connect to MySQL
+const useRealMySQL = Boolean(dbUrl) || process.env.USE_MYSQL === 'true' || (host && host !== 'localhost' && host !== '127.0.0.1');
 
 let sequelize;
 
-if (useRealMySQL) {
+if (dbUrl) {
+  sequelize = new Sequelize(dbUrl, {
+    dialect: 'mysql',
+    logging: false,
+    pool: {
+      max: 10,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    }
+  });
+} else if (useRealMySQL) {
   sequelize = new Sequelize(database, username, password, {
     host: host || 'localhost',
     port,

@@ -1,23 +1,19 @@
 const xlsx = require('xlsx');
-const Student = require('../models/Student');
-const Attendance = require('../models/Attendance');
-const Timetable = require('../models/Timetable');
+const { Student, Timetable } = require('../models/mysql');
 
 const excelService = {
   // Export students to Excel buffer
   async exportStudentsExcel(filter = {}) {
-    const students = await Student.find(filter).lean();
+    const students = await Student.findAll({ where: filter });
     const data = students.map((s) => ({
-      'Roll Number': s.rollNo,
+      'Enrollment Number': s.enrollment_no,
       'Full Name': s.name,
       'Email': s.email,
-      'Department': s.department,
+      'Phone': s.phone,
       'Year': s.year,
       'Semester': s.semester,
       'Section': s.section,
       'Batch': s.batch,
-      'CGPA': s.cgpa,
-      'Attendance %': s.attendance,
       'Status': s.status
     }));
 
@@ -28,23 +24,33 @@ const excelService = {
   },
 
   // Export section timetable to Excel buffer
-  async exportTimetableExcel(section = 'CSE-3A') {
-    const slots = await Timetable.find({ section }).lean();
+  async exportTimetableExcel(section = 'A', semester = 5) {
+    const cleanSection = section.replace('CSE-', '').toUpperCase();
+    const where = { section: cleanSection };
+    if (semester) where.semester = parseInt(semester, 10);
+
+    const slots = await Timetable.findAll({
+      where,
+      order: [
+        ['day', 'ASC'],
+        ['start_time', 'ASC']
+      ]
+    });
+
     const data = slots.map((s) => ({
       'Day': s.day,
-      'Period': s.period,
-      'Time': s.time,
-      'Subject Code': s.code,
-      'Subject Name': s.subject,
-      'Faculty': s.faculty,
-      'Room': s.room,
-      'Section': s.section,
-      'Type': s.type
+      'Period': s.period || 1,
+      'Time Slot': `${s.start_time || ''} - ${s.end_time || ''}`,
+      'Subject': s.subject,
+      'Faculty Member': s.faculty,
+      'Room / Lab': s.room,
+      'Class': `${s.year || '3rd Year'} Sem ${s.semester} Sec ${s.section}`,
+      'Type': s.type || 'Lecture'
     }));
 
     const worksheet = xlsx.utils.json_to_sheet(data);
     const workbook = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(workbook, worksheet, `Timetable_${section}`);
+    xlsx.utils.book_append_sheet(workbook, worksheet, `Timetable_Sec_${cleanSection}`);
     return xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
   }
 };

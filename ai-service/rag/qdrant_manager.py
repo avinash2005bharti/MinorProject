@@ -1,5 +1,6 @@
 import os
 import socket
+from datetime import datetime
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse
 from loguru import logger
@@ -7,26 +8,31 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, Filter, FieldCondition, MatchValue
 from embeddings.embedder import embedder, VECTOR_DIMENSION
 
+LTM_COLLECTION = "erp_long_term_memory"
+RAG_COLLECTION = "erp_documents"
+
 REQUIRED_COLLECTIONS = [
+    LTM_COLLECTION,
+    RAG_COLLECTION,
     "Notes",
     "Assignments",
     "Circulars",
-    "Syllabus",
-    "Lab Manuals",
-    "Previous Papers",
-    "Faculty Documents"
+    "Syllabus"
 ]
 
 class QdrantRAGManager:
     """
-    Manages Qdrant vector database connection, collection lifecycle,
-    chunk indexing, and hybrid semantic retrieval for CSE Department.
+    Manages Qdrant Cloud / Local vector database:
+    1. erp_long_term_memory (LTM): Persistent semantic memory for user/HOD preferences & historical context.
+    2. erp_documents (RAG): Institutional policies, department rules, regulations, uploaded academic files.
+    Applies strict department and tenant metadata filtering to prevent cross-department data leakage.
     """
     def __init__(self):
         self.qdrant_url = os.getenv("QDRANT_URL", "")
         self.api_key = os.getenv("QDRANT_API_KEY", "")
         self.client = self._init_client()
         self._ensure_collections()
+        self._seed_default_policies()
 
     def _is_url_reachable(self, url_str: str) -> bool:
         try:
@@ -39,7 +45,7 @@ class QdrantRAGManager:
             return False
 
     def _init_client(self) -> QdrantClient:
-        # Check if remote Qdrant is actually reachable
+        # Check if remote cloud Qdrant is configured and reachable
         if self.qdrant_url and self.qdrant_url.startswith("http") and self._is_url_reachable(self.qdrant_url):
             try:
                 logger.info(f"[Qdrant] Connecting to live remote Qdrant at {self.qdrant_url}")
@@ -47,16 +53,13 @@ class QdrantRAGManager:
             except Exception as e:
                 logger.warning(f"[Qdrant] Remote connection failed: {e}. Switching to local storage.")
 
-        # Local persistent embedded Qdrant database (runs anywhere with zero dependencies)
+        # Local persistent embedded Qdrant database fallback
         storage_path = os.path.join(os.path.dirname(__file__), "../qdrant_data")
         os.makedirs(storage_path, exist_ok=True)
         logger.info(f"[Qdrant] Initialized embedded Qdrant vector engine at: {storage_path}")
         return QdrantClient(path=storage_path)
 
     def _ensure_collections(self):
-        """
-        Verify and create all 7 departmental Qdrant collections.
-        """
         try:
             existing = [c.name for c in self.client.get_collections().collections]
         except Exception as e:
@@ -77,24 +80,160 @@ class QdrantRAGManager:
                 except Exception as e:
                     logger.debug(f"[Qdrant] Collection '{col}' status: {e}")
 
+    def _seed_default_policies(self):
+        """
+        Seeds standard departmental timetable policies into erp_documents if empty.
+        """
+        try:
+            res = self.search_rag(query="timetable regulations", department="CSE", top_k=1)
+            if not res:
+                policies = [
+                    {
+                        "content": (
+                            "CSE Department Timetable Regulations: Core theory lectures are 1 hour (09:30 AM to 12:45 PM and 01:30 PM to 04:30 PM). "
+                            "A mandatory departmental lunch recess is observed from 12:45 PM to 01:30 PM. No classes or labs may be scheduled during lunch break. "
+                            "Laboratory sessions must be allocated as 2 consecutive periods in designated software or hardware laboratories."
+                        ),
+                        "metadata": {
+                            "title": "CSE Department Timetable & Recess Policy",
+                            "department": "CSE",
+                            "category": "Academic Regulations",
+                            "document_type": "Policy"
+                        }
+                    },
+                    {
+                        "content": (
+                            "Faculty Workload & Absence Scheduling Policy: Full-time faculty maximum workload is 4 periods per day and 18 periods per week. "
+                            "Consecutive teaching blocks cannot exceed 3 hours without an interval. "
+                            "In case of teacher absence, the HOD AI Teacher Scheduler must evaluate available faculty with matching subject expertise, "
+                            "lowest daily load, and propose substitute assignments subject to HOD authorization."
+                        ),
+                        "metadata": {
+                            "title": "Faculty Workload & Absence Substitution Policy",
+                            "department": "CSE",
+                            "category": "Faculty Guidelines",
+                            "document_type": "Policy"
+                        }
+                    }
+                ]
+                self.index_document_chunks(RAG_COLLECTION, policies)
+                logger.info("[Qdrant] Seeded standard CSE timetable policies into 'erp_documents'.")
+        except Exception as e:
+            logger.debug(f"[Qdrant] Default policy check error: {e}")
+
+    # ----------------- Long-Term Memory (LTM) -----------------
+    def store_ltm(
+        self,
+        user_id: str,
+        role: str,
+        fact: str,
+        category: str = "preference",
+        department: str = "CSE"
+    ) -> bool:
+        """
+        Persists a high-value semantic long-term memory into erp_long_term_memory.
+        """
+        if not fact or not fact.strip():
+            return False
+
+        try:
+            vector = embedder.embed_text(fact)
+            point_id = abs(hash(f"ltm_{user_id}_{fact}_{datetime.utcnow().timestamp()}")) % (10**10)
+
+            point = PointStruct(
+                id=point_id,
+                vector=vector,
+                payload={
+                    "text": fact,
+                    "user_id": str(user_id),
+                    "role": role,
+                    "category": category,
+                    "department": department,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+            )
+
+            self.client.upsert(collection_name=LTM_COLLECTION, points=[point])
+            logger.info(f"[Qdrant LTM] Saved long-term memory for User #{user_id} ({category}): '{fact[:60]}...'")
+            return True
+        except Exception as e:
+            logger.error(f"[Qdrant LTM] Error saving memory: {e}")
+            return False
+
+    def retrieve_ltm(
+        self,
+        user_id: str,
+        query: str,
+        department: str = "CSE",
+        top_k: int = 3
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieves relevant long-term semantic memories for a user, filtered by department.
+        """
+        query_vector = embedder.embed_text(query)
+
+        conditions = [
+            FieldCondition(key="department", match=MatchValue(value=department))
+        ]
+        # Also allow general department memories or user-specific
+        qdrant_filter = Filter(must=conditions)
+
+        try:
+            if hasattr(self.client, "query_points"):
+                response = self.client.query_points(
+                    collection_name=LTM_COLLECTION,
+                    query=query_vector,
+                    query_filter=qdrant_filter,
+                    limit=top_k
+                )
+                points = response.points
+            elif hasattr(self.client, "search"):
+                points = self.client.search(
+                    collection_name=LTM_COLLECTION,
+                    query_vector=query_vector,
+                    query_filter=qdrant_filter,
+                    limit=top_k
+                )
+            else:
+                points = []
+
+            results = []
+            for p in points:
+                payload = p.payload or {}
+                results.append({
+                    "id": p.id,
+                    "fact": payload.get("text", ""),
+                    "category": payload.get("category", ""),
+                    "user_id": payload.get("user_id"),
+                    "score": round(float(p.score), 4)
+                })
+            return results
+        except Exception as e:
+            logger.warning(f"[Qdrant LTM] Retrieval error: {e}")
+            return []
+
+    # ----------------- Document RAG Indexing & Retrieval -----------------
     def index_document_chunks(self, collection_name: str, chunks: List[Dict[str, Any]]) -> int:
         if not chunks:
             return 0
 
-        # Validate collection exists
+        target_col = collection_name or RAG_COLLECTION
+
         try:
-            self.client.get_collection(collection_name)
+            self.client.get_collection(target_col)
         except Exception:
             self.client.create_collection(
-                collection_name=collection_name,
+                collection_name=target_col,
                 vectors_config=VectorParams(size=VECTOR_DIMENSION, distance=Distance.COSINE)
             )
 
         points = []
         for i, chunk in enumerate(chunks):
-            content = chunk["content"]
+            content = chunk.get("content", "")
+            if not content.strip():
+                continue
             vector = embedder.embed_text(content)
-            point_id = abs(hash(f"{collection_name}_{chunk.get('metadata', {}).get('title', '')}_{i}")) % (10**10)
+            point_id = abs(hash(f"{target_col}_{chunk.get('metadata', {}).get('title', '')}_{i}_{datetime.utcnow().timestamp()}")) % (10**10)
 
             points.append(
                 PointStruct(
@@ -103,14 +242,78 @@ class QdrantRAGManager:
                     payload={
                         "text": content,
                         "metadata": chunk.get("metadata", {}),
-                        "collection": collection_name
+                        "collection": target_col,
+                        "department": chunk.get("metadata", {}).get("department", "CSE")
                     }
                 )
             )
 
-        self.client.upsert(collection_name=collection_name, points=points)
-        logger.info(f"[Qdrant] Indexed {len(points)} chunks into collection '{collection_name}'")
+        if points:
+            self.client.upsert(collection_name=target_col, points=points)
+            logger.info(f"[Qdrant RAG] Indexed {len(points)} chunks into '{target_col}'")
         return len(points)
+
+    def search_rag(
+        self,
+        query: str,
+        department: str = "CSE",
+        category: Optional[str] = None,
+        top_k: int = 4
+    ) -> List[Dict[str, Any]]:
+        """
+        Hybrid semantic retrieval with strict departmental isolation filter.
+        """
+        query_vector = embedder.embed_text(query)
+
+        conditions = []
+        if department:
+            conditions.append(FieldCondition(key="department", match=MatchValue(value=department)))
+        if category:
+            conditions.append(FieldCondition(key="metadata.category", match=MatchValue(value=category)))
+
+        qdrant_filter = Filter(must=conditions) if conditions else None
+
+        collections_to_search = [RAG_COLLECTION]
+        if category and category in REQUIRED_COLLECTIONS:
+            collections_to_search.append(category)
+
+        all_results = []
+        for col in collections_to_search:
+            try:
+                if hasattr(self.client, "query_points"):
+                    res = self.client.query_points(
+                        collection_name=col,
+                        query=query_vector,
+                        query_filter=qdrant_filter,
+                        limit=top_k
+                    )
+                    points = res.points
+                elif hasattr(self.client, "search"):
+                    points = self.client.search(
+                        collection_name=col,
+                        query_vector=query_vector,
+                        query_filter=qdrant_filter,
+                        limit=top_k
+                    )
+                else:
+                    points = []
+
+                for r in points:
+                    payload = r.payload or {}
+                    meta = payload.get("metadata", {})
+                    all_results.append({
+                        "id": r.id,
+                        "score": round(float(r.score), 4),
+                        "snippet": payload.get("text", "")[:350],
+                        "title": meta.get("title", f"Policy in {col}"),
+                        "collection": col,
+                        "metadata": meta
+                    })
+            except Exception as e:
+                logger.debug(f"[Qdrant RAG] Search warning in '{col}': {e}")
+
+        all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return all_results[:top_k]
 
     def hybrid_search(
         self,
@@ -119,65 +322,10 @@ class QdrantRAGManager:
         top_k: int = 5,
         filter_metadata: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-        query_vector = embedder.embed_text(query)
-
-        qdrant_filter = None
-        if filter_metadata:
-            conditions = []
-            for key, val in filter_metadata.items():
-                if val is not None:
-                    conditions.append(
-                        FieldCondition(key=f"metadata.{key}", match=MatchValue(value=val))
-                    )
-            if conditions:
-                qdrant_filter = Filter(must=conditions)
-
-        try:
-            if hasattr(self.client, "query_points"):
-                response = self.client.query_points(
-                    collection_name=collection_name,
-                    query=query_vector,
-                    query_filter=qdrant_filter,
-                    limit=top_k
-                )
-                points = response.points
-            elif hasattr(self.client, "search"):
-                points = self.client.search(
-                    collection_name=collection_name,
-                    query_vector=query_vector,
-                    query_filter=qdrant_filter,
-                    limit=top_k
-                )
-            else:
-                points = []
-
-            formatted = []
-            for r in points:
-                payload = r.payload or {}
-                meta = payload.get("metadata", {})
-                formatted.append({
-                    "id": r.id,
-                    "score": round(float(r.score), 4),
-                    "snippet": payload.get("text", "")[:350],
-                    "title": meta.get("title", f"Document in {collection_name}"),
-                    "collection": collection_name,
-                    "metadata": meta
-                })
-            return formatted
-        except Exception as e:
-            logger.warning(f"[Qdrant] Search error in '{collection_name}': {e}")
-            return []
+        dept = filter_metadata.get("department", "CSE") if filter_metadata else "CSE"
+        return self.search_rag(query=query, department=dept, top_k=top_k)
 
     def multi_collection_search(self, query: str, top_k: int = 4) -> List[Dict[str, Any]]:
-        all_results = []
-        for col in ["Notes", "Syllabus", "Circulars", "Assignments"]:
-            try:
-                res = self.hybrid_search(col, query, top_k=2)
-                all_results.extend(res)
-            except Exception:
-                continue
-
-        all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
-        return all_results[:top_k]
+        return self.search_rag(query=query, department="CSE", top_k=top_k)
 
 qdrant_manager = QdrantRAGManager()

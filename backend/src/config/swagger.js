@@ -235,12 +235,11 @@ const swaggerDocument = {
       }
     },
 
-    // Timetable Module
+    // Timetable Module & AI Scheduler
     '/timetable': {
       get: {
-        tags: ['Timetable'],
+        tags: ['Timetable & Scheduler'],
         summary: 'Get class timetable by Year, Semester, Section, and Day',
-        security: [{ bearerAuth: [] }],
         parameters: [
           { name: 'year', in: 'query', schema: { type: 'string' } },
           { name: 'semester', in: 'query', schema: { type: 'integer' } },
@@ -248,6 +247,138 @@ const swaggerDocument = {
           { name: 'day', in: 'query', schema: { type: 'string' } }
         ],
         responses: { 200: { description: 'Weekly master schedule' } }
+      }
+    },
+    '/timetable/generate': {
+      post: {
+        tags: ['Timetable & Scheduler'],
+        summary: 'Generate optimized timetable using deterministic CSP solver and LLM intent constraints',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  department: { type: 'string', example: 'CSE' },
+                  year: { type: 'string', example: '3rd Year' },
+                  semester: { type: 'integer', example: 5 },
+                  section: { type: 'string', example: 'A' },
+                  academic_year: { type: 'string', example: '2026-27' },
+                  custom_constraints: { type: 'array', items: { type: 'string' }, example: ['Keep Friday lighter', 'Labs should be two consecutive periods'] }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'Draft timetable created with CSP metrics' } }
+      }
+    },
+    '/timetable/conflicts': {
+      get: {
+        tags: ['Timetable & Scheduler'],
+        summary: 'Detect room, teacher, section, and lab scheduling collisions',
+        parameters: [
+          { name: 'semester', in: 'query', schema: { type: 'integer', example: 5 } },
+          { name: 'section', in: 'query', schema: { type: 'string', example: 'A' } }
+        ],
+        responses: { 200: { description: 'Collision validation report' } }
+      }
+    },
+    '/timetable/{id}/approve': {
+      post: {
+        tags: ['Timetable & Scheduler'],
+        summary: 'Approve draft timetable version (HOD authorization required)',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Version approved' } }
+      }
+    },
+    '/timetable/{id}/publish': {
+      post: {
+        tags: ['Timetable & Scheduler'],
+        summary: 'Publish official timetable version and archive previous active schedule',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Version published and locked' } }
+      }
+    },
+    '/timetable/export/excel': {
+      get: {
+        tags: ['Timetable & Scheduler'],
+        summary: 'Export structured formatted timetable grid as XLSX workbook',
+        parameters: [
+          { name: 'semester', in: 'query', schema: { type: 'integer', example: 5 } },
+          { name: 'section', in: 'query', schema: { type: 'string', example: 'A' } }
+        ],
+        responses: { 200: { description: 'Binary XLSX file stream' } }
+      }
+    },
+    '/timetable/export/pdf': {
+      get: {
+        tags: ['Timetable & Scheduler'],
+        summary: 'Export high-resolution printable timetable grid as PDF document',
+        parameters: [
+          { name: 'semester', in: 'query', schema: { type: 'integer', example: 5 } },
+          { name: 'section', in: 'query', schema: { type: 'string', example: 'A' } }
+        ],
+        responses: { 200: { description: 'Binary PDF file stream' } }
+      }
+    },
+    // Teacher Absence & Dynamic Scheduler Module
+    '/teacher-scheduler/analyze': {
+      post: {
+        tags: ['Teacher Scheduler'],
+        summary: 'Analyze teacher absence and calculate conflict-free substitute proposals',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['teacher_name'],
+                properties: {
+                  teacher_name: { type: 'string', example: 'Dr. Sunita Sharma' },
+                  day: { type: 'string', example: 'Monday' },
+                  date: { type: 'string', example: '2026-09-28' },
+                  department: { type: 'string', example: 'CSE' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'Ranked substitute teacher recommendations' } }
+      }
+    },
+    '/teacher-scheduler/apply': {
+      post: {
+        tags: ['Teacher Scheduler'],
+        summary: 'Apply approved teacher substitutions transactionally to MySQL and notify faculty/students',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['absence_data'],
+                properties: {
+                  absence_data: { type: 'object' },
+                  approved_by: { type: 'string', example: 'Dr. Alok Verma (HOD)' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'Substitutions activated and audit log written' } }
+      }
+    },
+    '/teacher-scheduler/conflicts': {
+      get: {
+        tags: ['Teacher Scheduler'],
+        summary: 'List pending unresolved substitution conflicts',
+        responses: { 200: { description: 'Pending conflict proposals' } }
       }
     },
 

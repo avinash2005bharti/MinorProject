@@ -194,4 +194,97 @@ class MongoMemoryManager:
 
         getattr(self, "_local_cache", {}).setdefault("tool_execution_logs", []).append(doc)
 
+    # ----------------- Short Term Memory (STM) Workflow -----------------
+    def get_stm(self, session_id: str, conversation_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Retrieves active short-term task and conversational memory from MongoDB.
+        """
+        query = {"sessionId": session_id}
+        if self.db is not None:
+            try:
+                doc = self.db.short_term_memory.find_one(query)
+                if not doc and conversation_id:
+                    doc = self.db.short_term_memory.find_one({"conversationId": conversation_id})
+                if doc:
+                    doc["_id"] = str(doc["_id"])
+                    return doc
+            except Exception as e:
+                logger.warning(f"[MongoMemory] STM fetch error: {e}")
+
+        return getattr(self, "_local_cache", {}).get("short_term_memory", {}).get(session_id, {
+            "sessionId": session_id,
+            "conversationId": conversation_id or session_id,
+            "recentConstraints": [],
+            "taskContext": {},
+            "contextWindow": []
+        })
+
+    def update_stm(
+        self,
+        session_id: str,
+        user_id: str,
+        updates: Dict[str, Any],
+        conversation_id: Optional[str] = None
+    ):
+        """
+        Persists active short-term working memory state, task context, and constraints.
+        """
+        cid = conversation_id or session_id
+        doc_updates = {
+            "$set": {
+                "sessionId": session_id,
+                "conversationId": cid,
+                "userId": str(user_id),
+                "updatedAt": datetime.utcnow(),
+                **updates
+            }
+        }
+
+        if self.db is not None:
+            try:
+                self.db.short_term_memory.update_one(
+                    {"sessionId": session_id},
+                    doc_updates,
+                    upsert=True
+                )
+                return
+            except Exception as e:
+                logger.error(f"[MongoMemory] STM update error: {e}")
+
+        cache = getattr(self, "_local_cache", {}).setdefault("short_term_memory", {})
+        entry = cache.setdefault(session_id, {"sessionId": session_id, "conversationId": cid, "userId": str(user_id)})
+        entry.update(updates)
+
+    def store_pending_approval(
+        self,
+        session_id: str,
+        user_id: str,
+        action_type: str,
+        action_data: Dict[str, Any],
+        conversation_id: Optional[str] = None
+    ):
+        approval_payload = {
+            "actionType": action_type,
+            "actionData": action_data,
+            "status": "PENDING",
+            "createdAt": datetime.utcnow().isoformat()
+        }
+        self.update_stm(
+            session_id=session_id,
+            user_id=user_id,
+            updates={"pendingApprovalAction": approval_payload},
+            conversation_id=conversation_id
+        )
+
+    def get_pending_approval(self, session_id: str) -> Optional[Dict[str, Any]]:
+        stm = self.get_stm(session_id)
+        return stm.get("pendingApprovalAction")
+
+    def clear_pending_approval(self, session_id: str, user_id: str):
+        self.update_stm(
+            session_id=session_id,
+            user_id=user_id,
+            updates={"pendingApprovalAction": None}
+        )
+
 mongo_memory = MongoMemoryManager()
