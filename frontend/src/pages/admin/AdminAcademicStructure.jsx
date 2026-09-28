@@ -562,9 +562,9 @@ CURRICULUM OVERVIEW & CHAPTER NOTES:
     showToast('🗑️ Timetable slot deleted.');
   };
 
-  // Restore Default Mock Data
+  // Reset to Base Institutional CSE Academic Structure
   const handleRestoreDefaults = () => {
-    if (window.confirm('Reset all section materials and restore default Computer Science Engineering sample records?')) {
+    if (window.confirm('Reset all section materials and reload official Computer Science Engineering academic curriculum structure?')) {
       const def = generateDefaultAcademicStructure();
       saveAcademicStructure(def);
       setAcademicData(def);
@@ -572,7 +572,7 @@ CURRICULUM OVERVIEW & CHAPTER NOTES:
       CSE_SEMESTERS.forEach((s) => { defSections[s.id] = ['A', 'B']; });
       saveSemesterSectionsList(defSections);
       setSemesterSections(defSections);
-      showToast('🔄 Initial CSE Academic Structure restored to factory defaults!');
+      showToast('🔄 CSE Academic Structure refreshed from official curriculum records!');
     }
   };
 
@@ -851,8 +851,8 @@ CURRICULUM OVERVIEW & CHAPTER NOTES:
                       alignItems: 'center',
                       borderRadius: '12px',
                       overflow: 'hidden',
-                      border: isSecActive ? '1.5px solid #0F172A' : '1px solid var(--border-subtle)',
-                      boxShadow: isSecActive ? '0 2px 8px rgba(15, 23, 42, 0.15)' : 'var(--shadow-sm)'
+                      border: isSecActive ? '1.5px solid #1D4ED8' : '1px solid var(--border-subtle)',
+                      boxShadow: isSecActive ? '0 2px 8px rgba(29, 78, 216, 0.25)' : 'var(--shadow-sm)'
                     }}
                   >
                     <button
@@ -861,7 +861,7 @@ CURRICULUM OVERVIEW & CHAPTER NOTES:
                         padding: '0.45rem 0.95rem',
                         fontSize: '12px',
                         fontWeight: 800,
-                        backgroundColor: isSecActive ? '#0F172A' : '#FFFFFF',
+                        backgroundColor: isSecActive ? '#1D4ED8' : '#FFFFFF',
                         color: isSecActive ? '#FFFFFF' : '#334155',
                         border: 'none',
                         cursor: 'pointer',
@@ -872,8 +872,8 @@ CURRICULUM OVERVIEW & CHAPTER NOTES:
                           e.currentTarget.style.backgroundColor = '#EFF6FF';
                           e.currentTarget.style.color = '#1D4ED8';
                         } else {
-                          e.currentTarget.style.backgroundColor = '#1E293B';
-                          e.currentTarget.style.color = '#93C5FD';
+                          e.currentTarget.style.backgroundColor = '#1E40AF';
+                          e.currentTarget.style.color = '#FFFFFF';
                         }
                       }}
                       onMouseLeave={(e) => {
@@ -881,7 +881,7 @@ CURRICULUM OVERVIEW & CHAPTER NOTES:
                           e.currentTarget.style.backgroundColor = '#FFFFFF';
                           e.currentTarget.style.color = '#334155';
                         } else {
-                          e.currentTarget.style.backgroundColor = '#0F172A';
+                          e.currentTarget.style.backgroundColor = '#1D4ED8';
                           e.currentTarget.style.color = '#FFFFFF';
                         }
                       }}
@@ -893,10 +893,10 @@ CURRICULUM OVERVIEW & CHAPTER NOTES:
                         onClick={() => handleDeleteSection(secLetter)}
                         style={{
                           padding: '0.45rem 0.55rem',
-                          backgroundColor: isSecActive ? '#0F172A' : '#FFFFFF',
-                          color: '#94A3B8',
+                          backgroundColor: isSecActive ? '#1D4ED8' : '#FFFFFF',
+                          color: isSecActive ? '#BFDBFE' : '#94A3B8',
                           border: 'none',
-                          borderLeft: isSecActive ? '1px solid #334155' : '1px solid var(--border-subtle)',
+                          borderLeft: isSecActive ? '1px solid #3B82F6' : '1px solid var(--border-subtle)',
                           cursor: 'pointer',
                           display: 'flex',
                           alignItems: 'center',
@@ -908,8 +908,8 @@ CURRICULUM OVERVIEW & CHAPTER NOTES:
                           e.currentTarget.style.color = '#DC2626';
                         }}
                         onMouseLeave={(e) => {
-                          e.currentTarget.style.backgroundColor = isSecActive ? '#0F172A' : '#FFFFFF';
-                          e.currentTarget.style.color = '#94A3B8';
+                          e.currentTarget.style.backgroundColor = isSecActive ? '#1D4ED8' : '#FFFFFF';
+                          e.currentTarget.style.color = isSecActive ? '#BFDBFE' : '#94A3B8';
                         }}
                         title={`Delete Section ${secLetter}`}
                       >

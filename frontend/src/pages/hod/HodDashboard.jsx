@@ -194,7 +194,7 @@ export default function HodDashboard() {
                         <button
                           onClick={() => hodRejectAttendanceConsideration(req.id)}
                           className="btn btn-sm btn-outline text-xs py-1.5 px-3"
-                          style={{ color: 'var(--error)' }}
+                          style={{ color: 'var(--error)', backgroundColor: '#FFFFFF', borderColor: '#FECDD3' }}
                           id={`btn-hod-reject-att-${req.id}`}
                         >
                           Reject
@@ -205,20 +205,21 @@ export default function HodDashboard() {
                             onClick={() => hodApproveAttendanceConsideration(req.id, true)}
                             className="btn btn-sm btn-primary text-xs py-1.5 px-4 font-bold shadow-sm"
                             id={`btn-hod-bypass-att-${req.id}`}
-                            style={{ backgroundColor: 'var(--primary)' }}
+                            style={{ backgroundColor: 'var(--primary)', color: '#FFFFFF' }}
                             title="Bypass TG review and directly authorize attendance consideration"
                           >
-                            <Zap size={13} />
-                            <span>Bypass TG & Directly Approve</span>
+                            <Zap size={13} color="#FFFFFF" />
+                            <span style={{ color: '#FFFFFF' }}>Bypass TG & Directly Approve</span>
                           </button>
                         ) : (
                           <button
                             onClick={() => hodApproveAttendanceConsideration(req.id)}
                             className="btn btn-sm btn-primary text-xs py-1.5 px-4 font-bold shadow-sm"
                             id={`btn-hod-approve-att-${req.id}`}
+                            style={{ backgroundColor: 'var(--secondary)', color: '#FFFFFF' }}
                           >
-                            <Sparkles size={13} />
-                            <span>Approve & Launch Agent Sync</span>
+                            <Sparkles size={13} color="#FFFFFF" />
+                            <span style={{ color: '#FFFFFF' }}>Approve & Launch Agent Sync</span>
                           </button>
                         )}
                       </div>

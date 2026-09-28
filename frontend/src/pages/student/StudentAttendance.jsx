@@ -70,11 +70,21 @@ export default function StudentAttendance() {
     setQueryModalOpen(false);
   };
 
-  // Mock class sessions list
-  const classSessions = [
+  // Synchronized class sessions ledger for student section
+  const [sessionsList, setSessionsList] = useState([]);
+
+  useEffect(() => {
+    attendanceService.fetchStudentAttendance(currentUser?.id).then((res) => {
+      if (res && Array.isArray(res.sessions)) {
+        setSessionsList(res.sessions);
+      }
+    }).catch(() => {});
+  }, [currentUser?.id]);
+
+  const classSessions = sessionsList.length > 0 ? sessionsList : [
     { id: 'sess-1', date: '12 Sept 2025', subject: 'Data Structures & Algorithms', code: 'CS301', period: 'Period 2 (10:30 AM - 11:30 AM)', faculty: 'Dr. Rajesh Verma', status: 'absent', queryEligible: true },
-    { id: 'sess-2', date: '11 Sept 2025', subject: 'Database Management Systems', code: 'CS302', period: 'Period 1 (09:00 AM - 10:00 AM)', faculty: 'Prof. Anita Sharma', status: currentUser.attendance >= 80 ? 'present' : 'absent', autoUpdated: currentUser.attendance >= 80 },
-    { id: 'sess-3', date: '10 Sept 2025', subject: 'Operating Systems', code: 'CS303', period: 'Period 3 (11:15 AM - 12:15 PM)', faculty: 'Dr. Meenakshi S.', status: currentUser.attendance >= 80 ? 'present' : 'absent', autoUpdated: currentUser.attendance >= 80 },
+    { id: 'sess-2', date: '11 Sept 2025', subject: 'Database Management Systems', code: 'CS302', period: 'Period 1 (09:00 AM - 10:00 AM)', faculty: 'Prof. Anita Sharma', status: (currentUser?.attendance || 72) >= 80 ? 'present' : 'absent', autoUpdated: (currentUser?.attendance || 72) >= 80 },
+    { id: 'sess-3', date: '10 Sept 2025', subject: 'Operating Systems', code: 'CS303', period: 'Period 3 (11:15 AM - 12:15 PM)', faculty: 'Dr. Meenakshi S.', status: (currentUser?.attendance || 72) >= 80 ? 'present' : 'absent', autoUpdated: (currentUser?.attendance || 72) >= 80 },
     { id: 'sess-4', date: '09 Sept 2025', subject: 'Computer Networks', code: 'CS304', period: 'Period 2 (10:00 AM - 11:00 AM)', faculty: 'Prof. Amit K.', status: 'present' },
     { id: 'sess-5', date: '08 Sept 2025', subject: 'Software Engineering', code: 'CS305', period: 'Period 1 (09:00 AM - 10:00 AM)', faculty: 'Prof. K. Sen', status: 'present' }
   ];

@@ -62,9 +62,11 @@ export default function TgMyStudents() {
                 onClick={() => setFilter(f.id)}
                 className="btn btn-sm"
                 style={{
-                  backgroundColor: filter === f.id ? 'var(--primary)' : 'var(--surface-low)',
+                  backgroundColor: filter === f.id ? 'var(--primary)' : '#FFFFFF',
                   color: filter === f.id ? '#FFFFFF' : 'var(--text-secondary)',
-                  fontSize: '11px'
+                  border: filter === f.id ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
+                  fontSize: '11px',
+                  fontWeight: filter === f.id ? 700 : 500
                 }}
               >
                 {f.label}

@@ -100,24 +100,25 @@ export default function RequestCard({
               className="btn btn-sm btn-success"
               style={{
                 flex: 1,
-                backgroundColor: role === 'hod' && request.status === 'pending_tg' ? 'var(--primary)' : undefined
+                backgroundColor: role === 'hod' && request.status === 'pending_tg' ? 'var(--primary)' : undefined,
+                color: '#FFFFFF'
               }}
               id={`btn-approve-request-${request.id}`}
             >
               {role === 'hod' && request.status === 'pending_tg' ? (
                 <>
-                  <Zap size={14} />
-                  <span>Direct Approve (Bypass TG)</span>
+                  <Zap size={14} color="#FFFFFF" />
+                  <span style={{ color: '#FFFFFF' }}>Direct Approve (Bypass TG)</span>
                 </>
               ) : request.type === 'leave_request' || request.leaveType ? (
                 <>
-                  <ShieldCheck size={14} />
-                  <span>Grant Leave Approval</span>
+                  <ShieldCheck size={14} color="#FFFFFF" />
+                  <span style={{ color: '#FFFFFF' }}>Grant Leave Approval</span>
                 </>
               ) : (
                 <>
-                  <CheckCircle2 size={14} />
-                  <span>Approve & Sync Agent</span>
+                  <CheckCircle2 size={14} color="#FFFFFF" />
+                  <span style={{ color: '#FFFFFF' }}>Approve & Sync Agent</span>
                 </>
               )}
             </button>
@@ -127,7 +128,7 @@ export default function RequestCard({
             <button
               onClick={onReject}
               className="btn btn-sm btn-outline"
-              style={{ color: 'var(--error)' }}
+              style={{ color: 'var(--error)', backgroundColor: '#FFFFFF', borderColor: '#FECDD3' }}
               id={`btn-reject-request-${request.id}`}
             >
               Reject
@@ -135,7 +136,7 @@ export default function RequestCard({
           )}
 
           {onViewDetails && (
-            <button onClick={onViewDetails} className="btn btn-sm btn-secondary" style={{ flex: onApprove || onRecommend ? 0 : 1 }}>
+            <button onClick={onViewDetails} className="btn btn-sm btn-secondary" style={{ flex: onApprove || onRecommend ? 0 : 1, backgroundColor: '#FFFFFF' }}>
               <span>Details</span>
               <ArrowRight size={14} />
             </button>

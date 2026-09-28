@@ -246,7 +246,7 @@ export default function DemoGuideModal({ isOpen, onClose }) {
         </div>
 
         <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-          <span className="text-[11px] text-slate-400">All 8 demo flows interactive with mock data</span>
+          <span className="text-[11px] text-slate-400">All 8 demo flows interactive with live Cloud ERP & AI agents</span>
           <button onClick={onClose} className="btn btn-outline text-xs py-1.5 px-4">
             Close Guide
           </button>

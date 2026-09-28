@@ -343,7 +343,7 @@ export default function HodAttendanceApproval() {
                           <button
                             onClick={() => hodRejectAttendanceConsideration(req.id)}
                             className="btn btn-outline"
-                            style={{ color: 'var(--error)' }}
+                            style={{ color: 'var(--error)', backgroundColor: '#FFFFFF', borderColor: '#FECDD3' }}
                             id={`btn-hod-reject-att-${req.id}`}
                           >
                             Reject Application
@@ -356,14 +356,15 @@ export default function HodAttendanceApproval() {
                               className="btn btn-primary"
                               style={{
                                 backgroundColor: 'var(--primary)',
+                                color: '#FFFFFF',
                                 borderRadius: 'var(--radius-xl)',
                                 boxShadow: 'var(--shadow-sm)'
                               }}
                               id={`btn-hod-bypass-consideration-${req.id}`}
                               title="Bypass TG review and directly authorize attendance consideration"
                             >
-                              <Zap size={16} />
-                              <span>Direct Approve & Consider (Bypass TG)</span>
+                              <Zap size={16} color="#FFFFFF" />
+                              <span style={{ color: '#FFFFFF' }}>Direct Approve & Consider (Bypass TG)</span>
                             </button>
                           )}
 
@@ -374,13 +375,14 @@ export default function HodAttendanceApproval() {
                               className="btn btn-primary"
                               style={{
                                 backgroundColor: 'var(--secondary)',
+                                color: '#FFFFFF',
                                 borderRadius: 'var(--radius-xl)',
                                 boxShadow: 'var(--shadow-sm)'
                               }}
                               id={`btn-hod-approve-att-${req.id}`}
                             >
-                              <Sparkles size={16} />
-                              <span>Approve (Trigger Attendance Agent)</span>
+                              <Sparkles size={16} color="#FFFFFF" />
+                              <span style={{ color: '#FFFFFF' }}>Approve (Trigger Attendance Agent)</span>
                             </button>
                           )}
                         </>
@@ -509,7 +511,7 @@ export default function HodAttendanceApproval() {
                           <button
                             onClick={() => hodRejectLeave(lv.id)}
                             className="btn btn-outline"
-                            style={{ color: 'var(--error)' }}
+                            style={{ color: 'var(--error)', backgroundColor: '#FFFFFF', borderColor: '#FECDD3' }}
                             id={`btn-hod-reject-leave-${lv.id}`}
                           >
                             Reject Application
@@ -522,14 +524,15 @@ export default function HodAttendanceApproval() {
                               className="btn btn-primary"
                               style={{
                                 backgroundColor: 'var(--primary)',
+                                color: '#FFFFFF',
                                 borderRadius: 'var(--radius-xl)',
                                 boxShadow: 'var(--shadow-sm)'
                               }}
                               id={`btn-hod-bypass-leave-${lv.id}`}
                               title="Bypass TG mentor review and directly grant leave clearance"
                             >
-                              <Zap size={16} />
-                              <span>Direct Grant Leave (Bypass TG)</span>
+                              <Zap size={16} color="#FFFFFF" />
+                              <span style={{ color: '#FFFFFF' }}>Direct Grant Leave (Bypass TG)</span>
                             </button>
                           )}
 
@@ -540,13 +543,14 @@ export default function HodAttendanceApproval() {
                               className="btn btn-primary"
                               style={{
                                 backgroundColor: 'var(--secondary)',
+                                color: '#FFFFFF',
                                 borderRadius: 'var(--radius-xl)',
                                 boxShadow: 'var(--shadow-sm)'
                               }}
                               id={`btn-hod-approve-leave-${lv.id}`}
                             >
-                              <ShieldCheck size={16} />
-                              <span>Grant Leave Approval</span>
+                              <ShieldCheck size={16} color="#FFFFFF" />
+                              <span style={{ color: '#FFFFFF' }}>Grant Leave Approval</span>
                             </button>
                           )}
                         </>

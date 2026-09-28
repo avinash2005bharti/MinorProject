@@ -66,11 +66,12 @@ export default function HodRequestsCentral() {
               onClick={() => setFilter(f.id)}
               className="btn btn-sm"
               style={{
-                backgroundColor: filter === f.id ? 'var(--primary)' : 'var(--surface-low)',
+                backgroundColor: filter === f.id ? 'var(--primary)' : '#FFFFFF',
                 color: filter === f.id ? '#FFFFFF' : 'var(--text-secondary)',
+                border: filter === f.id ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
                 fontSize: '12px',
                 fontWeight: filter === f.id ? 700 : 500,
-                boxShadow: filter === f.id ? 'var(--shadow-sm)' : 'none'
+                boxShadow: filter === f.id ? '0 2px 6px rgba(29, 78, 216, 0.2)' : 'var(--shadow-sm)'
               }}
             >
               {f.label}

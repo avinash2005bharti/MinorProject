@@ -15,6 +15,11 @@ const notesRoutes = require('./notesRoutes');
 const aiRoutes = require('./aiRoutes');
 const academicRoutes = require('./academicRoutes');
 const adminRoutes = require('./adminRoutes');
+const requestRoutes = require('./requestRoutes');
+const noticeRoutes = require('./noticeRoutes');
+const notificationRoutes = require('./notificationRoutes');
+const dashboardRoutes = require('./dashboardRoutes');
+const agentRoutes = require('./agentRoutes');
 
 const teacherSchedulerController = require('../controllers/teacherSchedulerController');
 
@@ -36,6 +41,11 @@ router.use('/ai', aiRoutes);
 router.use('/academic', academicRoutes);
 router.use('/departments', academicRoutes);
 router.use('/admin', adminRoutes);
+router.use('/requests', requestRoutes);
+router.use('/notices', noticeRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/dashboard', dashboardRoutes);
+router.use('/agents', agentRoutes);
 
 // Direct REST routes for teacher absence & substitutions (Section 23)
 router.post('/teachers/:id/absence', teacherSchedulerController.reportAbsence);
