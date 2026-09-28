@@ -348,6 +348,8 @@ export function ERPProvider({ children }) {
 
         // When all steps finish
         if (index === steps.length - 1) {
+          const wasTgPending = targetReq.status === 'pending_tg';
+
           // 1. Update Request state to completed
           setAttendanceRequests((prevReqs) =>
             prevReqs.map((req) => {
@@ -355,10 +357,13 @@ export function ERPProvider({ children }) {
                 return {
                   ...req,
                   status: 'completed',
+                  tgBypassed: wasTgPending,
                   timeline: [
-                    { ...req.timeline[0], completed: true },
-                    { ...req.timeline[1], completed: true },
-                    { step: 'HOD Approval & Clearance', actor: 'Dr. S. Roy (Approved)', time: 'Just now', completed: true },
+                    { ...(req.timeline[0] || { step: 'Consideration Submitted', actor: req.studentName }), completed: true },
+                    wasTgPending
+                      ? { step: 'TG Review (Bypassed by HOD Direct Action)', actor: 'TG Mentor (Bypassed)', time: 'Bypassed', completed: true, warning: true }
+                      : { ...(req.timeline[1] || { step: 'TG Review', actor: 'Prof. K. Sen (Verified)' }), completed: true },
+                    { step: 'HOD Direct Clearance Granted', actor: 'HOD Office (Approved)', time: 'Just now', completed: true },
                     { step: 'Attendance Agent Execution', actor: 'Attendance Agent (Synced)', time: 'Completed', completed: true }
                   ]
                 };
@@ -426,6 +431,27 @@ export function ERPProvider({ children }) {
         }
       }, step.delay);
     });
+  };
+
+  // HOD rejects attendance consideration
+  const hodRejectAttendanceConsideration = (requestId, reason = 'Rejected by HOD') => {
+    requestService.hodRejectAttendanceConsiderationApi(requestId, reason).catch(() => {});
+    setAttendanceRequests((prevReqs) =>
+      prevReqs.map((req) =>
+        req.id === requestId
+          ? {
+              ...req,
+              status: 'rejected',
+              rejectionReason: reason,
+              timeline: [
+                ...req.timeline.map((t) => ({ ...t, active: false })),
+                { step: 'HOD Rejection', actor: 'HOD Office (Rejected)', time: 'Just now', completed: true }
+              ]
+            }
+          : req
+      )
+    );
+    addToast('Consideration Rejected', 'Attendance consideration was rejected by HOD.', 'info');
   };
 
   const closeAgentModal = () => {
@@ -636,17 +662,29 @@ export function ERPProvider({ children }) {
     addToast('Leave Verified', 'Forwarded to HOD for final sign-off.', 'success');
   };
 
-  const hodApproveLeave = (leaveId) => {
+  const hodApproveLeave = (leaveId, isBypass = false) => {
     // Backend API Call
     leaveService.hodApproveLeaveApi(leaveId).catch(() => {});
 
+    let wasTgBypassed = false;
     setLeaveRequests((prev) =>
       prev.map((lv) => {
         if (lv.id === leaveId) {
+          const isPendingTg = lv.status === 'pending_tg' || isBypass;
+          wasTgBypassed = isPendingTg;
+          const newTimeline = isPendingTg
+            ? [
+                { ...(lv.timeline[0] || { step: 'Leave Submitted', actor: lv.studentName }), completed: true },
+                { step: 'TG Review (Bypassed by HOD Direct Action)', actor: 'TG Mentor (Bypassed)', time: 'Bypassed', completed: true, warning: true },
+                { step: 'HOD Direct Clearance Granted', actor: 'HOD Office (Granted)', time: 'Just now', completed: true }
+              ]
+            : lv.timeline.map((item) => ({ ...item, completed: true, active: false }));
+
           return {
             ...lv,
             status: 'completed',
-            timeline: lv.timeline.map((item) => ({ ...item, completed: true, active: false }))
+            tgBypassed: isPendingTg,
+            timeline: newTimeline
           };
         }
         return lv;
@@ -655,22 +693,46 @@ export function ERPProvider({ children }) {
 
     logAgentActivity(
       'Leave Agent',
-      'Leave clearance signed and credited.',
-      `HOD Dr. S. Roy approved leave request #${leaveId}. Portal records updated.`,
+      wasTgBypassed ? 'Direct HOD leave consideration applied (TG bypassed).' : 'Leave clearance signed and credited.',
+      `HOD approved leave request #${leaveId}${wasTgBypassed ? ' bypassing TG queue directly' : ''}. Portal records updated.`,
       'leave'
     );
 
     setNotifications((prev) => [
       notificationService.createNotification(
         'Leave Approved by HOD',
-        'Your leave application has received final administrative clearance.',
+        'Your leave application has received administrative clearance from HOD Office.',
         'student',
         'success'
       ),
       ...prev
     ]);
 
-    addToast('Leave Approved', 'Leave digitally signed and granted.', 'success');
+    addToast(
+      wasTgBypassed ? 'Leave Directly Considered!' : 'Leave Approved',
+      wasTgBypassed ? 'Bypassed TG queue and granted immediate HOD approval.' : 'Leave cleared for student.',
+      'success'
+    );
+  };
+
+  const hodRejectLeave = (leaveId, reason = 'Rejected by HOD') => {
+    leaveService.hodRejectLeaveApi(leaveId, reason).catch(() => {});
+    setLeaveRequests((prev) =>
+      prev.map((lv) =>
+        lv.id === leaveId
+          ? {
+              ...lv,
+              status: 'rejected',
+              rejectionReason: reason,
+              timeline: [
+                ...lv.timeline.map((t) => ({ ...t, active: false })),
+                { step: 'HOD Rejection', actor: 'HOD Office (Rejected)', time: 'Just now', completed: true }
+              ]
+            }
+          : lv
+      )
+    );
+    addToast('Leave Rejected', 'Leave application was rejected by HOD.', 'info');
   };
 
   // ==========================================================================
@@ -1127,12 +1189,14 @@ export function ERPProvider({ children }) {
         submitAttendanceConsideration,
         tgReviewAttendanceConsideration,
         hodApproveAttendanceConsideration,
+        hodRejectAttendanceConsideration,
         submitAttendanceQuery,
         tgReviewAttendanceQuery,
         hodApproveAttendanceQuery,
         applyLeave,
         tgReviewLeave,
         hodApproveLeave,
+        hodRejectLeave,
         // Timetable actions
         timetableGenerated,
         timetableConflicts,

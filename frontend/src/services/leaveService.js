@@ -49,5 +49,9 @@ export const leaveService = {
 
   async hodApproveLeaveApi(leaveId) {
     return apiClient.put(`/requests/leave/${leaveId}/hod-approve`, {});
+  },
+
+  async hodRejectLeaveApi(leaveId, reason = 'Rejected by HOD') {
+    return apiClient.put(`/requests/leave/${leaveId}/hod-reject`, { reason });
   }
 };

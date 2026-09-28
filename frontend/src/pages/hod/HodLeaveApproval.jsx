@@ -4,7 +4,7 @@ import RequestCard from '../../components/RequestCard';
 import { FileText, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 export default function HodLeaveApproval() {
-  const { leaveRequests, hodApproveLeave } = useERP();
+  const { leaveRequests, hodApproveLeave, hodRejectLeave } = useERP();
 
   const directFallbackLeaves = leaveRequests.filter((l) => l.tgUnavailable || l.status === 'pending_hod_direct');
 
@@ -50,9 +50,10 @@ export default function HodLeaveApproval() {
             <RequestCard
               key={req.id}
               request={req}
-              showActions={req.status !== 'completed'}
+              showActions={req.status !== 'completed' && req.status !== 'approved' && req.status !== 'rejected'}
               role="hod"
-              onApprove={() => hodApproveLeave(req.id)}
+              onApprove={() => hodApproveLeave(req.id, req.status === 'pending_tg')}
+              onReject={() => hodRejectLeave(req.id)}
             />
           ))}
         </div>

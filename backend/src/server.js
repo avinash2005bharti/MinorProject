@@ -132,6 +132,8 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (require.main === module || process.env.NODE_ENV !== 'test') {
+  startServer();
+}
 
-module.exports = { app, server };
+module.exports = { app, server, startServer };

@@ -1,3 +1,4 @@
+process.env.NODE_ENV = 'test';
 const http = require('http');
 const assert = require('assert');
 const { connectMySQL, sequelize } = require('../src/config/mysql');

@@ -14,7 +14,8 @@ import {
   Activity,
   Calendar,
   AlertTriangle,
-  Bot
+  Bot,
+  Zap
 } from 'lucide-react';
 
 export default function HodDashboard() {
@@ -24,14 +25,16 @@ export default function HodDashboard() {
     leaveRequests,
     attendanceQueries,
     hodApproveAttendanceConsideration,
+    hodRejectAttendanceConsideration,
     hodApproveAttendanceQuery,
     hodApproveLeave,
+    hodRejectLeave,
     openModal
   } = useERP();
 
-  const pendingAttendance = attendanceRequests.filter((r) => r.status === 'pending_hod');
+  const pendingAttendance = attendanceRequests.filter((r) => r.status === 'pending_hod' || r.status === 'pending_tg');
   const pendingQueries = attendanceQueries.filter((q) => q.status === 'pending_hod');
-  const pendingLeaves = leaveRequests.filter((l) => l.status === 'pending_hod' || l.status === 'pending_hod_direct');
+  const pendingLeaves = leaveRequests.filter((l) => l.status === 'pending_hod' || l.status === 'pending_hod_direct' || l.status === 'pending_tg');
 
   const totalPending = pendingAttendance.length + pendingQueries.length + pendingLeaves.length;
 
@@ -113,7 +116,7 @@ export default function HodDashboard() {
           </div>
         </div>
 
-        {/* Pending Requests Requiring HOD Action (FLOW 2 & FLOW 8) */}
+        {/* Pending Requests Requiring HOD Action */}
         <div className="card flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -134,96 +137,174 @@ export default function HodDashboard() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {/* Attendance Considerations (FLOW 2: Approving triggers Autonomous Attendance Consideration Agent) */}
-              {pendingAttendance.map((req) => (
-                <div
-                  key={req.id}
-                  className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-200 flex flex-col gap-2.5 text-xs"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 text-sm">{req.title}</span>
-                        <span className="badge badge-indigo text-[10px]">Duty Adjustment</span>
+              {/* Attendance Considerations */}
+              {pendingAttendance.map((req) => {
+                const isPendingTg = req.status === 'pending_tg';
+
+                return (
+                  <div
+                    key={req.id}
+                    className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-200 flex flex-col gap-2.5 text-xs"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm">{req.title}</span>
+                          <span className="badge badge-indigo text-[10px]">Duty Adjustment</span>
+                          {isPendingTg && (
+                            <span className="badge badge-amber text-[10px]" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                              In TG Queue (Direct Bypass Available)
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-slate-600 text-xs mt-0.5">
+                          Student: <strong>{req.studentName} ({req.rollNo})</strong> • Section: <strong>{req.section}</strong> • Period: <strong>{req.dateRangeLabel}</strong>
+                        </p>
                       </div>
-                      <p className="text-slate-600 text-xs mt-0.5">
-                        Student: <strong>{req.studentName} ({req.rollNo})</strong> • Section: <strong>{req.section}</strong> • Period: <strong>{req.dateRangeLabel}</strong>
-                      </p>
+
+                      <div className="text-right">
+                        <span className="text-[11px] text-slate-400 block">Current → Expected</span>
+                        <span className="font-extrabold text-sm text-slate-800">
+                          {req.currentAttendance}% → <span className="text-emerald-600">{req.expectedAttendance || 84}%</span>
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="text-right">
-                      <span className="text-[11px] text-slate-400 block">Current → Expected</span>
-                      <span className="font-extrabold text-sm text-slate-800">
-                        {req.currentAttendance}% → <span className="text-emerald-600">{req.expectedAttendance}%</span>
+                    <p className="text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200/80 leading-relaxed">
+                      <strong>Reason:</strong> {req.reason}
+                    </p>
+
+                    {req.tgRecommendation ? (
+                      <div className="p-2 bg-emerald-50 rounded-lg text-emerald-800 text-[11px] border border-emerald-200/60">
+                        <strong>TG Mentor Recommendation:</strong> {req.tgRecommendation}
+                      </div>
+                    ) : isPendingTg ? (
+                      <div className="p-2 bg-amber-50/70 rounded-lg text-amber-800 text-[11px] border border-amber-200/50 flex items-center gap-1.5">
+                        <AlertTriangle size={13} />
+                        <span>Awaiting TG Review. As HOD, you have direct authority to bypass TG and approve now.</span>
+                      </div>
+                    ) : null}
+
+                    <div className="flex items-center justify-between pt-2 border-t border-blue-100 flex-wrap gap-2">
+                      <span className="text-[11px] text-blue-700 font-semibold flex items-center gap-1">
+                        <Bot size={14} /> Approving will trigger Autonomous Attendance Agent to adjust 6 class sessions
                       </span>
-                    </div>
-                  </div>
 
-                  <p className="text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200/80 leading-relaxed">
-                    <strong>Reason:</strong> {req.reason}
-                  </p>
-
-                  {req.tgRecommendation && (
-                    <div className="p-2 bg-emerald-50 rounded-lg text-emerald-800 text-[11px] border border-emerald-200/60">
-                      <strong>TG Mentor Recommendation:</strong> {req.tgRecommendation}
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between pt-2 border-t border-blue-100 flex-wrap gap-2">
-                    <span className="text-[11px] text-blue-700 font-semibold flex items-center gap-1">
-                      <Bot size={14} /> Approving will trigger Autonomous Attendance Agent to adjust 6 class sessions
-                    </span>
-
-                    <button
-                      onClick={() => hodApproveAttendanceConsideration(req.id)}
-                      className="btn btn-sm btn-primary text-xs py-1.5 px-4 font-bold shadow-sm"
-                      id={`btn-hod-approve-att-${req.id}`}
-                    >
-                      <Sparkles size={13} />
-                      <span>Approve & Launch Agent Sync</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {/* Leave Requests */}
-              {pendingLeaves.map((lv) => (
-                <div
-                  key={lv.id}
-                  className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col gap-2 text-xs"
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 text-sm">{lv.title}</span>
-                        {lv.tgUnavailable && (
-                          <span className="badge badge-amber text-[10px]">TG Bypassed (Direct Route)</span>
+                        <button
+                          onClick={() => hodRejectAttendanceConsideration(req.id)}
+                          className="btn btn-sm btn-outline text-xs py-1.5 px-3"
+                          style={{ color: 'var(--error)' }}
+                          id={`btn-hod-reject-att-${req.id}`}
+                        >
+                          Reject
+                        </button>
+
+                        {isPendingTg ? (
+                          <button
+                            onClick={() => hodApproveAttendanceConsideration(req.id, true)}
+                            className="btn btn-sm btn-primary text-xs py-1.5 px-4 font-bold shadow-sm"
+                            id={`btn-hod-bypass-att-${req.id}`}
+                            style={{ backgroundColor: 'var(--primary)' }}
+                            title="Bypass TG review and directly authorize attendance consideration"
+                          >
+                            <Zap size={13} />
+                            <span>Bypass TG & Directly Approve</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => hodApproveAttendanceConsideration(req.id)}
+                            className="btn btn-sm btn-primary text-xs py-1.5 px-4 font-bold shadow-sm"
+                            id={`btn-hod-approve-att-${req.id}`}
+                          >
+                            <Sparkles size={13} />
+                            <span>Approve & Launch Agent Sync</span>
+                          </button>
                         )}
                       </div>
-                      <p className="text-slate-600 text-xs mt-0.5">
-                        {lv.studentName} ({lv.rollNo}) • {lv.dateRangeLabel} • {lv.leaveType}
-                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Leave Requests */}
+              {pendingLeaves.map((lv) => {
+                const isPendingTg = lv.status === 'pending_tg';
+
+                return (
+                  <div
+                    key={lv.id}
+                    className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col gap-2 text-xs"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900 text-sm">{lv.title}</span>
+                          <span className="badge badge-emerald text-[10px]">{lv.leaveType}</span>
+                          {lv.tgUnavailable && (
+                            <span className="badge badge-amber text-[10px]">TG Bypassed (Direct Route)</span>
+                          )}
+                          {isPendingTg && (
+                            <span className="badge badge-amber text-[10px]" style={{ backgroundColor: '#FEF3C7', color: '#92400E' }}>
+                              In TG Queue (Direct Bypass Available)
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-slate-600 text-xs mt-0.5">
+                          {lv.studentName} ({lv.rollNo}) • {lv.dateRangeLabel} • {lv.leaveType}
+                        </p>
+                      </div>
+
+                      <span className="badge badge-amber text-[10px]">
+                        {isPendingTg ? 'TG Verification Pending' : 'Awaiting Final Sign-off'}
+                      </span>
                     </div>
 
-                    <span className="badge badge-amber text-[10px]">Awaiting Final Sign-off</span>
-                  </div>
+                    <p className="text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200/80">
+                      "{lv.reason}"
+                    </p>
 
-                  <p className="text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200/80">
-                    "{lv.reason}"
-                  </p>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 flex-wrap gap-2">
+                      <span className="text-[11px] text-slate-500">
+                        {isPendingTg ? 'Direct HOD access enabled: You can grant approval without waiting for TG.' : 'Ready for digital sign-off.'}
+                      </span>
 
-                  <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-200/60">
-                    <button
-                      onClick={() => hodApproveLeave(lv.id)}
-                      className="btn btn-sm btn-primary text-xs py-1.5 px-4 font-bold"
-                      id={`btn-hod-approve-leave-${lv.id}`}
-                    >
-                      <ShieldCheck size={13} />
-                      <span>Grant Leave Approval</span>
-                    </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => hodRejectLeave(lv.id)}
+                          className="btn btn-sm btn-outline text-xs py-1.5 px-3"
+                          style={{ color: 'var(--error)' }}
+                          id={`btn-hod-reject-leave-${lv.id}`}
+                        >
+                          Reject
+                        </button>
+
+                        {isPendingTg ? (
+                          <button
+                            onClick={() => hodApproveLeave(lv.id, true)}
+                            className="btn btn-sm btn-primary text-xs py-1.5 px-4 font-bold shadow-sm"
+                            id={`btn-hod-bypass-leave-${lv.id}`}
+                            style={{ backgroundColor: 'var(--primary)' }}
+                            title="Bypass TG mentor review and directly grant leave clearance"
+                          >
+                            <Zap size={13} />
+                            <span>Bypass TG & Grant Leave</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => hodApproveLeave(lv.id)}
+                            className="btn btn-sm btn-primary text-xs py-1.5 px-4 font-bold shadow-sm"
+                            id={`btn-hod-approve-leave-${lv.id}`}
+                          >
+                            <ShieldCheck size={13} />
+                            <span>Grant Leave Approval</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

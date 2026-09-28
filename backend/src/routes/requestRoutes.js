@@ -11,6 +11,7 @@ router.get('/', requestController.getAllRequests);
 router.post('/attendance/consideration', upload.single('supportingDoc'), auditLogger('Request', 'Submit Attendance Consideration'), requestController.submitAttendanceConsideration);
 router.put('/attendance/consideration/:id/tg-review', auditLogger('Request', 'TG Review Attendance Consideration'), requestController.tgReviewAttendanceConsideration);
 router.put('/attendance/consideration/:id/hod-approve', auditLogger('Request', 'HOD Approve Attendance Consideration'), requestController.hodApproveAttendanceConsideration);
+router.put('/attendance/consideration/:id/hod-reject', auditLogger('Request', 'HOD Reject Attendance Consideration'), requestController.hodRejectAttendanceConsideration);
 
 // Attendance Query (Wrong Attendance Dispute)
 router.post('/attendance/query', upload.single('supportingDoc'), auditLogger('Request', 'Submit Attendance Query'), requestController.submitAttendanceQuery);
@@ -21,5 +22,6 @@ router.put('/attendance/query/:id/hod-approve', auditLogger('Request', 'HOD Appr
 router.post('/leave', upload.single('supportingDoc'), auditLogger('Leave', 'Submit Leave Request'), requestController.applyLeave);
 router.put('/leave/:id/tg-review', auditLogger('Leave', 'TG Review Leave'), requestController.tgReviewLeave);
 router.put('/leave/:id/hod-approve', auditLogger('Leave', 'HOD Approve Leave'), requestController.hodApproveLeave);
+router.put('/leave/:id/hod-reject', auditLogger('Leave', 'HOD Reject Leave'), requestController.hodRejectLeave);
 
 module.exports = router;

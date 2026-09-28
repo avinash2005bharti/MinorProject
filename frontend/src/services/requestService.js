@@ -44,6 +44,10 @@ export const requestService = {
     return apiClient.put(`/requests/attendance/consideration/${id}/hod-approve`, {});
   },
 
+  async hodRejectAttendanceConsiderationApi(id, reason = 'Rejected by HOD') {
+    return apiClient.put(`/requests/attendance/consideration/${id}/hod-reject`, { reason });
+  },
+
   async submitAttendanceQueryApi(formData) {
     return apiClient.post('/requests/attendance/query', formData);
   },

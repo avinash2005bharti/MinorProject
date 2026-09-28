@@ -117,7 +117,7 @@ exports.tgReviewAttendanceConsideration = async (req, res, next) => {
   }
 };
 
-// 3. HOD Approves Attendance Consideration (Launches Attendance Agent)
+// 3. HOD Approves Attendance Consideration (Launches Attendance Agent & Bypasses TG if pending_tg)
 exports.hodApproveAttendanceConsideration = async (req, res, next) => {
   try {
     const { id } = req.params;
@@ -125,6 +125,8 @@ exports.hodApproveAttendanceConsideration = async (req, res, next) => {
     if (!request) {
       return res.status(404).json({ success: false, message: 'Request not found.' });
     }
+
+    const wasTgPending = request.status === 'pending_tg';
 
     // Run agent orchestration
     const agentResult = await agentService.runAttendanceAgent({
@@ -135,18 +137,46 @@ exports.hodApproveAttendanceConsideration = async (req, res, next) => {
     });
 
     request.status = 'completed';
+    request.tgBypassed = wasTgPending;
     request.timeline = [
-      { ...request.timeline[0], completed: true },
-      { ...request.timeline[1], completed: true },
-      { step: 'HOD Approval & Clearance', actor: 'Dr. S. Roy (Approved)', time: 'Just now', completed: true },
+      { ...(request.timeline[0] || { step: 'Consideration Submitted', actor: request.studentName }), completed: true },
+      wasTgPending
+        ? { step: 'TG Review (Bypassed by HOD Direct Action)', actor: 'TG Mentor (Bypassed)', time: 'Bypassed', completed: true, warning: true }
+        : { ...(request.timeline[1] || { step: 'TG Review', actor: 'TG Mentor (Verified)' }), completed: true },
+      { step: 'HOD Approval & Clearance', actor: 'HOD Office (Direct Clearance Granted)', time: 'Just now', completed: true },
       { step: 'Attendance Agent Execution', actor: 'Attendance Agent (Synced)', time: 'Completed', completed: true }
     ];
     await request.save();
 
     res.status(200).json({
       success: true,
-      message: 'HOD clearance granted! Autonomous Attendance Agent updated student records and synchronized section ledger.',
+      message: wasTgPending
+        ? 'HOD directly considered and granted attendance clearance (TG step bypassed). Section ledger synchronized.'
+        : 'HOD clearance granted! Autonomous Attendance Agent updated student records and synchronized section ledger.',
       agentResult,
+      data: request
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 3b. HOD Rejects Attendance Consideration
+exports.hodRejectAttendanceConsideration = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { reason = 'Rejected by HOD' } = req.body;
+    const request = await AttendanceRequest.findById(id);
+    if (!request) return res.status(404).json({ success: false, message: 'Request not found.' });
+
+    request.status = 'rejected';
+    request.rejectionReason = reason;
+    request.timeline.push({ step: 'HOD Rejection', actor: 'HOD Office (Rejected)', time: 'Just now', completed: true });
+    await request.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Attendance consideration application rejected by HOD.',
       data: request
     });
   } catch (error) {
@@ -319,22 +349,60 @@ exports.tgReviewLeave = async (req, res, next) => {
   }
 };
 
-// 9. HOD Approves Leave
+// 9. HOD Approves Leave (Supports Direct TG Bypass)
 exports.hodApproveLeave = async (req, res, next) => {
   try {
     const { id } = req.params;
     const leave = await LeaveRequest.findById(id);
     if (!leave) return res.status(404).json({ success: false, message: 'Leave not found.' });
 
+    const wasTgPending = leave.status === 'pending_tg';
     leave.status = 'completed';
-    leave.timeline = leave.timeline.map((item) => ({ ...item, completed: true, active: false }));
+    leave.tgBypassed = wasTgPending;
+
+    if (wasTgPending) {
+      leave.timeline = [
+        { ...(leave.timeline[0] || { step: 'Leave Submitted', actor: leave.studentName }), completed: true },
+        { step: 'TG Review (Bypassed by HOD Direct Action)', actor: 'TG Mentor (Bypassed)', time: 'Bypassed', completed: true, warning: true },
+        { step: 'HOD Direct Clearance & Approval', actor: 'HOD Office (Direct Clearance Granted)', time: 'Just now', completed: true }
+      ];
+    } else {
+      leave.timeline = leave.timeline.map((item) => ({ ...item, completed: true, active: false }));
+    }
     await leave.save();
 
     emitLeaveUpdate(leave);
 
     res.status(200).json({
       success: true,
-      message: 'Leave digitally signed and granted by HOD.',
+      message: wasTgPending
+        ? 'Leave application directly considered and granted by HOD (TG step bypassed).'
+        : 'Leave digitally signed and granted by HOD.',
+      data: leave
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// 9b. HOD Rejects Leave
+exports.hodRejectLeave = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { reason = 'Rejected by HOD' } = req.body;
+    const leave = await LeaveRequest.findById(id);
+    if (!leave) return res.status(404).json({ success: false, message: 'Leave not found.' });
+
+    leave.status = 'rejected';
+    leave.rejectionReason = reason;
+    leave.timeline.push({ step: 'HOD Rejection', actor: 'HOD Office (Rejected)', time: 'Just now', completed: true });
+    await leave.save();
+
+    emitLeaveUpdate(leave);
+
+    res.status(200).json({
+      success: true,
+      message: 'Leave application rejected by HOD.',
       data: leave
     });
   } catch (error) {

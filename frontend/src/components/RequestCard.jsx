@@ -1,7 +1,7 @@
 import React from 'react';
 import ApprovalStatus from './ApprovalStatus';
 import WorkflowTimeline from './WorkflowTimeline';
-import { FileText, ArrowRight, CheckCircle2, UserCheck, Calendar, ArrowUpRight } from 'lucide-react';
+import { FileText, ArrowRight, CheckCircle2, UserCheck, Calendar, ArrowUpRight, Zap, ShieldCheck } from 'lucide-react';
 
 export default function RequestCard({
   request,
@@ -95,14 +95,41 @@ export default function RequestCard({
           )}
 
           {onApprove && (
-            <button onClick={onApprove} className="btn btn-sm btn-success" style={{ flex: 1 }}>
-              <CheckCircle2 size={14} />
-              <span>Approve (Trigger Agent)</span>
+            <button
+              onClick={onApprove}
+              className="btn btn-sm btn-success"
+              style={{
+                flex: 1,
+                backgroundColor: role === 'hod' && request.status === 'pending_tg' ? 'var(--primary)' : undefined
+              }}
+              id={`btn-approve-request-${request.id}`}
+            >
+              {role === 'hod' && request.status === 'pending_tg' ? (
+                <>
+                  <Zap size={14} />
+                  <span>Direct Approve (Bypass TG)</span>
+                </>
+              ) : request.type === 'leave_request' || request.leaveType ? (
+                <>
+                  <ShieldCheck size={14} />
+                  <span>Grant Leave Approval</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={14} />
+                  <span>Approve & Sync Agent</span>
+                </>
+              )}
             </button>
           )}
 
           {onReject && (
-            <button onClick={onReject} className="btn btn-sm btn-outline" style={{ color: 'var(--error)' }}>
+            <button
+              onClick={onReject}
+              className="btn btn-sm btn-outline"
+              style={{ color: 'var(--error)' }}
+              id={`btn-reject-request-${request.id}`}
+            >
               Reject
             </button>
           )}
