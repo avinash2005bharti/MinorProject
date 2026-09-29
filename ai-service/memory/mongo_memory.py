@@ -22,11 +22,16 @@ class MongoMemoryManager:
 
     def _init_connection(self):
         try:
-            self.client = MongoClient(self.uri, serverSelectionTimeoutMS=2000)
-            self.db = self.client.get_database("cse_erp")
+            self.client = MongoClient(self.uri, serverSelectionTimeoutMS=8000)
+            try:
+                self.db = self.client.get_default_database()
+            except Exception:
+                self.db = self.client.get_database("cse_erp")
+
             # Trigger server check
             self.client.admin.command('ping')
-            logger.info("[MongoMemory] Connected to MongoDB database 'cse_erp'")
+            safe_uri = self.uri.split('@')[-1] if '@' in self.uri else 'local'
+            logger.info(f"[MongoMemory] Connected to MongoDB database '{self.db.name}' on {safe_uri}")
         except Exception as e:
             logger.warning(f"[MongoMemory] MongoDB connection failed: {e}. Using in-memory cache.")
             self.client = None

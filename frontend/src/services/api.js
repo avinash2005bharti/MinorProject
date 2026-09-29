@@ -3,7 +3,9 @@
 // Handles HTTP requests, JWT token attachment, base URLs, and response formatting
 // ==========================================================================
 
-const API_BASE_URL = '/api';
+// Cloud or local API Base URL configuration
+const RAW_BACKEND_URL = (import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+const API_BASE_URL = RAW_BACKEND_URL ? `${RAW_BACKEND_URL}/api` : '/api';
 
 export const apiClient = {
   getToken() {

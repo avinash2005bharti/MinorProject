@@ -64,6 +64,11 @@ __pycache__/
 *$py.class
 *.pyc
 .pytest_cache/
+venv/
+.venv/
+env/
+*/venv/
+*/.venv/
 
 # Local Vector Storage & Temporary Upload Deliverables
 ai-service/qdrant_data/

@@ -21,14 +21,18 @@ const seedCseDatabase = require('./utils/seedData');
 const app = express();
 const server = http.createServer(app);
 
-// Initialize Socket.IO
-const io = new Server(server, {
-  cors: {
-    origin: [
-      process.env.CLIENT_URL || 'http://localhost:5173',
+// Initialize Socket.IO with cloud origin support
+const allowedOrigins = process.env.CLIENT_URL
+  ? process.env.CLIENT_URL.split(',').map((s) => s.trim())
+  : [
+      'http://localhost:5173',
       'http://127.0.0.1:5173',
       'http://localhost:3000'
-    ],
+    ];
+
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins.length === 1 && allowedOrigins[0] === '*' ? '*' : allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true
   }
@@ -115,7 +119,7 @@ const startServer = async () => {
       process.exit(1);
     });
 
-    server.listen(PORT, () => {
+    server.listen(PORT, '0.0.0.0', () => {
       logger.info(`======================================================`);
       logger.info(`  CSE AGENTIC ERP BACKEND RUNNING ON PORT ${PORT} `);
       logger.info(`======================================================`);

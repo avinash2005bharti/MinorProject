@@ -129,6 +129,21 @@ services:
     networks:
       - cse_erp_net
 
+  # 6. Web Application UI: React Vite + Tailwind + Glassmorphism Dashboard
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: cse_erp_frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "5173:80"
+    depends_on:
+      - backend
+    networks:
+      - cse_erp_net
+
 networks:
   cse_erp_net:
     driver: bridge

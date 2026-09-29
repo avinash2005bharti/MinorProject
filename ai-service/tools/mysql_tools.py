@@ -46,8 +46,13 @@ class MySQLTools:
         return candidates[0]
 
     def _get_connection(self):
-        if bool(self.db_url) or (self.host and self.host not in ["localhost", "127.0.0.1"]) or os.getenv("USE_MYSQL") == "true":
+        if bool(self.db_url) or (self.host and self.host not in ["localhost", "127.0.0.1"]) or os.getenv("USE_MYSQL") == "true" or os.getenv("ENVIRONMENT") == "production":
             try:
+                ssl_params = {}
+                if os.getenv("MYSQL_SSL") == "true" or (self.db_url and "ssl=true" in self.db_url):
+                    ssl_ca = os.getenv("MYSQL_SSL_CA")
+                    ssl_params = {"ssl": {"ca": ssl_ca}} if ssl_ca and os.path.exists(ssl_ca) else {"ssl": {}}
+
                 conn = pymysql.connect(
                     host=self.host,
                     port=self.port,
@@ -55,12 +60,13 @@ class MySQLTools:
                     password=self.password,
                     database=self.database,
                     cursorclass=pymysql.cursors.DictCursor,
-                    connect_timeout=3,
-                    autocommit=False
+                    connect_timeout=10,
+                    autocommit=False,
+                    **ssl_params
                 )
                 return "mysql", conn
             except Exception as e:
-                logger.debug(f"[MySQLTools] MySQL connection attempt failed ({e}). Falling back to SQLite.")
+                logger.warning(f"[MySQLTools] MySQL connection attempt to {self.host}:{self.port} failed ({e}). Falling back to SQLite.")
 
         if os.path.exists(self.sqlite_path):
             conn = sqlite3.connect(self.sqlite_path)
