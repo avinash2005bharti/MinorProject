@@ -1,15 +1,17 @@
-const Notice = require('../models/Notice');
-const Notification = require('../models/Notification');
+const { Notice, Notification } = require('../models/mysql');
 const { emitNotification } = require('../sockets/socketHandler');
 
 exports.getNotices = async (req, res, next) => {
   try {
     const { targetType, targetValue } = req.query;
-    const filter = {};
-    if (targetType) filter.targetType = targetType;
-    if (targetValue) filter.targetValue = targetValue;
+    const where = {};
+    if (targetType) where.targetType = targetType;
+    if (targetValue) where.targetValue = targetValue;
 
-    const notices = await Notice.find(filter).sort({ pinned: -1, createdAt: -1 });
+    const notices = await Notice.findAll({
+      where,
+      order: [['pinned', 'DESC'], ['createdAt', 'DESC']]
+    });
     res.status(200).json({ success: true, count: notices.length, data: notices });
   } catch (error) {
     next(error);
@@ -21,10 +23,10 @@ exports.createNotice = async (req, res, next) => {
     const notice = await Notice.create({
       title: req.body.title,
       content: req.body.content,
-      authorRole: req.user?.role === 'hod' ? 'HOD Office' : req.user?.role === 'teacher' ? 'Faculty' : 'TG / Mentor',
-      authorName: req.user?.name || req.body.authorName || 'CSE Department',
-      targetType: req.body.targetType || 'Section',
-      targetValue: req.body.targetValue || 'CSE-3A',
+      authorRole: req.user?.role === 'hod' ? 'HOD Office' : req.user?.role === 'faculty' ? 'Faculty' : 'TG / Mentor',
+      authorName: req.user?.name || req.body.authorName || 'Dr. Alok Verma',
+      targetType: req.body.targetType || 'Department',
+      targetValue: req.body.targetValue || 'CSE',
       priority: req.body.priority || 'normal',
       pinned: !!req.body.pinned
     });

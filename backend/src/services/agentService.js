@@ -4,6 +4,11 @@ const AttendanceRequest = require('../models/AttendanceRequest');
 const LeaveRequest = require('../models/LeaveRequest');
 const Notification = require('../models/Notification');
 const Subject = require('../models/Subject');
+const {
+  Student: MysqlStudent,
+  Attendance: MysqlAttendance,
+  StudentRequest: MysqlStudentRequest
+} = require('../models/mysql');
 const timetableAiEngine = require('./timetableAiEngine');
 const { emitNotification, emitAttendanceUpdate, emitLeaveUpdate, emitAgentStep } = require('../sockets/socketHandler');
 
@@ -54,15 +59,39 @@ const agentService = {
   // Orchestrates real backend Attendance Agent execution
   async runAttendanceAgent({ requestId, studentRoll = '21CSE084', section = 'CSE-3A', dateRange = '10 Sept – 15 Sept' }) {
     let student = await Student.findOne({ rollNo: studentRoll });
-    const studentName = student ? student.name : 'Rahul Sharma';
+    const studentName = student ? student.name : 'Ayush Sharma';
 
-    // 1. Update Student's attendance in DB
+    // 1. Update Student's attendance in DB (MongoDB & MySQL)
     if (student) {
       student.attendance = 84;
       student.status = 'present';
       student.autoUpdated = true;
       await student.save();
     }
+
+    try {
+      const mysqlSt = await MysqlStudent.findOne({ where: { enrollment_no: studentRoll } });
+      if (mysqlSt) {
+        const absents = await MysqlAttendance.findAll({
+          where: { student_id: mysqlSt.id, status: 'Absent' },
+          limit: 6
+        });
+        for (const a of absents) {
+          a.status = 'Present';
+          await a.save();
+        }
+      }
+      if (requestId) {
+        const reqRecord = await MysqlStudentRequest.findOne({
+          where: isNaN(requestId) ? { requestId } : { id: requestId }
+        });
+        if (reqRecord) {
+          reqRecord.status = 'completed';
+          reqRecord.currentAttendance = 86;
+          await reqRecord.save();
+        }
+      }
+    } catch {}
 
     // 2. If requestId provided, update AttendanceRequest
     if (requestId) {

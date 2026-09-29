@@ -15,7 +15,10 @@ const {
   AssignmentSubmission,
   Attendance,
   Note,
-  Department
+  Department,
+  Notice,
+  Notification,
+  StudentRequest
 } = require('../models/mysql');
 const { UserMemory, AiPreference, Conversation } = require('../models/mongo/aiMemoryModels');
 const { logger } = require('../services/loggerService');
@@ -25,6 +28,9 @@ const seedCseDatabase = async () => {
 
   try {
     // 1. Clear existing relational tables
+    await StudentRequest.destroy({ where: {}, truncate: false }).catch(() => {});
+    await Notification.destroy({ where: {}, truncate: false }).catch(() => {});
+    await Notice.destroy({ where: {}, truncate: false }).catch(() => {});
     await TeacherSubstitution.destroy({ where: {}, truncate: false }).catch(() => {});
     await TeacherAbsence.destroy({ where: {}, truncate: false }).catch(() => {});
     await AssignmentSubmission.destroy({ where: {}, truncate: false }).catch(() => {});
@@ -364,7 +370,78 @@ const seedCseDatabase = async () => {
       rag_indexed: true
     });
 
-    // 14. Seed MongoDB AI Memory
+    // 14. Seed Department Notices into MySQL
+    await Notice.create({
+      title: 'Department Technical Symposium & Hackathon Call',
+      content: 'All 2nd, 3rd, and 4th year CSE students are invited to register for the Annual State Technical Symposium. Duty attendance will be granted to all participants upon HOD approval.',
+      authorRole: 'HOD Office',
+      authorName: 'Dr. Alok Verma',
+      targetType: 'Department',
+      targetValue: 'CSE',
+      priority: 'important',
+      pinned: true
+    });
+    await Notice.create({
+      title: 'Mid-Semester Timetable & Continuous Internal Evaluation Schedule',
+      content: 'The finalized Mid-Semester CIE timetable for CSE Semesters 3, 5, and 7 has been published. Room allocations: Labs LAB-1 & LAB-2, Classrooms 204 & 205.',
+      authorRole: 'Faculty',
+      authorName: 'Prof. Rahul Mehta',
+      targetType: 'Section',
+      targetValue: 'CSE-3A',
+      priority: 'normal',
+      pinned: false
+    });
+
+    // 15. Seed Department Notifications into MySQL
+    await Notification.create({
+      recipient: 'student',
+      role: 'student',
+      title: 'Timetable Published for CSE 3rd Year Sem 5',
+      message: 'The official collision-free timetable has been locked and published by HOD Dr. Alok Verma.',
+      type: 'info'
+    });
+    await Notification.create({
+      recipient: 'tg',
+      role: 'tg',
+      title: 'Student Requests Queue Active',
+      message: 'Student leave and attendance consideration verification pipeline is active.',
+      type: 'approval'
+    });
+
+    // 16. Seed Student Requests into MySQL (Attendance Consideration & Leave)
+    await StudentRequest.create({
+      requestId: 'REQ-ATT-1001',
+      requestType: 'attendance_consideration',
+      studentId: createdStudents[0].id,
+      studentName: createdStudents[0].name,
+      rollNo: createdStudents[0].enrollment_no,
+      department: 'CSE',
+      semester: '5th',
+      section: 'A',
+      title: 'Attendance Consideration (Smart India Hackathon Duty)',
+      startDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      endDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      dateRangeLabel: '10 Sept – 15 Sept 2026',
+      reason: 'Official College Representation: Smart India Hackathon Grand Finale. Recommended by Faculty Mentor.',
+      supportingDoc: '/uploads/sih_verification_signed.pdf',
+      currentAttendance: 76,
+      expectedAttendance: 86,
+      status: 'pending_tg',
+      tgRecommendation: 'Recommended: Student has verified institutional participation proof.',
+      timeline: JSON.stringify([
+        { step: 'Submitted by Student', actor: createdStudents[0].name, time: '2 days ago', completed: true },
+        { step: 'TG / Mentor Review', actor: 'Prof. Rahul Mehta', time: 'In Queue', completed: false, active: true },
+        { step: 'HOD Approval & Clearance', actor: 'Dr. Alok Verma', time: 'Awaiting TG', completed: false },
+        { step: 'Attendance Agent Execution', actor: 'Autonomous Agent', time: 'Pending', completed: false }
+      ]),
+      affectedClasses: JSON.stringify([
+        { subject: 'Database Management Systems', code: 'CS501', date: '10 Sept', period: 'Period 1' },
+        { subject: 'Operating Systems', code: 'CS504', date: '11 Sept', period: 'Period 2' },
+        { subject: 'Computer Networks', code: 'CS503', date: '12 Sept', period: 'Period 3' }
+      ])
+    });
+
+    // 17. Seed MongoDB AI Memory
     try {
       await UserMemory.deleteMany({});
       await AiPreference.deleteMany({});

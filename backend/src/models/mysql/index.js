@@ -789,6 +789,211 @@ const Note = sequelize.define('Note', {
   timestamps: true
 });
 
+// 17. Notice Model (Relational Department Notice Board)
+const Notice = sequelize.define('Notice', {
+  id: {
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
+    primaryKey: true
+  },
+  title: {
+    type: DataTypes.STRING(255),
+    allowNull: false
+  },
+  content: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  authorRole: {
+    type: DataTypes.STRING(50),
+    defaultValue: 'HOD Office'
+  },
+  authorName: {
+    type: DataTypes.STRING(150),
+    defaultValue: 'Dr. Alok Verma'
+  },
+  targetType: {
+    type: DataTypes.ENUM('Section', 'Year', 'Department', 'All'),
+    defaultValue: 'Department'
+  },
+  targetValue: {
+    type: DataTypes.STRING(50),
+    defaultValue: 'CSE-3A'
+  },
+  priority: {
+    type: DataTypes.ENUM('normal', 'urgent', 'important'),
+    defaultValue: 'normal'
+  },
+  pinned: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  date: {
+    type: DataTypes.DATEONLY,
+    defaultValue: DataTypes.NOW
+  }
+}, {
+  tableName: 'notices',
+  timestamps: true
+});
+
+// 18. Notification Model (Relational System Alerts & Notifications)
+const Notification = sequelize.define('Notification', {
+  id: {
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
+    primaryKey: true
+  },
+  recipient: {
+    type: DataTypes.STRING(50),
+    defaultValue: 'student'
+  },
+  role: {
+    type: DataTypes.STRING(50),
+    defaultValue: 'student'
+  },
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  title: {
+    type: DataTypes.STRING(255),
+    allowNull: false
+  },
+  message: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  type: {
+    type: DataTypes.STRING(50),
+    defaultValue: 'info'
+  },
+  read: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  }
+}, {
+  tableName: 'notifications',
+  timestamps: true
+});
+
+// 19. StudentRequest Model (Relational Attendance Considerations, Leaves, and Queries)
+const StudentRequest = sequelize.define('StudentRequest', {
+  id: {
+    type: DataTypes.INTEGER,
+    autoIncrement: true,
+    primaryKey: true
+  },
+  requestId: {
+    type: DataTypes.STRING(50),
+    allowNull: false,
+    unique: true
+  },
+  requestType: {
+    type: DataTypes.ENUM('attendance_consideration', 'leave_request', 'attendance_query'),
+    defaultValue: 'attendance_consideration'
+  },
+  studentId: {
+    type: DataTypes.INTEGER,
+    allowNull: true
+  },
+  studentName: {
+    type: DataTypes.STRING(150),
+    allowNull: false
+  },
+  rollNo: {
+    type: DataTypes.STRING(50),
+    allowNull: false
+  },
+  department: {
+    type: DataTypes.STRING(50),
+    defaultValue: 'CSE'
+  },
+  semester: {
+    type: DataTypes.STRING(20),
+    defaultValue: '5th'
+  },
+  section: {
+    type: DataTypes.STRING(10),
+    defaultValue: 'A'
+  },
+  title: {
+    type: DataTypes.STRING(255),
+    allowNull: false
+  },
+  startDate: {
+    type: DataTypes.DATEONLY,
+    allowNull: true
+  },
+  endDate: {
+    type: DataTypes.DATEONLY,
+    allowNull: true
+  },
+  dateRangeLabel: {
+    type: DataTypes.STRING(100),
+    allowNull: true
+  },
+  reason: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  supportingDoc: {
+    type: DataTypes.STRING(500),
+    allowNull: true
+  },
+  currentAttendance: {
+    type: DataTypes.INTEGER,
+    defaultValue: 75
+  },
+  expectedAttendance: {
+    type: DataTypes.INTEGER,
+    defaultValue: 85
+  },
+  leaveType: {
+    type: DataTypes.STRING(50),
+    allowNull: true
+  },
+  subjectName: {
+    type: DataTypes.STRING(150),
+    allowNull: true
+  },
+  queryDate: {
+    type: DataTypes.STRING(50),
+    allowNull: true
+  },
+  period: {
+    type: DataTypes.STRING(50),
+    allowNull: true
+  },
+  status: {
+    type: DataTypes.STRING(50),
+    defaultValue: 'pending_tg'
+  },
+  tgRecommendation: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  tgBypassed: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  rejectionReason: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  timeline: {
+    type: DataTypes.TEXT,
+    defaultValue: '[]'
+  },
+  affectedClasses: {
+    type: DataTypes.TEXT,
+    defaultValue: '[]'
+  }
+}, {
+  tableName: 'student_requests',
+  timestamps: true
+});
+
 // Associations
 User.hasOne(Student, { foreignKey: 'userId', as: 'studentProfile' });
 Student.belongsTo(User, { foreignKey: 'userId', as: 'user' });
@@ -847,5 +1052,8 @@ module.exports = {
   TeacherSubstitution,
   SchedulingConstraint,
   AuditRecord,
-  Note
+  Note,
+  Notice,
+  Notification,
+  StudentRequest
 };

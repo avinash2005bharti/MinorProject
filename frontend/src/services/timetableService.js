@@ -40,6 +40,32 @@ export const timetableService = {
   },
 
   // Real Backend API Integrations
+  async getTimetableApi(year = '3rd Year', semester = 5, section = 'A') {
+    try {
+      const res = await apiClient.get(`/timetable?year=${encodeURIComponent(year)}&semester=${semester}&section=${section}`);
+      const slots = res?.timetable || (Array.isArray(res) ? res : []);
+      const grid = { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] };
+      slots.forEach((s) => {
+        if (grid[s.day]) {
+          grid[s.day].push({
+            id: s.id,
+            period: s.period,
+            time: `${s.start_time} - ${s.end_time}`,
+            code: s.subject ? s.subject.split(' ').map(w => w[0]).join('').slice(0, 5).toUpperCase() : 'CS',
+            subject: s.subject,
+            faculty: s.faculty,
+            room: s.room,
+            type: s.type
+          });
+        }
+      });
+      return grid;
+    } catch (e) {
+      console.warn('[timetableService] Fetching timetable notice:', e.message);
+      return { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [] };
+    }
+  },
+
   async fetchTimetableApi(params = {}) {
     const query = new URLSearchParams(params).toString();
     try {
