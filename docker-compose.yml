@@ -1,24 +1,23 @@
 version: '3.8'
 
 services:
-  # 1. Relational Database: MySQL 8.0 for Student/Faculty Records
-  mysql:
-    image: mysql:8.0
-    container_name: cse_erp_mysql
+  # 1. Relational Database: PostgreSQL 16 for Academic & Student Records
+  postgres:
+    image: postgres:16-alpine
+    container_name: cse_erp_postgres
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword123
-      MYSQL_DATABASE: cse_erp
-      MYSQL_USER: cse_user
-      MYSQL_PASSWORD: cse_password123
+      POSTGRES_DB: cse_erp
+      POSTGRES_USER: cse_user
+      POSTGRES_PASSWORD: cse_password123
     ports:
-      - "3306:3306"
+      - "5432:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - cse_erp_net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD-SHELL", "pg_isready -U cse_user -d cse_erp"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,7 +39,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # 3. Optional Local Vector Database: Qdrant
+  # 3. Vector Database: Qdrant
   qdrant:
     image: qdrant/qdrant:latest
     container_name: cse_erp_qdrant
@@ -53,7 +52,7 @@ services:
     networks:
       - cse_erp_net
 
-  # 4. AI Microservice: Python FastAPI + Groq LLM + Pinecone (768 Dimensions)
+  # 4. AI Microservice: Python FastAPI + Groq LLM + Qdrant (768 Dimensions)
   python-ai:
     build:
       context: ./ai-service
@@ -72,24 +71,25 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - QDRANT_COLLECTION=Notes
       - MONGODB_URI=mongodb://mongodb:27017/cse_erp
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_DATABASE=cse_erp
-      - MYSQL_USER=cse_user
-      - MYSQL_PASSWORD=cse_password123
+      - DATABASE_URL=postgresql://cse_user:cse_password123@postgres:5432/cse_erp
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=cse_erp
+      - PGUSER=cse_user
+      - PGPASSWORD=cse_password123
       - EMBEDDING_MODEL=sentence-transformers/all-mpnet-base-v2
       - MAX_CONTEXT_TOKENS=4096
       - BREVO_API_KEY=${BREVO_API_KEY}
       - BREVO_SENDER_EMAIL=${BREVO_SENDER_EMAIL}
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
       mongodb:
         condition: service_healthy
     networks:
       - cse_erp_net
 
-  # 5. Core API Gateway: Node.js Express + JWT + Multer + Brevo + Winston
+  # 5. Core API Gateway: Node.js Express + JWT + Multer + PostgreSQL
   backend:
     build:
       context: ./backend
@@ -103,12 +103,8 @@ services:
       - NODE_ENV=production
       - JWT_SECRET=cse_super_secure_jwt_secret_token_key_2025
       - JWT_REFRESH_SECRET=cse_super_secure_refresh_secret_key_2025
-      - MYSQL_HOST=mysql
-      - MYSQL_PORT=3306
-      - MYSQL_DATABASE=cse_erp
-      - MYSQL_USER=cse_user
-      - MYSQL_PASSWORD=cse_password123
-      - USE_MYSQL=true
+      - DATABASE_URL=postgresql://cse_user:cse_password123@postgres:5432/cse_erp
+      - USE_POSTGRES=true
       - MONGODB_URI=mongodb://mongodb:27017/cse_erp
       - PYTHON_AI_SERVICE_URL=http://python-ai:8000
       - BREVO_API_KEY=${BREVO_API_KEY}
@@ -120,7 +116,7 @@ services:
       - backend_uploads:/app/uploads
       - backend_logs:/app/logs
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
       mongodb:
         condition: service_healthy
@@ -129,7 +125,7 @@ services:
     networks:
       - cse_erp_net
 
-  # 6. Web Application UI: React Vite + Tailwind + Glassmorphism Dashboard
+  # 6. Web Application UI: React Vite + Glassmorphism Dashboard
   frontend:
     build:
       context: ./frontend
@@ -149,7 +145,7 @@ networks:
     driver: bridge
 
 volumes:
-  mysql_data:
+  postgres_data:
   mongo_data:
   qdrant_data:
   backend_uploads:

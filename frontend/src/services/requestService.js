@@ -1,9 +1,10 @@
 // ==========================================================================
 // CampusFlow – Request Service
 // Handles filtering, status tracking, and clearance lifecycle
+// Directly connected to real backend request endpoints
 // ==========================================================================
 
-import { apiClient } from './api';
+import { requestApi } from '../api/requestApi';
 
 export const requestService = {
   getStatusDisplay(status) {
@@ -13,7 +14,7 @@ export const requestService = {
       case 'pending_hod':
         return { label: 'Pending HOD Clearance', badgeClass: 'badge-amber', stepIndex: 2 };
       case 'pending_hod_direct':
-        return { label: 'Direct HOD Clearance (TG Unavailable)', badgeClass: 'badge-rose', stepIndex: 2 };
+        return { label: 'Direct HOD Clearance (TG Bypassed)', badgeClass: 'badge-rose', stepIndex: 2 };
       case 'processing_agent':
         return { label: 'Agent Processing', badgeClass: 'badge-indigo', stepIndex: 3 };
       case 'completed':
@@ -26,37 +27,37 @@ export const requestService = {
     }
   },
 
-  // Backend API calls
+  // Real Backend API calls
   async fetchAllRequestsApi(status) {
-    const query = status ? `?status=${status}` : '';
-    return apiClient.get(`/requests${query}`);
+    const res = await requestApi.getAllRequests(status ? { status } : {});
+    return res;
   },
 
   async submitAttendanceConsiderationApi(formData) {
-    return apiClient.post('/requests/attendance/consideration', formData);
+    return requestApi.submitAttendanceConsideration(formData);
   },
 
   async tgReviewAttendanceConsiderationApi(id, recommendation) {
-    return apiClient.put(`/requests/attendance/consideration/${id}/tg-review`, { recommendation });
+    return requestApi.tgReviewAttendanceConsideration(id, recommendation);
   },
 
   async hodApproveAttendanceConsiderationApi(id) {
-    return apiClient.put(`/requests/attendance/consideration/${id}/hod-approve`, {});
+    return requestApi.hodApproveAttendanceConsideration(id);
   },
 
   async hodRejectAttendanceConsiderationApi(id, reason = 'Rejected by HOD') {
-    return apiClient.put(`/requests/attendance/consideration/${id}/hod-reject`, { reason });
+    return requestApi.hodRejectAttendanceConsideration(id, reason);
   },
 
   async submitAttendanceQueryApi(formData) {
-    return apiClient.post('/requests/attendance/query', formData);
+    return requestApi.submitAttendanceQuery(formData);
   },
 
   async tgReviewAttendanceQueryApi(id) {
-    return apiClient.put(`/requests/attendance/query/${id}/tg-review`, {});
+    return requestApi.tgReviewAttendanceQuery(id);
   },
 
   async hodApproveAttendanceQueryApi(id) {
-    return apiClient.put(`/requests/attendance/query/${id}/hod-approve`, {});
+    return requestApi.hodApproveAttendanceQuery(id);
   }
 };

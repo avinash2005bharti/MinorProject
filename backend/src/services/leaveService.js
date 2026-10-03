@@ -1,6 +1,3 @@
-const LeaveRequest = require('../models/LeaveRequest');
-const Teacher = require('../models/Teacher');
-
 const leaveService = {
   // Routes leave request based on mentor (TG) availability
   async evaluateLeaveRouting(isTgAvailable = true) {

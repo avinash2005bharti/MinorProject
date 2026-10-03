@@ -13,7 +13,6 @@ import {
   Award,
   BookOpen,
   HelpCircle,
-  FileQuestion,
   MessageSquarePlus,
   Layers,
   ShieldCheck,
@@ -23,8 +22,14 @@ import {
 
 export default function QuickActions({ role }) {
   const navigate = useNavigate();
-  const { openModal, currentRole } = useERP();
+  const { openModal, currentRole, currentUser } = useERP();
   const activeRole = role || currentRole;
+  const isAppointedTg = Boolean(
+    currentUser?.isTG ||
+    currentUser?.isTg ||
+    (currentUser?.mentorGroups && currentUser?.mentorGroups.length > 0) ||
+    (currentUser?.designation || '').toLowerCase().includes('(tg)')
+  );
 
   const renderStudentActions = () => (
     <div className="quick-actions-bar">
@@ -120,6 +125,33 @@ export default function QuickActions({ role }) {
         <span className="qa-label">Schedule Lecture</span>
       </button>
 
+      {/* If appointed as TG: TG = Faculty + TG Actions */}
+      {isAppointedTg && (
+        <>
+          <button
+            onClick={() => navigate('/tg/students')}
+            className="quick-action-btn"
+            id="qa-teacher-tg-mentees"
+          >
+            <span className="qa-icon-wrapper qa-icon-purple">
+              <Users size={16} />
+            </span>
+            <span className="qa-label">TG Mentees</span>
+          </button>
+
+          <button
+            onClick={() => navigate('/tg/requests')}
+            className="quick-action-btn"
+            id="qa-teacher-tg-approvals"
+          >
+            <span className="qa-icon-wrapper qa-icon-amber">
+              <Clock size={16} />
+            </span>
+            <span className="qa-label">TG Approvals</span>
+          </button>
+        </>
+      )}
+
       <button
         onClick={() => openModal('createAssignment')}
         className="quick-action-btn"
@@ -129,17 +161,6 @@ export default function QuickActions({ role }) {
           <FileText size={16} />
         </span>
         <span className="qa-label">Create Assignment</span>
-      </button>
-
-      <button
-        onClick={() => openModal('createTest')}
-        className="quick-action-btn"
-        id="qa-create-test"
-      >
-        <span className="qa-icon-wrapper qa-icon-amber">
-          <FileQuestion size={16} />
-        </span>
-        <span className="qa-label">Online Test</span>
       </button>
 
       <button
@@ -202,7 +223,7 @@ export default function QuickActions({ role }) {
       </button>
 
       <button
-        onClick={() => openModal('sendNotice', { defaultTarget: 'Section', targetValue: 'CSE-3A' })}
+        onClick={() => openModal('sendNotice', { defaultTarget: 'Section' })}
         className="quick-action-btn"
         id="qa-tg-send-notice"
       >
@@ -247,17 +268,6 @@ export default function QuickActions({ role }) {
           <Layers size={16} />
         </span>
         <span className="qa-label">Manage Classes</span>
-      </button>
-
-      <button
-        onClick={() => openModal('addSection')}
-        className="quick-action-btn"
-        id="qa-hod-add-section"
-      >
-        <span className="qa-icon-wrapper qa-icon-emerald">
-          <PlusCircle size={16} />
-        </span>
-        <span className="qa-label">Add Section</span>
       </button>
 
       <button

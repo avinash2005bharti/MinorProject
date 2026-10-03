@@ -16,13 +16,18 @@ from agents.admin_assistant import admin_assistant
 from agents.rag_agent import rag_agent
 from agents.memory_agent import memory_agent
 from agents.timetable_agent import timetable_agent
+from agents.orchestrator import central_orchestrator
 from scheduler.optimizer import scheduler_optimizer
 from scheduler.absence_adjuster import absence_adjuster
-from tools.mysql_tools import mysql_tools
+from tools.postgres_tools import postgres_tools
 from tools.file_generator import timetable_file_generator
 from rag.document_processor import document_processor
 from rag.qdrant_manager import qdrant_manager
 from memory.mongo_memory import mongo_memory
+from llm.provider import llm_provider
+from file_processing.file_type_router import file_type_router
+from file_processing.imagekit_client import imagekit_client
+
 
 app = FastAPI(
     title="CSE Department AI Agentic Microservice",
@@ -56,7 +61,14 @@ class GenerateTimetableRequest(BaseModel):
     semester: int = Field(default=5)
     section: str = Field(default="A")
     academic_year: str = Field(default="2026-27")
+    working_days: Optional[List[str]] = Field(default_factory=list)
+    breaks: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
     custom_constraints: Optional[List[str]] = Field(default_factory=list)
+    custom_subjects: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    period_timings: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+    start_time: Optional[str] = Field(default="09:00 AM")
+    period_duration_minutes: Optional[int] = Field(default=50)
+    periods_per_day: Optional[int] = Field(default=7)
     created_by: str = Field(default="AI Timetable Engine")
 
 class AnalyzeAbsenceRequest(BaseModel):
@@ -93,6 +105,18 @@ class RAGSearchRequest(BaseModel):
     collection: Optional[str] = Field(default=None)
     top_k: int = Field(default=4)
 
+class FileProcessRequest(BaseModel):
+    file_id: str = Field(..., description="MongoDB FileDocument ID")
+    file_url: str = Field(..., description="ImageKit URL or local URL")
+    filename: str = Field(..., description="Original filename")
+    mime_type: str = Field(default="", description="MIME type")
+    file_type: str = Field(default="", description="Detected file type")
+    user_id: str = Field(default="", description="User ID")
+    conversation_id: Optional[str] = Field(default=None)
+    department_id: Optional[str] = Field(default=None)
+    role: str = Field(default="student")
+    local_path: Optional[str] = Field(default=None, description="Local path to file if available")
+
 # ----------------- Routes -----------------
 
 @app.get("/")
@@ -107,13 +131,13 @@ def root():
         "document_rag": "Qdrant (erp_documents)",
         "scheduling_engine": "Deterministic Constraint Optimization Engine (CSP)",
         "memory": "MongoDB Short-Term Memory (STM)",
-        "academic_source_of_truth": "MySQL"
+        "academic_source_of_truth": "PostgreSQL"
     }
 
 @app.get("/health")
 def health_check():
-    db_type, conn = mysql_tools._get_connection()
-    mysql_active = conn is not None
+    db_type, conn = postgres_tools._get_connection()
+    pg_active = conn is not None
     if conn:
         try:
             conn.close()
@@ -126,25 +150,63 @@ def health_check():
         "qdrant_status": "Ready",
         "qdrant_collections": ["erp_long_term_memory", "erp_documents", "Notes", "Circulars"],
         "mongo_status": "Ready" if mongo_memory.client else "Cache Mode",
-        "mysql_status": f"Ready ({db_type})" if mysql_active else "Unavailable",
-        "llm_provider": os.getenv("LLM_PROVIDER", "Groq / OpenAI Compatible"),
-        "llm_configured": bool(os.getenv("GROQ_API_KEY") or os.getenv("LLM_API_KEY")),
+        "postgresql_status": f"Ready ({db_type})" if pg_active else "Unavailable",
+        "database": "postgresql",
+        "llm_provider": llm_provider.__class__.__name__,
+        "llm_configured": llm_provider.is_configured(),
         "active_agents": [
+            "ERPAssistantAgent",
             "TimetableAgent",
-            "TeacherSchedulerAgent",
-            "FacultyAssistant",
-            "AdminAssistant",
-            "StudentAssistant",
+            "TeacherSchedulingAgent",
+            "TeacherAbsenceAgent",
+            "AttendanceAgent",
+            "LeaveManagementAgent",
+            "AcademicInformationAgent",
             "RAGAgent",
-            "MemoryAgent"
+            "ReportingAgent",
+            "FileGenerationAgent"
         ]
+    }
+
+@app.get("/health/db")
+def health_db():
+    db_type, conn = postgres_tools._get_connection()
+    active = conn is not None
+    if conn:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return {
+        "status": "UP" if active else "DOWN",
+        "database": "postgresql",
+        "dialect": db_type,
+        "mongo_connected": mongo_memory.client is not None
+    }
+
+@app.get("/health/qdrant")
+def health_qdrant():
+    try:
+        collections = [c.name for c in qdrant_manager.client.get_collections().collections]
+        return {"status": "UP", "engine": "Qdrant", "collections": collections}
+    except Exception as e:
+        return {"status": "DEGRADED", "error": str(e), "engine": "Qdrant"}
+
+@app.get("/health/ai")
+def health_ai():
+    return {
+        "status": "UP",
+        "llm_provider": llm_provider.__class__.__name__,
+        "llm_configured": llm_provider.is_configured(),
+        "embedding_provider": "LocalDenseEmbedding (768-dim L2 Normalized)",
+        "orchestrator": "CentralAgentOrchestrator"
     }
 
 @app.post("/ai/chat")
 async def chat_endpoint(req: ChatRequest):
     """
     Central Multi-Agent Chat Entrypoint.
-    Intelligently routes requests to TimetableAgent, FacultyAssistant, AdminAssistant, or StudentAssistant.
+    Executes CentralAgentOrchestrator pipeline (Intent Detection -> Selective Agent Selection -> Tool Execution).
     """
     try:
         user_role = (req.role or "student").lower()
@@ -155,7 +217,7 @@ async def chat_endpoint(req: ChatRequest):
         if not query_text:
             raise HTTPException(status_code=400, detail="A message or prompt text is required.")
 
-        # Save user message to MongoDB
+        # Save user message to MongoDB STM
         mongo_memory.save_message(
             conversation_id=conv_id,
             user_id=req.user_id,
@@ -164,73 +226,44 @@ async def chat_endpoint(req: ChatRequest):
             content=query_text
         )
 
-        query_lower = query_text.lower()
-        is_timetable_query = (
-            target_agent in ["timetable", "scheduler", "teacher_scheduler"] or
-            user_role in ["hod"] or
-            any(w in query_lower for w in ["timetable", "schedule", "absent", "leave", "adjust his classes", "adjust her classes", "adjust all his classes", "substitute", "make friday", "generate timetable"])
-        )
-
-        # Agent Routing
-        if is_timetable_query:
-            agent_result = timetable_agent.handle_request(
-                prompt=query_text,
-                user_id=req.user_id,
-                conversation_id=conv_id,
-                role=user_role,
-                context_history=req.context_history
-            )
-        elif user_role in ["faculty", "teacher", "tg"]:
-            agent_result = faculty_assistant.handle_query(
-                prompt=query_text,
-                user_id=req.user_id,
-                conversation_id=conv_id,
-                context_history=req.context_history
-            )
-        elif user_role == "admin":
-            agent_result = admin_assistant.handle_query(
-                prompt=query_text,
-                user_id=req.user_id,
-                conversation_id=conv_id,
-                context_history=req.context_history
-            )
-        else: # Student
-            agent_result = student_assistant.handle_query(
-                prompt=query_text,
-                user_id=req.user_id,
-                conversation_id=conv_id,
-                context_history=req.context_history
-            )
-
-        # Save assistant response to MongoDB
-        mongo_memory.save_message(
-            conversation_id=conv_id,
+        # Execute selective agent orchestration
+        result = central_orchestrator.orchestrate(
+            prompt=query_text,
             user_id=req.user_id,
             role=user_role,
-            sender="assistant",
-            content=agent_result["answer"],
-            citations=agent_result.get("citations", []),
-            tool_calls=agent_result.get("tool_calls", [])
+            conversation_id=conv_id,
+            target_agent=target_agent,
+            context_history=req.context_history
         )
 
-        return {
-            "success": True,
-            "conversation_id": conv_id,
-            "answer": agent_result["answer"],
-            "detected_intent": agent_result.get("detected_intent", "GENERAL_QUERY"),
-            "agent_used": agent_result.get("agent_used", "GeneralAgent"),
-            "actions_taken": agent_result.get("actions_taken", []),
-            "proposed_actions": agent_result.get("proposed_actions", []),
-            "approval_requirement": agent_result.get("approval_requirement", {"requires_approval": False}),
-            "generated_files": agent_result.get("generated_files", []),
-            "affected_classes": agent_result.get("affected_classes", []),
-            "conflicts": agent_result.get("conflicts", []),
-            "citations": agent_result.get("citations", []),
-            "timetable_data": agent_result.get("timetable_data", [])
-        }
+        return result
     except Exception as e:
         logger.error(f"[Chat Endpoint Error]: {e}")
         raise HTTPException(status_code=500, detail=f"AI Agent execution error: {str(e)}")
+
+@app.post("/ai/chat/stream")
+async def chat_stream_endpoint(req: ChatRequest):
+    """
+    Streaming Chat Endpoint utilizing the active LLM Provider's stream generator.
+    """
+    from fastapi.responses import StreamingResponse
+
+    user_role = (req.role or "student").lower()
+    query_text = (req.prompt or req.message or "").strip()
+
+    if not query_text:
+        raise HTTPException(status_code=400, detail="A message or prompt text is required.")
+
+    messages = [{"role": "system", "content": f"You are the CSE Department ERP Assistant for a {user_role}."},
+                {"role": "user", "content": query_text}]
+
+    def token_stream():
+        for token in llm_provider.generate_stream(messages):
+            yield f"data: {token}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(token_stream(), media_type="text/event-stream")
+
 
 # ----------------- Dedicated Timetable & Scheduler API -----------------
 
@@ -238,12 +271,12 @@ async def chat_endpoint(req: ChatRequest):
 async def generate_timetable_api(req: GenerateTimetableRequest):
     """
     Deterministic Timetable Generator Endpoint:
-    Queries authoritative MySQL tables -> executes CSP constraint optimizer -> saves new version in MySQL -> outputs XLSX & PDF.
+    Queries authoritative PostgreSQL tables -> executes CSP constraint optimizer -> saves new version in PostgreSQL -> outputs XLSX & PDF.
     """
     try:
-        subjects = mysql_tools.get_all_subjects(semester=req.semester, department=req.department)
-        faculty_list = mysql_tools.get_all_faculty(department=req.department)
-        rooms = mysql_tools.get_all_rooms(department=req.department)
+        subjects = postgres_tools.get_all_subjects(semester=req.semester, department=req.department)
+        faculty_list = postgres_tools.get_all_faculty(department=req.department)
+        rooms = postgres_tools.get_all_rooms(department=req.department)
 
         opt_res = scheduler_optimizer.generate_timetable(
             department=req.department,
@@ -253,14 +286,20 @@ async def generate_timetable_api(req: GenerateTimetableRequest):
             subjects=subjects,
             faculty_list=faculty_list,
             rooms=rooms,
-            custom_constraints=req.custom_constraints
+            custom_constraints=req.custom_constraints,
+            custom_subjects=req.custom_subjects,
+            period_timings=req.period_timings,
+            start_time=req.start_time,
+            period_duration_minutes=req.period_duration_minutes,
+            periods_per_day=req.periods_per_day,
+            working_days=req.working_days
         )
 
         slots = opt_res.get("timetable_slots", [])
         metrics = opt_res.get("metrics", {})
 
-        # Save to MySQL
-        master_id = mysql_tools.save_new_timetable_version(
+        # Save to PostgreSQL
+        master_id = postgres_tools.save_new_timetable_version(
             department=req.department,
             year=req.year,
             semester=req.semester,
@@ -271,7 +310,7 @@ async def generate_timetable_api(req: GenerateTimetableRequest):
             created_by=req.created_by
         )
 
-        master_row = mysql_tools.get_timetable_master(req.semester, req.section, req.academic_year)
+        master_row = postgres_tools.get_timetable_master(req.semester, req.section, req.academic_year)
         version_num = master_row.get("version", 1) if master_row else 1
 
         excel_info = timetable_file_generator.generate_excel(
@@ -323,7 +362,7 @@ async def analyze_absence_api(req: AnalyzeAbsenceRequest):
 @app.post("/ai/teacher-scheduler/apply")
 async def apply_substitutions_api(req: ApplySubstitutionRequest):
     """
-    Applies approved substitution proposals transactionally into MySQL.
+    Applies approved substitution proposals transactionally into PostgreSQL.
     """
     try:
         res = absence_adjuster.execute_approved_substitutions(
@@ -337,7 +376,7 @@ async def apply_substitutions_api(req: ApplySubstitutionRequest):
 
 @app.post("/ai/timetable/export/excel")
 async def export_excel_api(req: ExportTimetableRequest):
-    slots = mysql_tools.get_timetable(year=req.year, semester=req.semester, section=req.section)
+    slots = postgres_tools.get_timetable(year=req.year, semester=req.semester, section=req.section)
     res = timetable_file_generator.generate_excel(
         req.department, req.year, req.semester, req.section, req.academic_year, req.version, slots
     )
@@ -345,7 +384,7 @@ async def export_excel_api(req: ExportTimetableRequest):
 
 @app.post("/ai/timetable/export/pdf")
 async def export_pdf_api(req: ExportTimetableRequest):
-    slots = mysql_tools.get_timetable(year=req.year, semester=req.semester, section=req.section)
+    slots = postgres_tools.get_timetable(year=req.year, semester=req.semester, section=req.section)
     res = timetable_file_generator.generate_pdf(
         req.department, req.year, req.semester, req.section, req.academic_year, req.version, slots
     )
@@ -411,6 +450,112 @@ async def rag_search_endpoint(req: RAGSearchRequest):
     except Exception as e:
         logger.error(f"[RAG Search Error]: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ----------------- Universal File Processing Pipeline -----------------
+
+@app.post("/ai/files/process")
+async def process_file_endpoint(req: FileProcessRequest, background_tasks: BackgroundTasks):
+    """
+    Universal File Processing Pipeline entry point.
+    Receives file metadata from Node.js backend, processes asynchronously.
+    """
+    try:
+        logger.info(f"[File Process] Received: {req.filename} (type={req.file_type}, id={req.file_id})")
+
+        # Process in background to not block the response
+        background_tasks.add_task(
+            _background_process_file,
+            file_id=req.file_id,
+            file_url=req.file_url,
+            filename=req.filename,
+            mime_type=req.mime_type,
+            file_type=req.file_type,
+            user_id=req.user_id,
+            conversation_id=req.conversation_id,
+            department_id=req.department_id,
+            role=req.role,
+            local_path=req.local_path
+        )
+
+        return {
+            "success": True,
+            "message": f"File '{req.filename}' queued for processing.",
+            "file_id": req.file_id,
+            "status": "processing"
+        }
+    except Exception as e:
+        logger.error(f"[File Process Error]: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _background_process_file(
+    file_id: str,
+    file_url: str,
+    filename: str,
+    mime_type: str,
+    file_type: str,
+    user_id: str,
+    conversation_id: str,
+    department_id: str,
+    role: str,
+    local_path: Optional[str] = None
+):
+    """Background task for file processing."""
+    try:
+        result = await file_type_router.process_file(
+            file_id=file_id,
+            file_url=file_url,
+            filename=filename,
+            mime_type=mime_type,
+            file_type=file_type,
+            user_id=user_id,
+            conversation_id=conversation_id or "",
+            department_id=department_id or "",
+            role=role,
+            local_path=local_path
+        )
+        logger.info(f"[File Process] Completed: {filename} -> {result.get('chunks_indexed', 0)} chunks indexed")
+    except Exception as e:
+        logger.error(f"[File Process Background Error] {filename}: {e}")
+
+
+@app.get("/ai/files/{file_id}/content")
+async def get_file_content(file_id: str):
+    """
+    Get processed/normalized content for a file.
+    Useful for agents that need to reason over file content.
+    """
+    try:
+        # Search Qdrant for chunks belonging to this document
+        results = qdrant_manager.search_rag(
+            query="document content",
+            department="CSE",
+            top_k=20
+        )
+
+        # Filter results for this specific document
+        doc_chunks = []
+        for r in results:
+            meta = r.get("metadata", {})
+            if meta.get("document_id") == file_id:
+                doc_chunks.append({
+                    "content": r.get("snippet", ""),
+                    "section": meta.get("section", "General"),
+                    "page": meta.get("page"),
+                    "chunk_id": meta.get("chunk_id", 0)
+                })
+
+        return {
+            "success": True,
+            "file_id": file_id,
+            "chunks": doc_chunks,
+            "chunk_count": len(doc_chunks)
+        }
+    except Exception as e:
+        logger.error(f"[File Content Error]: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn

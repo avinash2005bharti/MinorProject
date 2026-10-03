@@ -1,254 +1,477 @@
-const { Attendance, Student, Subject, Faculty } = require('../models/mysql');
-const emailService = require('../services/emailService');
+// ============================================================================
+// Departmental ERP - Attendance Controller
+// Canonical Source of Truth: PostgreSQL via Prisma
+// ============================================================================
+
+const crypto = require('crypto');
+const { prisma } = require('../config/postgres');
 const { logger } = require('../services/loggerService');
 
-// 1. Mark Single Attendance Record
+// Helper to resolve or create Attendance parent session
+async function resolveOrCreateAttendance({ subjectId, teacherId, sectionId, date, periodNumber }) {
+  const sessionDate = date ? new Date(date) : new Date();
+  sessionDate.setHours(0, 0, 0, 0);
+
+  let attendance = await prisma.attendance.findFirst({
+    where: {
+      subjectId,
+      date: sessionDate,
+      periodNumber: periodNumber || 1,
+      sectionId: sectionId || undefined
+    }
+  });
+
+  if (!attendance) {
+    attendance = await prisma.attendance.create({
+      data: {
+        subjectId,
+        teacherId,
+        sectionId: sectionId || null,
+        date: sessionDate,
+        periodNumber: periodNumber || 1,
+        totalStudents: 0,
+        presentCount: 0,
+        absentCount: 0
+      }
+    });
+  }
+
+  return attendance;
+}
+
+// 1. Mark Single Student Attendance
 exports.markAttendance = async (req, res) => {
   try {
-    const { student_id, subject_id, faculty_id, date, status } = req.body;
+    const { studentId, student_id, subjectId, subject_id, teacherId, faculty_id, date, status = 'PRESENT', remarks, periodNumber } = req.body;
+    const finalStudentId = studentId || student_id;
+    const finalSubjectId = subjectId || subject_id;
+    let finalTeacherId = teacherId || faculty_id || req.user?.teacherId;
 
-    if (!student_id || !subject_id || !date || !status) {
-      return res.status(400).json({
-        success: false,
-        message: 'student_id, subject_id, date, and status are required.'
-      });
+    if (!finalStudentId || !finalSubjectId) {
+      return res.status(400).json({ success: false, message: 'studentId and subjectId are required.' });
     }
 
-    const fid = faculty_id || (req.user && req.user.facultyProfile ? req.user.facultyProfile.id : null);
+    if (!finalTeacherId) {
+      const defaultTeacher = await prisma.teacher.findFirst();
+      finalTeacherId = defaultTeacher ? defaultTeacher.id : null;
+    }
 
-    // Upsert attendance for student, subject, and date
-    let record = await Attendance.findOne({
-      where: { student_id, subject_id, date }
+    const student = await prisma.student.findUnique({ where: { id: finalStudentId } });
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found in ERP records.' });
+    }
+
+    const session = await resolveOrCreateAttendance({
+      subjectId: finalSubjectId,
+      teacherId: finalTeacherId,
+      sectionId: student.sectionId,
+      date,
+      periodNumber
     });
 
-    if (record) {
-      record.status = status;
-      record.faculty_id = fid || record.faculty_id;
-      await record.save();
-    } else {
-      record = await Attendance.create({
-        student_id,
-        subject_id,
-        faculty_id: fid,
-        date,
-        status
-      });
-    }
+    const normStatus = status.toUpperCase();
 
-    // Check attendance threshold
-    await checkAndAlertThreshold(student_id, subject_id);
+    const record = await prisma.attendanceRecord.upsert({
+      where: {
+        attendanceId_studentId: {
+          attendanceId: session.id,
+          studentId: student.id
+        }
+      },
+      update: {
+        status: normStatus,
+        remarks: remarks || null,
+        markedAt: new Date()
+      },
+      create: {
+        attendanceId: session.id,
+        studentId: student.id,
+        status: normStatus,
+        remarks: remarks || null,
+        verificationMethod: 'MANUAL',
+        markedAt: new Date()
+      }
+    });
+
+    // Update parent session totals
+    const totalRecords = await prisma.attendanceRecord.count({ where: { attendanceId: session.id } });
+    const presentRecords = await prisma.attendanceRecord.count({
+      where: { attendanceId: session.id, status: { in: ['PRESENT', 'Present', 'LATE', 'Late'] } }
+    });
+
+    await prisma.attendance.update({
+      where: { id: session.id },
+      data: {
+        totalStudents: totalRecords,
+        presentCount: presentRecords,
+        absentCount: totalRecords - presentRecords
+      }
+    });
 
     return res.status(200).json({
       success: true,
       message: 'Attendance recorded successfully.',
-      attendance: record
+      record
     });
   } catch (error) {
-    logger.error(`[Attendance] Mark error: ${error.message}`);
+    logger.error(`[Attendance Controller] Mark error: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 2. Bulk Mark Attendance (For an entire section/class lecture)
+// 2. Bulk Mark Attendance
 exports.bulkMarkAttendance = async (req, res) => {
   try {
-    const { subject_id, faculty_id, date, records } = req.body;
-    // records: Array of { student_id, status: 'Present' | 'Absent' | 'Late' | 'Excused' }
+    const { subjectId, sectionId, date, periodNumber, records = [] } = req.body;
+    let teacherId = req.body.teacherId || req.user?.teacherId;
 
-    if (!subject_id || !date || !Array.isArray(records) || records.length === 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'subject_id, date, and an array of student records are required.'
-      });
+    if (!subjectId || !Array.isArray(records)) {
+      return res.status(400).json({ success: false, message: 'subjectId and records array are required.' });
     }
 
-    const fid = faculty_id || (req.user && req.user.facultyProfile ? req.user.facultyProfile.id : null);
+    if (!teacherId) {
+      const defaultTeacher = await prisma.teacher.findFirst();
+      teacherId = defaultTeacher ? defaultTeacher.id : null;
+    }
 
-    const savedRecords = [];
-    for (const item of records) {
-      let record = await Attendance.findOne({
+    const session = await resolveOrCreateAttendance({
+      subjectId,
+      teacherId,
+      sectionId,
+      date,
+      periodNumber
+    });
+
+    // Process all student records transactionally
+    const upserts = records.map((r) => {
+      const stId = r.studentId || r.student_id;
+      const status = (r.status || 'PRESENT').toUpperCase();
+      return prisma.attendanceRecord.upsert({
         where: {
-          student_id: item.student_id,
-          subject_id,
-          date
+          attendanceId_studentId: {
+            attendanceId: session.id,
+            studentId: stId
+          }
+        },
+        update: {
+          status,
+          remarks: r.remarks || null,
+          markedAt: new Date()
+        },
+        create: {
+          attendanceId: session.id,
+          studentId: stId,
+          status,
+          remarks: r.remarks || null,
+          verificationMethod: 'MANUAL',
+          markedAt: new Date()
         }
       });
+    });
 
-      if (record) {
-        record.status = item.status;
-        record.faculty_id = fid || record.faculty_id;
-        await record.save();
-      } else {
-        record = await Attendance.create({
-          student_id: item.student_id,
-          subject_id,
-          faculty_id: fid,
-          date,
-          status: item.status
-        });
+    await prisma.$transaction(upserts);
+
+    // Recompute totals
+    const totalRecords = await prisma.attendanceRecord.count({ where: { attendanceId: session.id } });
+    const presentRecords = await prisma.attendanceRecord.count({
+      where: { attendanceId: session.id, status: { in: ['PRESENT', 'Present', 'LATE', 'Late'] } }
+    });
+
+    await prisma.attendance.update({
+      where: { id: session.id },
+      data: {
+        totalStudents: totalRecords,
+        presentCount: presentRecords,
+        absentCount: totalRecords - presentRecords
       }
-      savedRecords.push(record);
-
-      // Async threshold check
-      checkAndAlertThreshold(item.student_id, subject_id).catch(() => {});
-    }
+    });
 
     return res.status(200).json({
       success: true,
-      message: `Bulk attendance recorded successfully for ${savedRecords.length} students.`,
-      count: savedRecords.length
+      message: `Successfully marked attendance for ${records.length} students.`,
+      sessionId: session.id,
+      totalStudents: totalRecords,
+      presentCount: presentRecords,
+      absentCount: totalRecords - presentRecords
     });
   } catch (error) {
-    logger.error(`[Attendance] Bulk error: ${error.message}`);
+    logger.error(`[Attendance Controller] Bulk mark error: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 3. Get Student Attendance Percentage & Summary
+// 3. Get Student Attendance Stats
 exports.getStudentAttendanceStats = async (req, res) => {
   try {
-    const studentId = req.params.studentId || (req.user && req.user.studentProfile ? req.user.studentProfile.id : null);
+    let studentId = req.params.studentId || req.query.studentId;
+
+    if (studentId === 'me' || !studentId) {
+      studentId = req.user?.studentId;
+      if (!studentId && req.user?.id) {
+        const st = await prisma.student.findUnique({ where: { userId: req.user.id } });
+        if (st) studentId = st.id;
+      }
+    }
 
     if (!studentId) {
-      return res.status(400).json({ success: false, message: 'Student ID is required.' });
+      // If still not found, return empty attendance response instead of crashing
+      return res.status(200).json({
+        success: true,
+        overallPercentage: 0,
+        totalClasses: 0,
+        attendedClasses: 0,
+        subjectWise: [],
+        records: []
+      });
     }
 
-    const student = await Student.findByPk(studentId);
-    if (!student) {
-      return res.status(404).json({ success: false, message: 'Student not found.' });
-    }
-
-    // Fetch all attendance for student
-    const records = await Attendance.findAll({
-      where: { student_id: studentId },
-      include: [{ model: Subject, as: 'subject', attributes: ['id', 'name', 'code', 'credits'] }]
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: { department: true, section: true }
     });
 
-    const totalLectures = records.length;
-    const presentCount = records.filter(r => r.status === 'Present' || r.status === 'Excused').length;
-    const overallPercentage = totalLectures > 0 ? Math.round((presentCount / totalLectures) * 100) : 100;
+    if (!student) {
+      return res.status(404).json({ success: false, message: 'Student not found in ERP database.' });
+    }
 
-    // Subject-wise breakdown
-    const subjectMap = {};
-    for (const rec of records) {
-      const subId = rec.subject_id;
-      const subName = rec.subject ? rec.subject.name : `Subject #${subId}`;
-      const subCode = rec.subject ? rec.subject.code : `CS${subId}`;
+    const records = await prisma.attendanceRecord.findMany({
+      where: { studentId: student.id },
+      include: {
+        attendance: {
+          include: {
+            subject: true,
+            teacher: true
+          }
+        }
+      },
+      orderBy: { markedAt: 'desc' }
+    });
 
-      if (!subjectMap[subId]) {
-        subjectMap[subId] = {
-          subjectId: subId,
-          subjectName: subName,
-          subjectCode: subCode,
+    const totalClasses = records.length;
+    const attendedClasses = records.filter(r => ['PRESENT', 'Present', 'LATE', 'Late'].includes(r.status)).length;
+    const overallPercentage = totalClasses > 0 ? Math.round((attendedClasses / totalClasses) * 100) : 0;
+
+    // Group by subject
+    const subjectMap = new Map();
+    for (const r of records) {
+      const sub = r.attendance?.subject;
+      if (!sub) continue;
+      if (!subjectMap.has(sub.id)) {
+        subjectMap.set(sub.id, {
+          subjectId: sub.id,
+          subjectCode: sub.code,
+          subjectName: sub.name,
           total: 0,
-          attended: 0,
-          absent: 0
-        };
+          attended: 0
+        });
       }
-
-      subjectMap[subId].total += 1;
-      if (rec.status === 'Present' || rec.status === 'Excused') {
-        subjectMap[subId].attended += 1;
-      } else {
-        subjectMap[subId].absent += 1;
+      const data = subjectMap.get(sub.id);
+      data.total += 1;
+      if (['PRESENT', 'Present', 'LATE', 'Late'].includes(r.status)) {
+        data.attended += 1;
       }
     }
 
-    const subjectBreakdown = Object.values(subjectMap).map(s => ({
+    const subjectWise = Array.from(subjectMap.values()).map(s => ({
       ...s,
-      percentage: s.total > 0 ? Math.round((s.attended / s.total) * 100) : 100,
-      isShortage: s.total > 0 && (s.attended / s.total) * 100 < 75
+      percentage: s.total > 0 ? Math.round((s.attended / s.total) * 100) : 0
     }));
 
     return res.status(200).json({
       success: true,
       student: {
         id: student.id,
-        enrollment_no: student.enrollment_no,
-        name: student.name,
-        year: student.year,
+        name: `${student.firstName} ${student.lastName || ''}`.trim(),
+        enrollmentNo: student.enrollmentNo,
         semester: student.semester,
-        section: student.section
+        section: student.section?.name || 'A'
       },
-      summary: {
-        totalLectures,
-        attendedLectures: presentCount,
-        overallPercentage,
-        isShortage: overallPercentage < 75,
-        threshold: 75
-      },
-      subjectBreakdown,
-      recentRecords: records.slice(-10)
+      overallPercentage,
+      totalClasses,
+      attendedClasses,
+      absentClasses: totalClasses - attendedClasses,
+      subjectWise,
+      records: records.slice(0, 50).map(r => ({
+        id: r.id,
+        date: r.attendance?.date,
+        subject: r.attendance?.subject?.name || 'Subject',
+        subjectCode: r.attendance?.subject?.code || '',
+        teacher: r.attendance?.teacher ? `${r.attendance.teacher.firstName} ${r.attendance.teacher.lastName || ''}`.trim() : null,
+        status: r.status,
+        remarks: r.remarks
+      }))
     });
   } catch (error) {
-    logger.error(`[Attendance] Stats error: ${error.message}`);
+    logger.error(`[Attendance Controller] Stats error: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 4. Get Class / Section Attendance Report (Faculty / Admin)
+// 4. Get Class Attendance Report
 exports.getClassAttendanceReport = async (req, res) => {
   try {
-    const { year, semester, section, subject_id, date } = req.query;
+    const { subjectId, sectionId, semester = 5 } = req.query;
 
-    const studentWhere = {};
-    if (year) studentWhere.year = year;
-    if (semester) studentWhere.semester = parseInt(semester, 10);
-    if (section) studentWhere.section = section.toUpperCase();
+    const where = {};
+    if (subjectId) where.subjectId = subjectId;
+    if (sectionId) where.sectionId = sectionId;
 
-    const students = await Student.findAll({ where: studentWhere, order: [['enrollment_no', 'ASC']] });
-
-    const attendanceWhere = {};
-    if (subject_id) attendanceWhere.subject_id = parseInt(subject_id, 10);
-    if (date) attendanceWhere.date = date;
-
-    const studentIds = students.map(s => s.id);
-    const records = await Attendance.findAll({
-      where: {
-        student_id: studentIds,
-        ...attendanceWhere
+    const sessions = await prisma.attendance.findMany({
+      where,
+      include: {
+        subject: true,
+        teacher: true,
+        section: true,
+        records: {
+          include: { student: true }
+        }
       },
-      include: [
-        { model: Subject, as: 'subject', attributes: ['name', 'code'] },
-        { model: Student, as: 'student', attributes: ['name', 'enrollment_no'] }
-      ]
+      orderBy: { date: 'desc' },
+      take: 20
     });
 
     return res.status(200).json({
       success: true,
-      totalStudents: students.length,
-      records
+      totalSessions: sessions.length,
+      sessions
+    });
+  } catch (error) {
+    logger.error(`[Attendance Controller] Report error: ${error.message}`);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// 5. Override Attendance (Faculty / HOD)
+exports.overrideAttendance = async (req, res) => {
+  try {
+    const { recordId, newStatus, reason } = req.body;
+
+    if (!recordId || !newStatus) {
+      return res.status(400).json({ success: false, message: 'recordId and newStatus are required.' });
+    }
+
+    const updated = await prisma.attendanceRecord.update({
+      where: { id: recordId },
+      data: {
+        status: newStatus.toUpperCase(),
+        remarks: reason ? `Override: ${reason}` : 'Administrative Override',
+        verificationMethod: 'MANUAL_OVERRIDE'
+      },
+      include: { student: true, attendance: true }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Attendance record updated successfully.',
+      record: updated
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Helper: Check attendance threshold & trigger Brevo alert if < 75%
-async function checkAndAlertThreshold(studentId, subjectId) {
+// 6. Generate QR Session
+exports.generateQrSession = async (req, res) => {
   try {
-    const records = await Attendance.findAll({
-      where: { student_id: studentId, subject_id: subjectId }
+    const { subjectId, sectionId, periodNumber, durationMinutes = 10 } = req.body;
+    let teacherId = req.body.teacherId || req.user?.teacherId;
+
+    if (!subjectId) {
+      return res.status(400).json({ success: false, message: 'subjectId is required.' });
+    }
+
+    if (!teacherId) {
+      const defaultTeacher = await prisma.teacher.findFirst();
+      teacherId = defaultTeacher ? defaultTeacher.id : null;
+    }
+
+    const qrCodeHash = crypto.randomBytes(16).toString('hex');
+    const qrExpiresAt = new Date(Date.now() + durationMinutes * 60 * 1000);
+
+    const session = await prisma.attendance.create({
+      data: {
+        subjectId,
+        teacherId,
+        sectionId: sectionId || null,
+        date: new Date(),
+        periodNumber: periodNumber || 1,
+        qrCodeHash,
+        qrExpiresAt,
+        isLocked: false
+      },
+      include: { subject: true }
     });
 
-    if (records.length < 5) return; // Wait for minimum 5 sessions before raising warnings
-
-    const present = records.filter(r => r.status === 'Present' || r.status === 'Excused').length;
-    const percent = Math.round((present / records.length) * 100);
-
-    if (percent < 75) {
-      const student = await Student.findByPk(studentId);
-      const subject = await Subject.findByPk(subjectId);
-      if (student && subject) {
-        await emailService.sendAttendanceAlert(
-          student.email,
-          student.name,
-          subject.name,
-          percent
-        );
-      }
-    }
-  } catch (err) {
-    logger.warn(`[Attendance Alert Check] Failed for student ${studentId}: ${err.message}`);
+    return res.status(200).json({
+      success: true,
+      sessionId: session.id,
+      qrToken: qrCodeHash,
+      expiresAt: qrExpiresAt,
+      message: 'Dynamic QR attendance session active.'
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
-}
+};
+
+// 7. Scan QR Session
+exports.scanQrSession = async (req, res) => {
+  try {
+    const { qrToken, studentId } = req.body;
+    let finalStudentId = studentId || req.user?.studentId;
+
+    if (!qrToken) {
+      return res.status(400).json({ success: false, message: 'qrToken is required.' });
+    }
+
+    if (!finalStudentId && req.user?.id) {
+      const st = await prisma.student.findUnique({ where: { userId: req.user.id } });
+      if (st) finalStudentId = st.id;
+    }
+
+    if (!finalStudentId) {
+      return res.status(400).json({ success: false, message: 'Student identity required.' });
+    }
+
+    const session = await prisma.attendance.findFirst({
+      where: { qrCodeHash: qrToken }
+    });
+
+    if (!session) {
+      return res.status(404).json({ success: false, message: 'Invalid QR session token.' });
+    }
+
+    if (session.qrExpiresAt && new Date() > session.qrExpiresAt) {
+      return res.status(410).json({ success: false, message: 'QR session has expired.' });
+    }
+
+    const record = await prisma.attendanceRecord.upsert({
+      where: {
+        attendanceId_studentId: {
+          attendanceId: session.id,
+          studentId: finalStudentId
+        }
+      },
+      update: {
+        status: 'PRESENT',
+        verificationMethod: 'QR_SCAN',
+        markedAt: new Date()
+      },
+      create: {
+        attendanceId: session.id,
+        studentId: finalStudentId,
+        status: 'PRESENT',
+        verificationMethod: 'QR_SCAN',
+        markedAt: new Date()
+      }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Attendance recorded via QR verification.',
+      record
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};

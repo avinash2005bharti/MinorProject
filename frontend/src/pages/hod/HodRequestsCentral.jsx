@@ -22,17 +22,32 @@ export default function HodRequestsCentral() {
     ...leaveRequests.map((l) => ({ ...l, type: 'leave_request' })),
     ...attendanceQueries.map((q) => ({
       ...q,
-      title: `Attendance Query: ${q.subject}`,
+      title: `Attendance Query: ${q.subjectName || q.subject || 'Dispute'}`,
       type: 'attendance_query'
     }))
   ];
 
+  const isAccepted = (status) => {
+    const s = String(status || '').toLowerCase();
+    return s === 'approved' || s === 'completed' || s === 'approved_by_hod';
+  };
+
+  const isAwaitingHod = (status) => {
+    const s = String(status || '').toLowerCase();
+    return s === 'pending_hod' || s === 'pending_hod_direct' || s === 'recommended_by_tg';
+  };
+
+  const isPendingTg = (status) => {
+    const s = String(status || '').toLowerCase();
+    return s === 'pending' || s === 'pending_tg';
+  };
+
   const filtered = allRequests.filter((r) => {
-    if (filter === 'pending') return r.status === 'pending_hod' || r.status === 'pending_hod_direct';
-    if (filter === 'bypass') return r.status === 'pending_tg';
+    if (filter === 'pending') return isAwaitingHod(r.status);
+    if (filter === 'bypass') return isPendingTg(r.status);
     if (filter === 'leaves') return r.type === 'leave_request';
     if (filter === 'considerations') return r.type === 'attendance_consideration';
-    if (filter === 'approved') return r.status === 'completed' || r.status === 'approved';
+    if (filter === 'approved') return isAccepted(r.status);
     return true;
   });
 
@@ -55,11 +70,11 @@ export default function HodRequestsCentral() {
         <div style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '2px' }}>
           {[
             { id: 'all', label: `All Requests (${allRequests.length})` },
-            { id: 'pending', label: `Awaiting HOD Sign-off (${allRequests.filter((r) => r.status === 'pending_hod' || r.status === 'pending_hod_direct').length})` },
-            { id: 'bypass', label: `⚡ In TG Queue / Direct Bypass (${allRequests.filter((r) => r.status === 'pending_tg').length})` },
+            { id: 'pending', label: `Awaiting HOD Sign-off (${allRequests.filter((r) => isAwaitingHod(r.status)).length})` },
+            { id: 'bypass', label: `⚡ In TG Queue / Direct Bypass (${allRequests.filter((r) => isPendingTg(r.status)).length})` },
             { id: 'leaves', label: `Leave Applications (${allRequests.filter((r) => r.type === 'leave_request').length})` },
             { id: 'considerations', label: `Considerations (${allRequests.filter((r) => r.type === 'attendance_consideration').length})` },
-            { id: 'approved', label: `Cleared & Synced (${allRequests.filter((r) => r.status === 'completed' || r.status === 'approved').length})` }
+            { id: 'approved', label: `Cleared & Synced (${allRequests.filter((r) => isAccepted(r.status)).length})` }
           ].map((f) => (
             <button
               key={f.id}

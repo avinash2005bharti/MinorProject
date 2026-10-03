@@ -1,27 +1,16 @@
 // ==========================================================================
 // CampusFlow – Attendance Service
 // Handles section-wise automated propagation, recalculation, and query tracking
+// Directly connected to real backend attendance APIs
 // ==========================================================================
 
-import { apiClient } from './api';
+import { attendanceApi } from '../api/attendanceApi';
 
 export const attendanceService = {
   // Recalculates student's overall attendance %
   calculatePercentage(attended, total) {
-    if (!total || total === 0) return 100;
+    if (!total || total === 0) return 0;
     return Math.round((attended / total) * 100);
-  },
-
-  // Identifies affected classes for a student's section within a date range
-  identifyAffectedClasses(section, startDate, endDate) {
-    return [
-      { subject: 'Data Structures & Algorithms', code: 'CS301', date: '10 Sept', faculty: 'Dr. Rajesh Verma' },
-      { subject: 'Database Management Systems', code: 'CS302', date: '11 Sept', faculty: 'Prof. Anita Sharma' },
-      { subject: 'Operating Systems', code: 'CS303', date: '12 Sept', faculty: 'Dr. Meenakshi S.' },
-      { subject: 'Computer Networks', code: 'CS304', date: '13 Sept', faculty: 'Prof. Amit K.' },
-      { subject: 'Data Structures Lab', code: 'CS306', date: '14 Sept', faculty: 'Dr. Rajesh Verma' },
-      { subject: 'Software Engineering', code: 'CS305', date: '15 Sept', faculty: 'Prof. K. Sen' }
-    ];
   },
 
   // Determines badge color and label for attendance percentage
@@ -53,34 +42,28 @@ export const attendanceService = {
     }
   },
 
-  // Real Backend API Integrations
+  // Real Backend API Integrations (Zero mock fallback)
   async fetchStudentAttendance(studentId) {
-    try {
-      const res = await apiClient.get(`/attendance/student/${studentId || ''}`);
-      return res.data;
-    } catch (e) {
-      console.warn('[attendanceService] Falling back to local state:', e.message);
-      return null;
-    }
+    return attendanceApi.getStudentStats(studentId);
   },
 
   async markAttendanceApi(data) {
-    return apiClient.post('/attendance/mark', data);
+    return attendanceApi.markAttendance(data);
   },
 
   async bulkRollCallApi(data) {
-    return apiClient.post('/attendance/bulk', data);
+    return attendanceApi.bulkMarkAttendance(data);
   },
 
   async overrideAttendanceApi(studentRoll, newPercentage, reason) {
-    return apiClient.post('/attendance/override', { studentRoll, newPercentage, reason });
+    return attendanceApi.overrideAttendance(studentRoll, newPercentage, reason);
   },
 
   async generateQrApi(data) {
-    return apiClient.post('/attendance/qr/generate', data);
+    return attendanceApi.generateQrSession(data);
   },
 
   async scanQrApi(sessionId, token, rollNo) {
-    return apiClient.post('/attendance/qr/scan', { sessionId, token, rollNo });
+    return attendanceApi.scanQrSession({ sessionId, token, rollNo });
   }
 };

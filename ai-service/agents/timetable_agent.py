@@ -4,7 +4,7 @@ import time
 from typing import Dict, Any, List, Optional
 from loguru import logger
 
-from tools.mysql_tools import mysql_tools
+from tools.postgres_tools import postgres_tools
 from tools.file_generator import timetable_file_generator
 from scheduler.optimizer import scheduler_optimizer
 from scheduler.absence_adjuster import absence_adjuster
@@ -20,13 +20,13 @@ class TimetableAgent:
     - MongoDB STM: Task context, active constraints, pending approval state
     - Qdrant LTM: Historical planning preferences & HOD scheduling rules
     - Qdrant RAG: Institutional regulations & departmental policies
-    - MySQL: Relational source of truth for faculty, subjects, rooms, and timetables
+    - PostgreSQL: Relational source of truth for faculty, subjects, rooms, and timetables
     - Deterministic CSP Optimizer: Collision-free schedule generator
     - Deterministic Absence Adjuster: Autonomous substitute ranker
     - File Generator: Instant XLSX & PDF creation
     """
     def __init__(self):
-        self.sql = mysql_tools
+        self.sql = postgres_tools
         self.optimizer = scheduler_optimizer
         self.adjuster = absence_adjuster
         self.memory = memory_agent
@@ -95,7 +95,7 @@ class TimetableAgent:
     ) -> Dict[str, Any]:
         """
         Scenario 2: Dynamic Teacher Absence Adjustment.
-        Identifies teacher -> queries MySQL timetable -> checks faculty availability & expertise -> ranks substitutes -> produces proposal -> asks HOD approval.
+        Identifies teacher -> queries PostgreSQL timetable -> checks faculty availability & expertise -> ranks substitutes -> produces proposal -> asks HOD approval.
         """
         # Extract teacher name from prompt (e.g., "Professor Sharma is absent today")
         teacher_query = "Sharma"
@@ -146,7 +146,7 @@ class TimetableAgent:
 
         # Construct HOD Response
         answer = f"### ⚠️ Teacher Absence Reported: **{absent_name}**\n\n"
-        answer += f"**Date:** {date_str} ({day}) | **Status:** {len(proposals)} Affected Classes Identified in MySQL\n\n"
+        answer += f"**Date:** {date_str} ({day}) | **Status:** {len(proposals)} Affected Classes Identified in PostgreSQL\n\n"
         answer += "Here is the proposed collision-free substitution plan:\n\n"
 
         for idx, p in enumerate(proposals, 1):
@@ -163,7 +163,7 @@ class TimetableAgent:
 
         answer += "---\n"
         answer += "**Do you approve these substitution adjustments?**\n"
-        answer += "*(Reply **'Approve'** to transactionally update the official MySQL timetable and notify the assigned faculty and students.)*"
+        answer += "*(Reply **'Approve'** to transactionally update the official PostgreSQL timetable and notify the assigned faculty and students.)*"
 
         duration = (time.time() - start_time) * 1000
         mongo_memory.log_agent_execution(
@@ -203,7 +203,7 @@ class TimetableAgent:
         action_data = pending.get("actionData", {})
 
         if action_type == "APPLY_ABSENCE_SUBSTITUTIONS":
-            # Execute transactional MySQL updates
+            # Execute transactional PostgreSQL updates
             exec_res = self.adjuster.execute_approved_substitutions(
                 absence_data=action_data,
                 approved_by="Dr. Alok Verma (HOD)"
@@ -215,7 +215,7 @@ class TimetableAgent:
             modifications = exec_res.get("modifications", [])
             answer = "### ✅ Substitution Plan Approved & Applied Successfully!\n\n"
             answer += f"**Authority:** {exec_res.get('approved_by')} | **Substitutions Activated:** {exec_res.get('applied_count')}\n\n"
-            answer += "The relational MySQL timetable and audit records have been updated:\n\n"
+            answer += "The relational PostgreSQL timetable and audit records have been updated:\n\n"
 
             for m in modifications:
                 answer += f"- **{m['class']} ({m['time']})**: **{m['subject']}** reassigned from {m['original']} to **{m['substitute']}**\n"
@@ -233,7 +233,7 @@ class TimetableAgent:
 
         elif action_type == "PUBLISH_TIMETABLE":
             master_id = action_data.get("master_id")
-            # Update MySQL timetable_master status to 'Published'
+            # Update PostgreSQL timetable_master status to 'Published'
             self.sql._execute_update(
                 "UPDATE timetable_masters SET status = 'Published', published_at = datetime('now'), approved_by = 'Dr. Alok Verma (HOD)' WHERE id = ?",
                 (master_id,)
@@ -266,7 +266,7 @@ class TimetableAgent:
     ) -> Dict[str, Any]:
         """
         Scenario 1: Generate Timetable.
-        Extracts parameters -> fetches MySQL truth data -> applies custom constraints -> solves via CSP optimizer -> creates Draft vX -> generates PDF/Excel -> asks HOD approval.
+        Extracts parameters -> fetches PostgreSQL truth data -> applies custom constraints -> solves via CSP optimizer -> creates Draft vX -> generates PDF/Excel -> asks HOD approval.
         """
         prompt_lower = prompt.lower()
 
@@ -298,7 +298,7 @@ class TimetableAgent:
         if "consecutive" in prompt_lower and "lab" in prompt_lower:
             all_constraints.append("Labs must be 2 consecutive periods")
 
-        # 1. Fetch factual data from MySQL
+        # 1. Fetch factual data from PostgreSQL
         subjects = self.sql.get_all_subjects(semester=semester)
         faculty_list = self.sql.get_all_faculty(department=department)
         rooms = self.sql.get_all_rooms(department=department)
@@ -318,7 +318,7 @@ class TimetableAgent:
         slots = opt_res.get("timetable_slots", [])
         metrics = opt_res.get("metrics", {})
 
-        # 3. Save new version into MySQL
+        # 3. Save new version into PostgreSQL
         master_id = self.sql.save_new_timetable_version(
             department=department,
             year=year,
@@ -509,7 +509,7 @@ class TimetableAgent:
 
         system_prompt = (
             "You are the HOD AI Scheduling & Timetable Agent for the CSE Department.\n"
-            "You have direct access to authoritative MySQL schedules, Qdrant institutional rules, and deterministic scheduling engines.\n"
+            "You have direct access to authoritative PostgreSQL schedules, Qdrant institutional rules, and deterministic scheduling engines.\n"
             f"Department Policy Regulations:\n{policy_context}\n"
             f"HOD Historical Preferences:\n{ltm_facts}\n"
             "Respond concisely with structured options: generate timetable, check teacher absence, view conflicts, or export schedule."
@@ -531,3 +531,4 @@ class TimetableAgent:
         }
 
 timetable_agent = TimetableAgent()
+

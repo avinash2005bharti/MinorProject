@@ -19,27 +19,40 @@ import {
   GraduationCap,
   LogOut,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Database,
+  Bot
 } from 'lucide-react';
 
-export default function Sidebar({ isOpen, onClose, onToggle, onOpenDemoGuide }) {
-  const { currentRole, logout } = useERP();
+export default function Sidebar({ isOpen, onClose, onToggle }) {
+  const { currentRole, currentUser, logout } = useERP();
   const navigate = useNavigate();
+
+  const isAppointedTg = Boolean(
+    currentUser?.isTG ||
+    currentUser?.isTg ||
+    (currentUser?.mentorGroups && currentUser?.mentorGroups.length > 0) ||
+    (currentUser?.designation || '').toLowerCase().includes('(tg)')
+  );
 
   const getNavLinks = () => {
     switch (currentRole) {
       case 'admin':
         return [
           { to: '/admin', label: 'Dashboard', icon: <LayoutDashboard size={19} /> },
-          { to: '/admin/students', label: 'Users & Roster', icon: <Users size={19} /> },
+          { to: '/ai-workspace', label: 'AI Workspace', icon: <Bot size={19} />, badge: 'Agent' },
+          { to: '/admin/master-data', label: 'Master Data & Import', icon: <Database size={19} />, badge: 'Core' },
+          { to: '/admin/users', label: 'User & RBAC Accounts', icon: <Users size={19} /> },
+          { to: '/admin/students', label: 'Student Roster', icon: <GraduationCap size={19} /> },
           { to: '/admin/teachers', label: 'Faculty Directory', icon: <UserCheck size={19} /> },
-          { to: '/admin/departments', label: 'Academic Structure', icon: <GraduationCap size={19} /> },
-          { to: '/admin/settings', label: 'System Settings', icon: <Settings size={19} /> },
-          { to: '/admin/settings', label: 'AI/Agent Settings', icon: <Sparkles size={19} />, badge: 'AI' }
+          { to: '/admin/departments', label: 'Academic Structure', icon: <Building2 size={19} /> },
+          { to: '/admin/settings', label: 'System Settings', icon: <Settings size={19} /> }
         ];
       case 'hod':
         return [
           { to: '/hod', label: 'Dashboard', icon: <LayoutDashboard size={19} /> },
+          { to: '/ai-workspace', label: 'AI Workspace', icon: <Bot size={19} />, badge: 'Agent' },
+          { to: '/hod/master-data', label: 'Master Data & Import', icon: <Database size={19} />, badge: 'Core' },
           { to: '/hod/teachers', label: 'Teachers', icon: <UserCheck size={19} /> },
           { to: '/hod/classes', label: 'Classes & Sections', icon: <Building2 size={19} /> },
           { to: '/hod/students', label: 'Students', icon: <Users size={19} /> },
@@ -51,15 +64,18 @@ export default function Sidebar({ isOpen, onClose, onToggle, onOpenDemoGuide }) 
         ];
       case 'tg':
         return [
-          { to: '/tg', label: 'Dashboard', icon: <LayoutDashboard size={19} /> },
-          { to: '/tg/students', label: 'Students', icon: <Users size={19} /> },
+          { to: '/tg', label: 'TG Dashboard', icon: <LayoutDashboard size={19} /> },
+          { to: '/ai-workspace', label: 'AI Workspace', icon: <Bot size={19} />, badge: 'Agent' },
+          { to: '/tg/students', label: 'Mentee Students', icon: <Users size={19} /> },
           { to: '/tg/attendance', label: 'Attendance', icon: <CheckSquare size={19} /> },
           { to: '/tg/requests', label: 'Requests', icon: <FileText size={19} />, badge: 'Review' },
-          { to: '/tg/notices', label: 'Notices', icon: <Compass size={19} /> }
+          { to: '/tg/notices', label: 'Notices', icon: <Compass size={19} /> },
+          { to: '/teacher', label: 'Teaching Classes', icon: <BookOpen size={19} />, badge: 'Faculty' }
         ];
       case 'teacher':
-        return [
+        const teacherLinks = [
           { to: '/teacher', label: 'Dashboard', icon: <LayoutDashboard size={19} /> },
+          { to: '/ai-workspace', label: 'AI Workspace', icon: <Bot size={19} />, badge: 'Agent' },
           { to: '/teacher/attendance', label: 'Attendance', icon: <CheckSquare size={19} />, badge: 'Live' },
           { to: '/teacher/lectures', label: 'Lectures', icon: <Clock size={19} /> },
           { to: '/teacher/assignments', label: 'Assignments', icon: <BookOpen size={19} /> },
@@ -67,10 +83,15 @@ export default function Sidebar({ isOpen, onClose, onToggle, onOpenDemoGuide }) 
           { to: '/teacher/students', label: 'Students', icon: <Users size={19} /> },
           { to: '/teacher/notices', label: 'Notices', icon: <Compass size={19} /> }
         ];
+        if (isAppointedTg) {
+          teacherLinks.push({ to: '/tg', label: 'TG Mentorship Portal', icon: <Sparkles size={19} />, badge: 'TG' });
+        }
+        return teacherLinks;
       case 'student':
       default:
         return [
           { to: '/student', label: 'Dashboard', icon: <LayoutDashboard size={19} /> },
+          { to: '/ai-workspace', label: 'AI Workspace', icon: <Bot size={19} />, badge: 'Agent' },
           { to: '/student/attendance', label: 'Attendance', icon: <CheckSquare size={19} /> },
           { to: '/student/timetable', label: 'Timetable', icon: <Calendar size={19} /> },
           { to: '/student/assignments', label: 'Assignments', icon: <BookOpen size={19} /> },
@@ -243,7 +264,7 @@ export default function Sidebar({ isOpen, onClose, onToggle, onOpenDemoGuide }) 
           ))}
         </nav>
 
-        {/* Demo Guide Shortcut Box & Logout */}
+        {/* Sidebar Footer & Logout */}
         <div
           style={{
             padding: '0.75rem',
@@ -253,47 +274,6 @@ export default function Sidebar({ isOpen, onClose, onToggle, onOpenDemoGuide }) 
             gap: '0.5rem'
           }}
         >
-          {/* Demo Guide Box */}
-          <button
-            onClick={onOpenDemoGuide}
-            className="card-interactive"
-            style={{
-              width: '100%',
-              backgroundColor: 'var(--surface-low)',
-              borderRadius: 'var(--radius-xl)',
-              padding: '0.65rem 0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.65rem',
-              textAlign: 'left',
-              border: '1px solid var(--border-subtle)'
-            }}
-          >
-            <div
-              style={{
-                width: '30px',
-                height: '30px',
-                borderRadius: 'var(--radius-lg)',
-                backgroundColor: 'var(--primary-container)',
-                color: 'var(--primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0
-              }}
-            >
-              <Sparkles size={16} />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-                Demo Showcase Guide
-              </div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                4 Guided Workflows
-              </div>
-            </div>
-          </button>
-
           {/* Logout Button */}
           <button
             onClick={() => {

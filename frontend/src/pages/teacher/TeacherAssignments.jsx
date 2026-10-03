@@ -60,34 +60,42 @@ export default function TeacherAssignments() {
         </div>
 
         {/* Assignments Selector Carousel */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          {assignments.map((asg) => (
-            <button
-              key={asg.id}
-              onClick={() => {
-                setSelectedAsgId(asg.id);
-                setGradingSubmId(null);
-              }}
-              className={`p-3 rounded-2xl border text-left transition-all min-w-[240px] shrink-0 ${
-                selectedAsgId === asg.id
-                  ? 'bg-blue-50/80 border-blue-500 shadow-sm ring-1 ring-blue-500'
-                  : 'bg-white border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-blue-700 bg-blue-100/60 px-2 py-0.5 rounded">
-                  {asg.section}
-                </span>
-                <span className="text-[10px] text-slate-400 font-semibold">{asg.dueDaysLeft}</span>
-              </div>
-              <h4 className="text-xs font-bold text-slate-900 mt-1.5 line-clamp-1">{asg.title}</h4>
-              <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
-                <span>{asg.subjectCode}</span>
-                <span className="font-semibold text-slate-700">{asg.submissionsCount} Submissions</span>
-              </div>
-            </button>
-          ))}
-        </div>
+        {assignments.length === 0 ? (
+          <div className="card text-center py-12 text-slate-400">
+            <FileText size={36} className="mx-auto mb-2 opacity-40 text-slate-400" />
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>No records found.</h3>
+            <p className="text-xs text-slate-500 mt-1">No course assignments have been published yet.</p>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {assignments.map((asg) => (
+              <button
+                key={asg.id}
+                onClick={() => {
+                  setSelectedAsgId(asg.id);
+                  setGradingSubmId(null);
+                }}
+                className={`p-3 rounded-2xl border text-left transition-all min-w-[240px] shrink-0 ${
+                  selectedAsgId === asg.id
+                    ? 'bg-blue-50/80 border-blue-500 shadow-sm ring-1 ring-blue-500'
+                    : 'bg-white border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-blue-700 bg-blue-100/60 px-2 py-0.5 rounded">
+                    {asg.section}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-semibold">{asg.dueDaysLeft}</span>
+                </div>
+                <h4 className="text-xs font-bold text-slate-900 mt-1.5 line-clamp-1">{asg.title}</h4>
+                <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
+                  <span>{asg.subjectCode}</span>
+                  <span className="font-semibold text-slate-700">{asg.submissionsCount} Submissions</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Selected Assignment Overview */}
         {selectedAsg && (

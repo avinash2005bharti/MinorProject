@@ -1,4 +1,4 @@
-const { Assignment, AssignmentSubmission, Subject, Student, Faculty } = require('../models/mysql');
+const { Assignment, AssignmentSubmission, Subject, Student, Faculty } = require('../models/postgres');
 const emailService = require('../services/emailService');
 const { logger } = require('../services/loggerService');
 
@@ -58,13 +58,25 @@ exports.createAssignment = async (req, res) => {
     let file_url = null;
     if (req.file) {
       file_url = `/uploads/${req.file.filename}`;
+      const imageKitService = require('../services/imageKitService');
+      if (imageKitService.isConfigured()) {
+        const ikUpload = await imageKitService.uploadFromPath(
+          req.file.path,
+          req.file.originalname,
+          '/erp-assignments',
+          ['assignment', `subject-${subject_id}`]
+        );
+        if (ikUpload && ikUpload.url) {
+          file_url = ikUpload.url;
+        }
+      }
     }
 
     const assignment = await Assignment.create({
       title,
       description,
       deadline: new Date(deadline),
-      subject_id: parseInt(subject_id, 10),
+      subject_id,
       max_marks: max_marks ? parseInt(max_marks, 10) : 100,
       file_url
     });
@@ -117,7 +129,19 @@ exports.submitAssignment = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Assignment not found.' });
     }
 
-    const file_path = `/uploads/${req.file.filename}`;
+    let file_path = `/uploads/${req.file.filename}`;
+    const imageKitService = require('../services/imageKitService');
+    if (imageKitService.isConfigured()) {
+      const ikUpload = await imageKitService.uploadFromPath(
+        req.file.path,
+        req.file.originalname,
+        '/erp-submissions',
+        ['submission', `assignment-${assignment_id}`, `student-${finalStudentId}`]
+      );
+      if (ikUpload && ikUpload.url) {
+        file_path = ikUpload.url;
+      }
+    }
     const isLate = new Date() > new Date(assignment.deadline);
 
     // Check if previous submission exists
@@ -186,3 +210,4 @@ exports.evaluateSubmission = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+

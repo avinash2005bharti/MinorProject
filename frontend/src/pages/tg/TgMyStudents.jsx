@@ -3,17 +3,19 @@ import { useERP } from '../../context/ERPContext';
 import { Users, Search, AlertTriangle, CheckCircle2, ChevronRight, ShieldCheck, Mail } from 'lucide-react';
 
 export default function TgMyStudents() {
-  const { students, currentUser } = useERP();
+  const { students, currentUser, openModal } = useERP();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
 
   const filteredStudents = students.filter((st) => {
-    const matchesSearch =
-      st.name.toLowerCase().includes(search.toLowerCase()) ||
-      st.rollNo.toLowerCase().includes(search.toLowerCase());
+    const studentName = (st.name || '').toLowerCase();
+    const roll = (st.rollNo || st.enrollment_no || '').toLowerCase();
+    const q = search.toLowerCase();
+    const matchesSearch = studentName.includes(q) || roll.includes(q);
 
-    if (filter === 'at-risk') return matchesSearch && st.attendance < 75;
-    if (filter === 'safe') return matchesSearch && st.attendance >= 75;
+    const att = st.attendance !== undefined ? st.attendance : 80;
+    if (filter === 'at-risk') return matchesSearch && att < 75;
+    if (filter === 'safe') return matchesSearch && att >= 75;
     return matchesSearch;
   });
 
@@ -24,7 +26,7 @@ export default function TgMyStudents() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-              My Mentees (Section {currentUser.assignedSection})
+              My Mentees (Section {currentUser?.assignedSection || currentUser?.section || 'CSE'})
             </h1>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
               Teacher Guardian supervision • {students.length} enrolled students
@@ -33,7 +35,7 @@ export default function TgMyStudents() {
 
           <span className="badge badge-indigo">
             <Users size={14} />
-            <span>TG: {currentUser.name}</span>
+            <span>TG: {currentUser?.name || 'Mentor'}</span>
           </span>
         </div>
 
@@ -77,89 +79,99 @@ export default function TgMyStudents() {
 
         {/* Students Table / Cards Grid */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-          {filteredStudents.map((st) => {
-            const isAtRisk = st.attendance < 75;
+          {filteredStudents.length === 0 ? (
+            <div className="card text-center" style={{ padding: '2.5rem', color: 'var(--text-secondary)' }}>
+              <Users size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
+              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>No students found</h3>
+              <p style={{ fontSize: '13px', margin: '0.25rem 0 0' }}>No mentees assigned in database.</p>
+            </div>
+          ) : (
+            filteredStudents.map((st) => {
+              const att = st.attendance !== undefined ? st.attendance : 80;
+              const isAtRisk = att < 75;
+              const roll = st.enrollment_no || st.rollNo || 'N/A';
 
-            return (
-              <div
-                key={st.id}
-                className="card"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '0.85rem 1.25rem',
-                  gap: '1rem',
-                  flexWrap: 'wrap'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: '220px', flex: 1 }}>
-                  <div
-                    style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      backgroundColor: isAtRisk ? 'var(--error-container)' : 'var(--secondary-container)',
-                      color: isAtRisk ? 'var(--on-error-container)' : 'var(--on-secondary-container)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontWeight: 700,
-                      fontSize: '14px',
-                      flexShrink: 0
-                    }}
-                  >
-                    {st.name.split(' ').map((n) => n[0]).join('')}
-                  </div>
-
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {st.name}
-                      </h4>
-                      {st.autoUpdated && (
-                        <span className="badge badge-indigo" style={{ fontSize: '10px' }}>
-                          Auto-Adjusted by Agent
-                        </span>
-                      )}
-                    </div>
-                    <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                      Roll No: {st.rollNo} • CGPA: {st.cgpa}
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                  <div style={{ textAlign: 'right' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>Attendance</span>
-                    <span
+              return (
+                <div
+                  key={st.id}
+                  className="card"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.85rem 1.25rem',
+                    gap: '1rem',
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: '220px', flex: 1 }}>
+                    <div
                       style={{
-                        fontFamily: 'var(--font-heading)',
-                        fontSize: '18px',
-                        fontWeight: 800,
-                        color: isAtRisk ? 'var(--error)' : 'var(--secondary)'
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        backgroundColor: isAtRisk ? 'var(--error-container)' : 'var(--secondary-container)',
+                        color: isAtRisk ? 'var(--on-error-container)' : 'var(--on-secondary-container)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: '14px',
+                        flexShrink: 0
                       }}
                     >
-                      {st.attendance}%
-                    </span>
+                      {(st.name || 'S').split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                          {st.name}
+                        </h4>
+                        {st.autoUpdated && (
+                          <span className="badge badge-indigo" style={{ fontSize: '10px' }}>
+                            Auto-Adjusted by Agent
+                          </span>
+                        )}
+                      </div>
+                      <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                        Enrollment: {roll} • Semester: {st.semester || 5} • Section: {st.section || 'A'}
+                      </span>
+                    </div>
                   </div>
 
-                  <span className={`badge ${isAtRisk ? 'badge-rose' : 'badge-emerald'}`}>
-                    {isAtRisk ? 'Shortage Alert' : 'Eligible'}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block' }}>Attendance</span>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-heading)',
+                          fontSize: '18px',
+                          fontWeight: 800,
+                          color: isAtRisk ? 'var(--error)' : 'var(--secondary)'
+                        }}
+                      >
+                        {att}%
+                      </span>
+                    </div>
 
-                  <button
-                    onClick={() => openModal('studentDetail', { student: st })}
-                    className="btn btn-sm btn-primary text-xs py-1.5 px-3"
-                    id={`btn-inspect-${st.rollNo}`}
-                  >
-                    <span>Inspect Profile</span>
-                    <ChevronRight size={13} />
-                  </button>
+                    <span className={`badge ${isAtRisk ? 'badge-rose' : 'badge-emerald'}`}>
+                      {isAtRisk ? 'Shortage Alert' : 'Eligible'}
+                    </span>
+
+                    <button
+                      onClick={() => openModal('studentDetail', { student: st })}
+                      className="btn btn-sm btn-primary text-xs py-1.5 px-3"
+                      id={`btn-inspect-${roll}`}
+                    >
+                      <span>Inspect Profile</span>
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })
+          )}
         </div>
       </div>
     </div>

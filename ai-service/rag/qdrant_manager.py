@@ -13,11 +13,7 @@ RAG_COLLECTION = "erp_documents"
 
 REQUIRED_COLLECTIONS = [
     LTM_COLLECTION,
-    RAG_COLLECTION,
-    "Notes",
-    "Assignments",
-    "Circulars",
-    "Syllabus"
+    RAG_COLLECTION
 ]
 
 class QdrantRAGManager:
@@ -79,6 +75,17 @@ class QdrantRAGManager:
                     logger.info(f"[Qdrant] Initialized collection: '{col}'")
                 except Exception as e:
                     logger.debug(f"[Qdrant] Collection '{col}' status: {e}")
+
+            # Ensure payload indexes for filtered fields on Qdrant Cloud
+            for field in ["department", "user_id", "category", "access_level", "role"]:
+                try:
+                    self.client.create_payload_index(
+                        collection_name=col,
+                        field_name=field,
+                        field_schema="keyword"
+                    )
+                except Exception:
+                    pass
 
     def _seed_default_policies(self):
         """
@@ -233,7 +240,24 @@ class QdrantRAGManager:
             if not content.strip():
                 continue
             vector = embedder.embed_text(content)
-            point_id = abs(hash(f"{target_col}_{chunk.get('metadata', {}).get('title', '')}_{i}_{datetime.utcnow().timestamp()}")) % (10**10)
+            meta = chunk.get("metadata", {})
+            point_id = abs(hash(f"{target_col}_{meta.get('title', '')}_{i}_{datetime.utcnow().timestamp()}")) % (10**10)
+
+            # Enriched metadata adhering to Section 4 & 21
+            payload_meta = {
+                "document_id": meta.get("document_id") or meta.get("note_id") or f"doc_{point_id}",
+                "filename": meta.get("filename") or meta.get("file_name", "unnamed_document"),
+                "department": meta.get("department", "CSE"),
+                "uploaded_by": meta.get("uploaded_by", "Faculty/Admin"),
+                "document_type": meta.get("document_type") or meta.get("category", "Academic Notes"),
+                "access_level": meta.get("access_level", "student"), # 'public', 'student', 'faculty', 'hod', 'admin'
+                "created_at": meta.get("created_at") or datetime.utcnow().isoformat(),
+                "chunk_id": i + 1,
+                "source_page": meta.get("page", 1),
+                "source_section": meta.get("section", "General"),
+                "title": meta.get("title", f"Document Chunk {i+1}"),
+                "category": meta.get("category", "Notes")
+            }
 
             points.append(
                 PointStruct(
@@ -241,16 +265,17 @@ class QdrantRAGManager:
                     vector=vector,
                     payload={
                         "text": content,
-                        "metadata": chunk.get("metadata", {}),
+                        "metadata": payload_meta,
                         "collection": target_col,
-                        "department": chunk.get("metadata", {}).get("department", "CSE")
+                        "department": payload_meta["department"],
+                        "access_level": payload_meta["access_level"]
                     }
                 )
             )
 
         if points:
             self.client.upsert(collection_name=target_col, points=points)
-            logger.info(f"[Qdrant RAG] Indexed {len(points)} chunks into '{target_col}'")
+            logger.info(f"[Qdrant RAG] Indexed {len(points)} chunks into '{target_col}' with access control metadata")
         return len(points)
 
     def search_rag(
@@ -258,10 +283,12 @@ class QdrantRAGManager:
         query: str,
         department: str = "CSE",
         category: Optional[str] = None,
+        user_role: str = "student",
         top_k: int = 4
     ) -> List[Dict[str, Any]]:
         """
-        Hybrid semantic retrieval with strict departmental isolation filter.
+        Hybrid semantic retrieval with strict departmental isolation and access-control security (Section 4 & 21).
+        Students cannot retrieve HOD-only or faculty-confidential documents.
         """
         query_vector = embedder.embed_text(query)
 
@@ -277,6 +304,8 @@ class QdrantRAGManager:
         if category and category in REQUIRED_COLLECTIONS:
             collections_to_search.append(category)
 
+        role_lower = (user_role or "student").lower()
+
         all_results = []
         for col in collections_to_search:
             try:
@@ -285,7 +314,7 @@ class QdrantRAGManager:
                         collection_name=col,
                         query=query_vector,
                         query_filter=qdrant_filter,
-                        limit=top_k
+                        limit=top_k * 2
                     )
                     points = res.points
                 elif hasattr(self.client, "search"):
@@ -293,7 +322,7 @@ class QdrantRAGManager:
                         collection_name=col,
                         query_vector=query_vector,
                         query_filter=qdrant_filter,
-                        limit=top_k
+                        limit=top_k * 2
                     )
                 else:
                     points = []
@@ -301,19 +330,31 @@ class QdrantRAGManager:
                 for r in points:
                     payload = r.payload or {}
                     meta = payload.get("metadata", {})
+                    doc_access = str(meta.get("access_level") or payload.get("access_level", "student")).lower()
+
+                    # Access Control Enforcement (Section 21)
+                    # Student: only 'public' or 'student'
+                    if role_lower == "student" and doc_access in ["hod", "admin", "faculty", "teacher", "confidential"]:
+                        continue # Strict access denial
+                    # Teacher / Faculty / TG: public, student, faculty, teacher
+                    if role_lower in ["faculty", "teacher", "tg"] and doc_access in ["hod", "admin"]:
+                        continue
+
                     all_results.append({
                         "id": r.id,
                         "score": round(float(r.score), 4),
                         "snippet": payload.get("text", "")[:350],
                         "title": meta.get("title", f"Policy in {col}"),
                         "collection": col,
-                        "metadata": meta
+                        "metadata": meta,
+                        "access_level": doc_access
                     })
             except Exception as e:
                 logger.debug(f"[Qdrant RAG] Search warning in '{col}': {e}")
 
         all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
         return all_results[:top_k]
+
 
     def hybrid_search(
         self,

@@ -1,3 +1,8 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
 from agents.timetable_agent import timetable_agent
 
 def main():

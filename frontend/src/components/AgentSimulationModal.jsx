@@ -5,9 +5,16 @@ import { Bot, CheckCircle2, Loader2, Sparkles, X, ArrowRight } from 'lucide-reac
 export default function AgentSimulationModal() {
   const { agentModal, closeAgentModal } = useERP();
 
-  if (!agentModal.isOpen) return null;
+  if (!agentModal || !agentModal.isOpen) return null;
 
-  const { title, subtitle, steps, activeStepIndex, isComplete, agentType } = agentModal;
+  const {
+    title = 'Agent Automation',
+    subtitle = '',
+    steps = [],
+    activeStepIndex = 0,
+    isComplete = false,
+    agentType = 'default'
+  } = agentModal;
   const progressPercent = steps.length > 0 ? Math.min(100, Math.round((activeStepIndex / steps.length) * 100)) : 0;
 
   return (

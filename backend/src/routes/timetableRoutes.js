@@ -2,11 +2,15 @@ const express = require('express');
 const router = express.Router();
 const timetableController = require('../controllers/timetableController');
 const { verifyToken, checkRole, optionalAuth } = require('../middleware/auth');
+const cacheService = require('../services/cacheService');
 
-// 1. Core Timetable Querying
-router.get('/', optionalAuth, timetableController.getTimetable);
-router.get('/my', verifyToken, timetableController.getMyTimetable);
-router.get('/conflicts', optionalAuth, timetableController.getConflicts);
+// Invalidate timetable caches on any timetable generation, approval, or CRUD mutations
+router.use(cacheService.invalidateOnMutation(['/timetable', '/dashboard']));
+
+// 1. Core Timetable Querying (Cached 45s)
+router.get('/', optionalAuth, cacheService.middleware(45), timetableController.getTimetable);
+router.get('/my', verifyToken, cacheService.middleware(45, true), timetableController.getMyTimetable);
+router.get('/conflicts', optionalAuth, cacheService.middleware(45), timetableController.getConflicts);
 
 // 2. AI Autonomous Timetable Generation & Regeneration
 router.post('/generate', optionalAuth, timetableController.generateTimetable);
@@ -30,6 +34,6 @@ router.get('/:id', optionalAuth, timetableController.getTimetableById);
 // 5. CRUD Endpoints
 router.post('/', verifyToken, checkRole('admin', 'faculty', 'hod'), timetableController.createTimetableEntry);
 router.put('/:id', verifyToken, checkRole('admin', 'faculty', 'hod'), timetableController.updateTimetableEntry);
-router.delete('/:id', verifyToken, checkRole('admin', 'hod'), timetableController.deleteTimetableEntry);
+router.delete('/:id', verifyToken, checkRole('admin', 'faculty', 'hod'), timetableController.deleteTimetableEntry);
 
 module.exports = router;

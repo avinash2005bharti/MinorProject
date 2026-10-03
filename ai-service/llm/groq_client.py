@@ -4,8 +4,8 @@ from typing import List, Dict, Any, Generator, Optional
 from loguru import logger
 from groq import Groq
 
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
-FALLBACK_MODEL = "llama-3.1-8b-instant"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
+FALLBACK_MODEL = "qwen/qwen3.8-27b"
 
 class GroqLLMWrapper:
     """
@@ -19,7 +19,7 @@ class GroqLLMWrapper:
     """
     def __init__(self):
         self.api_key = os.getenv("GROQ_API_KEY", "")
-        self.default_model = os.getenv("GROQ_MODEL", DEFAULT_MODEL)
+        self.default_model = os.getenv("LLM_MODEL") or os.getenv("GROQ_MODEL") or DEFAULT_MODEL
         self.client = None
         self._init_client()
 
@@ -180,7 +180,7 @@ class GroqLLMWrapper:
             response = (
                 f"### CSE Department Agentic Response\n\n"
                 f"Regarding your inquiry about: *\"{last_user_message}\"*\n\n"
-                f"I have synchronized with the CSE departmental knowledge base, MySQL records, and Qdrant RAG store.\n\n"
+                f"I have synchronized with the CSE departmental knowledge base, PostgreSQL records, and Qdrant RAG store.\n\n"
                 f"- **Department:** Computer Science & Engineering (Exclusively dedicated platform)\n"
                 f"- **Structure:** 1st, 2nd, 3rd, 4th Year | Semesters 1 to 8 | Sections A & B\n"
                 f"- **Resources Available:** Live Timetable, Real-time Attendance, Notes & Syllabus RAG, and Faculty Consultation."
@@ -193,3 +193,4 @@ class GroqLLMWrapper:
         }
 
 groq_client = GroqLLMWrapper()
+

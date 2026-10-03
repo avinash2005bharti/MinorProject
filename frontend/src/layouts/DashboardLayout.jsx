@@ -4,9 +4,8 @@ import Header from '../components/Header';
 import Sidebar from '../components/Sidebar';
 import NotificationToast from '../components/NotificationToast';
 import AgentSimulationModal from '../components/AgentSimulationModal';
-import DemoGuideModal from '../components/DemoGuideModal';
 import GlobalModals from '../components/modals/GlobalModals';
-import AIDashboard from '../components/AIDashboard';
+import AIChatWidget from '../components/AIChatWidget';
 import { ChevronRight } from 'lucide-react';
 
 export default function DashboardLayout() {
@@ -15,7 +14,6 @@ export default function DashboardLayout() {
     if (saved !== null) return saved === 'true';
     return typeof window !== 'undefined' ? window.innerWidth >= 1024 : true;
   });
-  const [demoGuideOpen, setDemoGuideOpen] = useState(false);
   const location = useLocation();
 
   const handleToggleSidebar = () => {
@@ -75,7 +73,6 @@ export default function DashboardLayout() {
         isOpen={isSidebarOpen}
         onClose={handleCloseSidebar}
         onToggle={handleToggleSidebar}
-        onOpenDemoGuide={() => setDemoGuideOpen(true)}
       />
 
       {/* Floating Edge Slide-Open Tab (when sidebar is slid closed) */}
@@ -104,16 +101,13 @@ export default function DashboardLayout() {
             <Outlet />
           </div>
         </main>
-
-        {/* Fixed AI Dashboard (stays visible on every page at the bottom of the screen) */}
-        <AIDashboard isSidebarOpen={isSidebarOpen} />
       </div>
 
       {/* Modals & Portals */}
       <NotificationToast />
       <AgentSimulationModal />
-      <DemoGuideModal isOpen={demoGuideOpen} onClose={() => setDemoGuideOpen(false)} />
       <GlobalModals />
+      <AIChatWidget />
     </div>
   );
 }

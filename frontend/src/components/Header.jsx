@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { useERP } from '../context/ERPContext';
 import { Bell, ShieldCheck, User, Menu, X, Bot, Check, Clock, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 export default function Header({ isSidebarOpen, onToggleSidebar }) {
-  const { currentRole, switchRole, currentUser, notifications, tgAvailable, toggleTgAvailability, logout } = useERP();
+  const { currentRole, currentUser, notifications, logout } = useERP();
   const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -68,7 +68,11 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
             {isSidebarOpen ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}
           </button>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <Link
+            to={`/${currentRole}`}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', textDecoration: 'none', cursor: 'pointer' }}
+            title="Go to Home Dashboard"
+          >
             <div
               style={{
                 width: '38px',
@@ -80,8 +84,10 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 boxShadow: 'var(--shadow-sm)',
-                border: '1px solid var(--border-subtle)'
+                border: '1px solid var(--border-subtle)',
+                transition: 'transform 0.15s ease'
               }}
+              className="hover:scale-105"
             >
               <img
                 src="/oist.png"
@@ -94,10 +100,10 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
                 OIST CSE
               </span>
               <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 600 }}>
-                Autonomous College ERP
+                CampusFlow ERP
               </span>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Center: Fixed Role Window Session Indicator (Restricted to Logged-in Role) */}
@@ -119,9 +125,9 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
                 {currentRole === 'admin' && 'System Administrator'}
               </span>
               <span className="fixed-role-sub">
-                {currentRole === 'student' && `${currentUser?.section || 'CSE-3A'} • B.Tech CSE`}
+                {currentRole === 'student' && `${currentUser?.section || 'Section unassigned'} • B.Tech CSE`}
                 {currentRole === 'teacher' && 'Dept. of CSE • Academic Faculty'}
-                {currentRole === 'tg' && 'Teacher Guardian • Section 3A'}
+                {currentRole === 'tg' && 'Teacher Guardian'}
                 {currentRole === 'hod' && 'Dept. of CSE • Head of Dept'}
                 {currentRole === 'admin' && 'CampusFlow ERP Infrastructure'}
               </span>
@@ -161,22 +167,11 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
 
         {/* Right: Quick Telemetry, Notification Bell & Profile */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
-          {/* TG Quick Availability Toggle (Visible if TG role) */}
-          {currentRole === 'tg' && (
-            <button
-              onClick={toggleTgAvailability}
-              className={`badge ${tgAvailable ? 'badge-emerald' : 'badge-rose'}`}
-              style={{ cursor: 'pointer', padding: '0.35rem 0.75rem' }}
-              title="Click to toggle mentor office availability"
-            >
-              <span className="agent-pulse" style={{ backgroundColor: tgAvailable ? 'var(--secondary)' : 'var(--error)' }} />
-              <span>{tgAvailable ? 'TG Available' : 'TG On Leave'}</span>
-            </button>
-          )}
-
-          {/* Autonomous Agents Health Indicator */}
+          {/* Autonomous Agents Health Indicator & AI Workspace Trigger */}
           <div
+            onClick={() => navigate('/ai-workspace')}
             style={{
+              cursor: 'pointer',
               display: 'none',
               alignItems: 'center',
               gap: '0.35rem',
@@ -185,12 +180,14 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
               backgroundColor: 'var(--secondary-container)',
               color: 'var(--on-secondary-container)',
               fontSize: '11px',
-              fontWeight: 600
+              fontWeight: 600,
+              transition: 'opacity 0.2s ease'
             }}
-            className="md:flex"
+            className="md:flex hover:opacity-85"
+            title="Open Fullscreen CampusFlow AI Workspace"
           >
             <Bot size={14} />
-            <span>Agents Active</span>
+            <span>AI Workspace</span>
             <span className="agent-pulse" style={{ width: '6px', height: '6px' }} />
           </div>
 
@@ -259,25 +256,31 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '280px', overflowY: 'auto' }}>
-                  {notifications.map((n) => (
-                    <div
-                      key={n.id}
-                      style={{
-                        padding: '0.65rem',
-                        borderRadius: 'var(--radius-lg)',
-                        backgroundColor: 'var(--surface-low)',
-                        fontSize: '12px'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{n.title}</span>
-                        <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{n.time}</span>
-                      </div>
-                      <p style={{ color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.3 }}>
-                        {n.message}
-                      </p>
+                  {notifications.length === 0 ? (
+                    <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
+                      No notifications
                     </div>
-                  ))}
+                  ) : (
+                    notifications.map((n) => (
+                      <div
+                        key={n.id}
+                        style={{
+                          padding: '0.65rem',
+                          borderRadius: 'var(--radius-lg)',
+                          backgroundColor: 'var(--surface-low)',
+                          fontSize: '12px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{n.title}</span>
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{n.time}</span>
+                        </div>
+                        <p style={{ color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.3 }}>
+                          {n.message}
+                        </p>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}

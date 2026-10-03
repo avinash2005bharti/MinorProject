@@ -1,34 +1,64 @@
-const { Op } = require('sequelize');
-const { Faculty, User } = require('../models/mysql');
+// ============================================================================
+// Departmental ERP - Faculty & Teacher Controller
+// Canonical Source of Truth: PostgreSQL via Prisma
+// ============================================================================
+
+const bcrypt = require('bcryptjs');
+const { prisma } = require('../config/postgres');
 const { logger } = require('../services/loggerService');
+
+// Format teacher record helper
+const formatTeacher = (t) => {
+  const isHod = (t.hodAssignments && t.hodAssignments.length > 0) || (t.user?.role?.name === 'HOD');
+  const isTg = t.isTG || (t.user?.role?.name === 'TG');
+  const name = `${t.firstName} ${t.lastName || ''}`.trim();
+
+  return {
+    ...t,
+    name,
+    isTG: isTg,
+    isTg,
+    isHOD: isHod,
+    role: isTg ? 'tg' : (isHod ? 'hod' : 'teacher'),
+    departmentName: t.department?.name || 'Computer Science & Engineering',
+    departmentCode: t.department?.code || 'CSE'
+  };
+};
 
 // 1. Get All Faculty
 exports.getFaculty = async (req, res) => {
   try {
-    const { search, designation, specialization } = req.query;
+    const { search, designation } = req.query;
     const where = {};
 
     if (designation) where.designation = designation;
-    if (specialization) where.specialization = { [Op.like]: `%${specialization}%` };
 
     if (search) {
-      where[Op.or] = [
-        { name: { [Op.like]: `%${search}%` } },
-        { email: { [Op.like]: `%${search}%` } },
-        { specialization: { [Op.like]: `%${search}%` } }
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { employeeId: { contains: search, mode: 'insensitive' } }
       ];
     }
 
-    const facultyList = await Faculty.findAll({
+    const teachers = await prisma.teacher.findMany({
       where,
-      order: [['name', 'ASC']],
-      include: [{ model: User, as: 'user', attributes: ['id', 'email', 'role'] }]
+      include: {
+        department: true,
+        user: { select: { id: true, email: true, role: true } },
+        hodAssignments: { where: { isCurrent: true } }
+      },
+      orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }]
     });
+
+    const formattedList = teachers.map(formatTeacher);
 
     return res.status(200).json({
       success: true,
-      count: facultyList.length,
-      faculty: facultyList
+      count: formattedList.length,
+      faculty: formattedList,
+      data: formattedList
     });
   } catch (error) {
     logger.error(`[Faculty Controller] Error fetching faculty: ${error.message}`);
@@ -36,20 +66,34 @@ exports.getFaculty = async (req, res) => {
   }
 };
 
-// 2. Get Single Faculty
+// 2. Get Single Faculty Member
 exports.getFacultyById = async (req, res) => {
   try {
     const { id } = req.params;
-    const faculty = await Faculty.findByPk(id, {
-      include: [{ model: User, as: 'user', attributes: ['id', 'email', 'role'] }]
+
+    const teacher = await prisma.teacher.findFirst({
+      where: {
+        OR: [
+          { id: id.length === 36 ? id : undefined },
+          { employeeId: id.toUpperCase() },
+          { email: id.toLowerCase() }
+        ].filter(Boolean)
+      },
+      include: {
+        department: true,
+        user: { select: { id: true, email: true, role: true } },
+        hodAssignments: { where: { isCurrent: true } },
+        teacherSubjects: { include: { subject: true, section: true } }
+      }
     });
 
-    if (!faculty) {
-      return res.status(404).json({ success: false, message: 'Faculty member not found.' });
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Faculty member not found in ERP records.' });
     }
 
-    return res.status(200).json({ success: true, faculty });
+    return res.status(200).json({ success: true, faculty: formatTeacher(teacher), data: formatTeacher(teacher) });
   } catch (error) {
+    logger.error(`[Faculty Controller] Error fetching faculty ${req.params.id}: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -57,84 +101,192 @@ exports.getFacultyById = async (req, res) => {
 // 3. Create Faculty
 exports.createFaculty = async (req, res) => {
   try {
-    const { name, email, designation, specialization, phone } = req.body;
+    const { name, email, employeeId, designation = 'Assistant Professor', phone, isTG = false, departmentCode = 'CSE' } = req.body;
 
-    if (!name || !email || !designation || !specialization) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name, email, designation, and specialization are required.'
-      });
+    if (!name || !email) {
+      return res.status(400).json({ success: false, message: 'Name and email are required.' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    const existing = await Faculty.findOne({ where: { email: cleanEmail } });
+    const cleanEmpId = (employeeId || `EMP${Math.floor(1000 + Math.random() * 9000)}`).toUpperCase();
+
+    const existing = await prisma.teacher.findFirst({
+      where: { OR: [{ email: cleanEmail }, { employeeId: cleanEmpId }] }
+    });
     if (existing) {
-      return res.status(409).json({ success: false, message: 'Faculty with this email already exists.' });
+      return res.status(409).json({ success: false, message: 'Teacher with this email or employee ID already exists.' });
     }
 
-    const faculty = await Faculty.create({
-      name,
-      email: cleanEmail,
-      designation,
-      specialization,
-      phone
+    const defaultDept = await prisma.department.findFirst();
+    const teacherRole = await prisma.role.findFirst({ where: { name: isTG ? 'TG' : 'TEACHER' } });
+
+    const passwordHash = await bcrypt.hash('Teacher@123', 10);
+    const parts = name.trim().split(/\s+/);
+    const firstName = parts[0] || 'Teacher';
+    const lastName = parts.slice(1).join(' ') || '';
+
+    const result = await prisma.$transaction(async (tx) => {
+      const newUser = await tx.user.create({
+        data: {
+          name: name.trim(),
+          email: cleanEmail,
+          passwordHash,
+          roleId: teacherRole.id,
+          departmentId: defaultDept.id,
+          isActive: true
+        }
+      });
+
+      const newTeacher = await tx.teacher.create({
+        data: {
+          userId: newUser.id,
+          employeeId: cleanEmpId,
+          firstName,
+          lastName,
+          email: cleanEmail,
+          phone: phone || null,
+          designation,
+          departmentId: defaultDept.id,
+          isTG: Boolean(isTG),
+          status: 'ACTIVE'
+        },
+        include: {
+          department: true
+        }
+      });
+
+      return newTeacher;
     });
 
     return res.status(201).json({
       success: true,
-      message: 'Faculty member registered successfully in CSE Department.',
-      faculty
+      message: 'Faculty member created successfully.',
+      faculty: formatTeacher(result)
     });
   } catch (error) {
+    logger.error(`[Faculty Controller] Error creating faculty: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 4. Update Faculty
+// 4. Update Faculty Member
 exports.updateFaculty = async (req, res) => {
   try {
     const { id } = req.params;
-    const faculty = await Faculty.findByPk(id);
+    const { name, phone, designation, status, isTG } = req.body;
 
-    if (!faculty) {
-      return res.status(404).json({ success: false, message: 'Faculty not found.' });
+    const data = {};
+    if (phone !== undefined) data.phone = phone;
+    if (designation !== undefined) data.designation = designation;
+    if (status !== undefined) data.status = status;
+    if (isTG !== undefined) data.isTG = Boolean(isTG);
+
+    if (name) {
+      const parts = name.trim().split(/\s+/);
+      data.firstName = parts[0];
+      data.lastName = parts.slice(1).join(' ');
     }
 
-    const { name, designation, specialization, phone } = req.body;
-
-    await faculty.update({
-      name: name || faculty.name,
-      designation: designation || faculty.designation,
-      specialization: specialization || faculty.specialization,
-      phone: phone !== undefined ? phone : faculty.phone
+    const updated = await prisma.teacher.update({
+      where: { id },
+      data,
+      include: {
+        department: true,
+        user: true,
+        hodAssignments: { where: { isCurrent: true } }
+      }
     });
 
     return res.status(200).json({
       success: true,
-      message: 'Faculty details updated successfully.',
-      faculty
+      message: 'Faculty profile updated successfully.',
+      faculty: formatTeacher(updated)
+    });
+  } catch (error) {
+    logger.error(`[Faculty Controller] Error updating faculty ${req.params.id}: ${error.message}`);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// 5. Appoint as Tutor Guardian (TG)
+exports.appointTg = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const updated = await prisma.teacher.update({
+      where: { id },
+      data: { isTG: true },
+      include: { department: true }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Teacher appointed as Tutor Guardian (TG).',
+      faculty: formatTeacher(updated)
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// 5. Delete Faculty
+// 6. Remove TG Status
+exports.removeTg = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const updated = await prisma.teacher.update({
+      where: { id },
+      data: { isTG: false },
+      include: { department: true }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'TG appointment revoked.',
+      faculty: formatTeacher(updated)
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+exports.revokeTg = exports.removeTg;
+
+// 7. Delete Faculty
 exports.deleteFaculty = async (req, res) => {
   try {
     const { id } = req.params;
-    const faculty = await Faculty.findByPk(id);
 
-    if (!faculty) {
-      return res.status(404).json({ success: false, message: 'Faculty not found.' });
-    }
+    await prisma.$transaction(async (tx) => {
+      // 1. Unlink any students where this teacher is TG
+      await tx.student.updateMany({
+        where: { tgTeacherId: id },
+        data: { tgTeacherId: null }
+      });
 
-    await faculty.destroy();
-    return res.status(200).json({
-      success: true,
-      message: 'Faculty removed successfully.'
+      // 2. Unlink or remove teacher subjects
+      await tx.teacherSubject.deleteMany({ where: { teacherId: id } });
+
+      // 3. Clear timetable slots
+      await tx.timetableSlot.deleteMany({ where: { teacherId: id } });
+
+      // 4. Remove leave applications
+      await tx.leaveApplication.deleteMany({ where: { teacherId: id } });
+
+      // 5. Remove HOD assignment if exists
+      await tx.hOD.deleteMany({ where: { teacherId: id } });
+
+      // 6. Delete teacher record
+      const teacher = await tx.teacher.delete({ where: { id } });
+
+      // 7. Delete associated user if exists
+      if (teacher.userId) {
+        await tx.user.delete({ where: { id: teacher.userId } }).catch(() => {});
+      }
     });
+
+    return res.status(200).json({ success: true, message: 'Faculty member deleted successfully.' });
   } catch (error) {
+    logger.error(`[Faculty Controller] Error deleting faculty ${req.params.id}: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

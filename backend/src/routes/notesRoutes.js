@@ -5,8 +5,10 @@ const { verifyToken, checkRole } = require('../middleware/auth');
 const upload = require('../middleware/fileUpload');
 
 router.get('/', verifyToken, notesController.getNotes);
-router.post('/upload', verifyToken, checkRole('faculty', 'admin'), upload.single('file'), notesController.uploadNote);
+router.post('/upload', verifyToken, checkRole('faculty', 'admin', 'hod'), upload.single('file'), notesController.uploadNote);
 router.get('/download/:id', verifyToken, notesController.downloadNote);
-router.delete('/:id', verifyToken, checkRole('faculty', 'admin'), notesController.deleteNote);
+router.get('/status/:id', verifyToken, notesController.getNoteStatus);
+router.delete('/:id', verifyToken, checkRole('faculty', 'admin', 'hod'), notesController.deleteNote);
 
 module.exports = router;
+

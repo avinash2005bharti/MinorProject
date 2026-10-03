@@ -4,11 +4,11 @@ import { X, Calendar, FileText, Upload, AlertTriangle, ShieldCheck, Check } from
 import DocumentUploader from '../common/DocumentUploader';
 
 export default function ApplyLeaveModal({ onClose }) {
-  const { applyLeave, currentUser, tgAvailable } = useERP();
+  const { applyLeave } = useERP();
 
   const [leaveType, setLeaveType] = useState('Medical');
-  const [startDate, setStartDate] = useState('2025-09-28');
-  const [endDate, setEndDate] = useState('2025-09-30');
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [reason, setReason] = useState('');
   const [uploadedFile, setUploadedFile] = useState({ name: '', size: '' });
 
@@ -25,7 +25,7 @@ export default function ApplyLeaveModal({ onClose }) {
       endDate,
       dateRangeLabel: `${startDate} to ${endDate}`,
       reason,
-      supportingDoc: uploadedFile.name || 'student_declaration.pdf'
+      supportingDoc: uploadedFile.name || null
     });
 
     onClose();
@@ -52,25 +52,6 @@ export default function ApplyLeaveModal({ onClose }) {
           <button onClick={onClose} className="modal-close-btn" aria-label="Close modal">
             <X size={18} />
           </button>
-        </div>
-
-        {/* TG Telemetry Banner */}
-        <div className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 ${tgAvailable ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
-          {tgAvailable ? (
-            <>
-              <ShieldCheck size={17} className="shrink-0 text-emerald-600 mt-0.5" />
-              <div>
-                <strong>Standard 3-Stage Pipeline Active:</strong> Request routes to Mentor <strong>{currentUser.tgName}</strong>, then forwarded to HOD for final sign-off.
-              </div>
-            </>
-          ) : (
-            <>
-              <AlertTriangle size={17} className="shrink-0 text-amber-600 mt-0.5" />
-              <div>
-                <strong>Autonomous Fallback Routing:</strong> Mentor Prof. K. Sen is marked unavailable. Your leave will route <strong>directly to HOD Dr. S. Roy</strong> to prevent administrative delay.
-              </div>
-            </>
-          )}
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 mt-2">

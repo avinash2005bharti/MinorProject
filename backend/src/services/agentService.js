@@ -1,14 +1,4 @@
-const Student = require('../models/Student');
-const Attendance = require('../models/Attendance');
-const AttendanceRequest = require('../models/AttendanceRequest');
-const LeaveRequest = require('../models/LeaveRequest');
-const Notification = require('../models/Notification');
-const Subject = require('../models/Subject');
-const {
-  Student: MysqlStudent,
-  Attendance: MysqlAttendance,
-  StudentRequest: MysqlStudentRequest
-} = require('../models/mysql');
+const { prisma } = require('../config/postgres');
 const timetableAiEngine = require('./timetableAiEngine');
 const { emitNotification, emitAttendanceUpdate, emitLeaveUpdate, emitAgentStep } = require('../sockets/socketHandler');
 
@@ -56,77 +46,73 @@ const agentService = {
     ];
   },
 
-  // Orchestrates real backend Attendance Agent execution
+  // Orchestrates real backend Attendance Agent execution in PostgreSQL
   async runAttendanceAgent({ requestId, studentRoll = '21CSE084', section = 'CSE-3A', dateRange = '10 Sept – 15 Sept' }) {
-    let student = await Student.findOne({ rollNo: studentRoll });
-    const studentName = student ? student.name : 'Ayush Sharma';
-
-    // 1. Update Student's attendance in DB (MongoDB & MySQL)
-    if (student) {
-      student.attendance = 84;
-      student.status = 'present';
-      student.autoUpdated = true;
-      await student.save();
-    }
-
+    let student = null;
     try {
-      const mysqlSt = await MysqlStudent.findOne({ where: { enrollment_no: studentRoll } });
-      if (mysqlSt) {
-        const absents = await MysqlAttendance.findAll({
-          where: { student_id: mysqlSt.id, status: 'Absent' },
-          limit: 6
+      student = await prisma.student.findFirst({
+        where: {
+          OR: [
+            { enrollmentNo: studentRoll },
+            { rollNo: studentRoll }
+          ]
+        }
+      });
+    } catch (e) {}
+
+    const studentName = student ? `${student.firstName} ${student.lastName || ''}`.trim() : 'Ayush Verma';
+
+    // 1. Update attendance records in PostgreSQL
+    try {
+      if (student) {
+        const absents = await prisma.attendanceRecord.findMany({
+          where: { studentId: student.id, status: 'ABSENT' },
+          take: 6
         });
         for (const a of absents) {
-          a.status = 'Present';
-          await a.save();
+          await prisma.attendanceRecord.update({
+            where: { id: a.id },
+            data: { status: 'PRESENT', remarks: 'Attendance consideration granted by HOD' }
+          });
         }
       }
       if (requestId) {
-        const reqRecord = await MysqlStudentRequest.findOne({
-          where: isNaN(requestId) ? { requestId } : { id: requestId }
+        await prisma.attendanceConsiderationRequest.updateMany({
+          where: { id: requestId },
+          data: { status: 'APPROVED', approvedBy: 'HOD Dr. Alok Verma', approvedAt: new Date() }
         });
-        if (reqRecord) {
-          reqRecord.status = 'completed';
-          reqRecord.currentAttendance = 86;
-          await reqRecord.save();
-        }
       }
-    } catch {}
-
-    // 2. If requestId provided, update AttendanceRequest
-    if (requestId) {
-      await AttendanceRequest.findOneAndUpdate(
-        { $or: [{ _id: requestId }, { requestId }] },
-        {
-          status: 'completed',
-          'timeline.2.completed': true,
-          'timeline.3.completed': true
-        }
-      );
+    } catch (dbErr) {
+      console.warn('[agentService] PostgreSQL update notice:', dbErr.message);
     }
 
-    // 3. Increment subject attended counts
-    await Subject.updateMany({ semester: 6 }, { $inc: { attended: 1 } });
+    // 2. Create Notifications in PostgreSQL
+    let studentNotif = null;
+    let teacherNotif = null;
+    try {
+      studentNotif = await prisma.notification.create({
+        data: {
+          recipientUserId: student?.userId || 'student',
+          role: 'student',
+          title: 'Attendance Consideration Approved 🎉',
+          message: 'Attendance Agent updated affected lectures. Overall attendance raised to 84% (Safe Status).',
+          type: 'success'
+        }
+      });
 
-    // 4. Create and push Notifications
-    const studentNotif = await Notification.create({
-      recipient: 'student',
-      role: 'student',
-      title: 'Attendance Consideration Approved 🎉',
-      message: 'Attendance Agent updated 6 affected lectures. Overall attendance raised to 84% (Safe Status).',
-      type: 'success'
-    });
+      teacherNotif = await prisma.notification.create({
+        data: {
+          recipientUserId: 'teacher',
+          role: 'teacher',
+          title: `Section ${section} Attendance Auto-Updated`,
+          message: `Attendance Agent auto-adjusted ${studentName} attendance for duty credit granted by HOD.`,
+          type: 'attendance'
+        }
+      });
+    } catch (notifErr) {}
 
-    const teacherNotif = await Notification.create({
-      recipient: 'teacher',
-      role: 'teacher',
-      title: `Section ${section} Attendance Auto-Updated`,
-      message: `Attendance Agent auto-adjusted ${studentName} attendance for duty credit granted by HOD.`,
-      type: 'attendance'
-    });
-
-    emitNotification('student', studentNotif);
-    emitNotification('teacher', teacherNotif);
+    if (studentNotif) emitNotification('student', studentNotif);
+    if (teacherNotif) emitNotification('teacher', teacherNotif);
     emitAttendanceUpdate(section, { rollNo: studentRoll, newAttendance: 84 });
 
     const steps = this.getAttendanceAgentSteps(studentName, section, dateRange);
@@ -200,3 +186,4 @@ const agentService = {
 };
 
 module.exports = agentService;
+

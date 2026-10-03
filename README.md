@@ -1,6 +1,6 @@
 # CSE Department AI Agentic ERP — Production Backend
 
-A production-ready enterprise backend dedicated exclusively to the **Computer Science & Engineering (CSE) Department**. Powered by a Node.js Express API Gateway, a Python FastAPI Multi-Agent Microservice with Groq LLM, Qdrant Hybrid RAG, normalized MySQL records, and MongoDB AI Memory.
+A production-ready enterprise backend dedicated exclusively to the **Computer Science & Engineering (CSE) Department**. Powered by a Node.js Express API Gateway, a Python FastAPI Multi-Agent Microservice with Groq LLM, Qdrant Hybrid RAG, normalized **PostgreSQL** relational records (designed for Render PostgreSQL), and MongoDB AI Memory.
 
 ---
 
@@ -19,14 +19,15 @@ This ERP is tailored specifically for the Computer Science & Engineering departm
 - **API Gateway:** Node.js + Express (Port 5000)
 - **AI Microservice:** Python 3.10 + FastAPI (Port 8000)
 - **Authentication:** JWT (Access & Refresh Tokens, bcrypt, Role-based Access Control)
-- **Relational DB:** MySQL 8.0 with Sequelize ORM (with seamless SQLite dev fallback)
+- **Relational DB:** PostgreSQL 16 (`pg`, Sequelize ORM, transactional migration engine, with SQLite dev fallback)
 - **AI Memory DB:** MongoDB 7.0 (Long-term facts, conversations, short-term memory, rolling summaries)
-- **Vector Database:** Pinecone (768-dimensional dense vectors with Cosine similarity)
+- **Vector Database:** Qdrant (dense vector search with Cosine similarity)
 - **LLM Engine:** Groq SDK (`llama-3.3-70b-versatile`) with exponential backoff & token tracking
 - **Email Service:** Brevo (OTP verification, attendance alerts `<75%`, assignment reminders)
-- **File Upload Pipeline:** Multer (PDF, DOCX, PPT, Images -> Extract -> Chunk -> Embed 768-dim -> Pinecone -> MySQL)
+- **File Upload Pipeline:** Multer (PDF, DOCX, PPT, Images -> Extract -> Chunk -> Embed -> Qdrant -> PostgreSQL)
 - **Logging:** Winston (`api.log`, `error.log`, `ai.log`, `email.log`)
 - **API Docs:** Interactive Swagger UI at `http://localhost:5000/api-docs`
+- **Cloud Deployment:** Render Blueprint (`render.yaml`)
 
 ---
 
@@ -37,41 +38,39 @@ MinorProject/
 │
 ├── backend/                       # Node.js Express API Gateway
 │   ├── src/
-│   │   ├── config/                # MySQL (Sequelize), MongoDB, Swagger
-│   │   ├── controllers/           # Auth, Students, Faculty, Attendance, Assignments, Timetable, Notes, AI
+│   │   ├── config/                # PostgreSQL (pg / Sequelize connection pool), MongoDB, Swagger
+│   │   ├── controllers/           # Auth, Students, Faculty, Attendance, Timetable, AI, Leaves
 │   │   ├── middleware/            # JWT Auth, RBAC, Multer upload, Winston request logger, Error handler
+│   │   ├── migrations/            # 001_initial_postgresql_schema.sql & transactional migrate.js runner
 │   │   ├── models/
-│   │   │   ├── mysql/             # Normalized Sequelize tables
+│   │   │   ├── postgres/          # Normalized Sequelize PostgreSQL models
 │   │   │   └── mongo/             # AI Memory schemas (users_memory, conversations, agent_logs)
 │   │   ├── routes/                # Modular Express routers
 │   │   ├── services/              # Brevo email service, Winston logger
 │   │   ├── utils/                 # Automatic CSE database seeder
 │   │   └── server.js              # Server entrypoint
+│   ├── tests/                     # Automated ERP backend test suite
 │   ├── uploads/                   # Uploaded academic materials (PDF, DOCX, PPT)
 │   ├── logs/                      # Winston logs (api.log, error.log, ai.log, email.log)
 │   ├── .env                       # Backend environment configuration
 │   └── package.json
 │
 ├── ai-service/                    # Python FastAPI AI Microservice
-│   ├── agents/                    # Specialized AI Agents
-│   │   ├── student_assistant.py   # Timetable, Attendance, Assignments, Office hours
-│   │   ├── faculty_assistant.py   # Assignment generator, Submission summary, Email drafter
-│   │   ├── admin_assistant.py     # Workload audits, Attendance compliance, Missing registers
-│   │   ├── rag_agent.py           # Multi-collection semantic retriever & citations
-│   │   ├── memory_agent.py        # Short-term/long-term memory & rolling summaries
-│   │   └── email_agent.py         # Brevo transactional email actions
+│   ├── agents/                    # Specialized AI Agents (Timetable, Student, Faculty, Admin, Memory, RAG)
+│   ├── scheduler/                 # Absence scheduler & dynamic substitution adjuster
+│   ├── tools/                     # Direct PostgreSQL query tools (psycopg2) & Brevo email tools
 │   ├── rag/                       # Qdrant manager, text extraction, chunking
 │   ├── memory/                    # MongoDB motor/pymongo memory manager
-│   ├── tools/                     # Direct MySQL query tools & Brevo email tools
-│   ├── embeddings/                # Standardized 384-dim dense vector embedder
 │   ├── llm/                       # Official Groq SDK wrapper with retries & streaming
 │   ├── main.py                    # FastAPI server entrypoint
 │   ├── requirements.txt
 │   └── .env
 │
+├── frontend/                      # React + Vite Web Application
 ├── docker/                        # Dockerfiles for backend and ai-service
-├── docs/                          # Architecture blueprints & API documentation
-├── docker-compose.yml             # Orchestrates node, python, mysql, mongodb, qdrant
+├── docs/                          # Architecture blueprints & cloud deployment guides
+├── render.yaml                    # Render Blueprint specification for one-click deployment
+├── docker-compose.yml             # Orchestrates node, python, postgres, mongodb, qdrant
 └── README.md
 ```
 
@@ -81,26 +80,29 @@ MinorProject/
 
 ### Option 1: Native Local Development (Zero Docker Required)
 
-#### 1. Start Node.js Backend Gateway
+#### 1. Setup & Run Database Migrations (Backend)
 ```bash
 cd backend
 npm install
+npm run migrate
+npm run seed
 npm start
 ```
-*The backend initializes, syncs database tables, creates seed accounts, and runs on `http://localhost:5000`.*
+*The backend connects to PostgreSQL (or dev SQLite fallback), tracks applied migrations, seeds test data, and runs on `http://localhost:5000`.*
 *Interactive Swagger documentation is live at `http://localhost:5000/api-docs`.*
 
 #### 2. Start Python AI Microservice
 ```bash
 cd ai-service
 pip install -r requirements.txt
-python -m uvicorn main:app --host 127.0.0.1 --port 8000
+uvicorn main:app --host 127.0.0.1 --port 8000
 ```
-*The AI service initializes Qdrant collections, connects memory, and runs on `http://127.0.0.1:8000`.*
+*The AI service connects to PostgreSQL and Qdrant, exposing endpoints on `http://127.0.0.1:8000`.*
 
 #### 3. Start Frontend
 ```bash
 cd frontend
+npm install
 npm run dev
 ```
 *Frontend runs on `http://localhost:5173`.*
@@ -109,11 +111,23 @@ npm run dev
 
 ### Option 2: Docker Compose (Full Stack)
 
-To run the complete system including MySQL 8.0, MongoDB 7.0, Qdrant, Node.js, and Python via Docker:
+To run the complete system including PostgreSQL 16, MongoDB 7.0, Qdrant, Node.js backend, Python AI service, and React frontend:
 
 ```bash
-docker-compose up --build
+docker compose up -d --build
 ```
+
+---
+
+### Option 3: Production Deployment on Render
+
+1. Create a Render Blueprint instance pointing to this repository.
+2. Render uses [`render.yaml`](./render.yaml) to automatically provision:
+   - **PostgreSQL 16** managed database (`cse-erp-postgres`)
+   - **Node.js Express Backend** (`cse-erp-backend`) with safe automatic migrations (`npm run migrate && npm start`)
+   - **Python FastAPI Microservice** (`cse-erp-ai-service`) with timetable generation and LLM reasoning
+   - **React Frontend** (`cse-erp-frontend`) static site
+3. Input your sensitive environment keys in the Render Dashboard (`GROQ_API_KEY`, `MONGODB_URI`, `QDRANT_API_KEY`).
 
 ---
 
@@ -145,26 +159,17 @@ docker-compose up --build
 ### 📊 Attendance (`/api/attendance`)
 - `POST /api/attendance/mark`: Mark single student attendance
 - `POST /api/attendance/bulk`: Roll call for an entire class lecture
-- `GET /api/attendance/stats`: Student percentage and subject-wise breakdown (auto-triggers Brevo alert if `<75%`)
-
-### 📝 Assignments (`/api/assignments`)
-- `GET /api/assignments`: List assignments by semester or subject
-- `POST /api/assignments`: Create assignment with PDF/DOCX attachment
-- `POST /api/assignments/submit`: Student submission with file upload
-- `PUT /api/assignments/evaluate/:id`: Faculty grading with marks and feedback
+- `GET /api/attendance/stats`: Student percentage and subject-wise breakdown (auto-triggers alert if `<75%`)
 
 ### 📅 Timetable (`/api/timetable`)
 - `GET /api/timetable`: Query schedule by Year, Semester, Section, and Day
-- `GET /api/timetable/my`: Personalized schedule for logged-in student
-- `POST /api/timetable`: Create lecture slot
-
-### 📚 Notes & Documents (`/api/notes`)
-- `POST /api/notes/upload`: Upload PDF/DOCX/PPT note, save metadata in MySQL, and index into Qdrant collection
-- `GET /api/notes`: Filter documents by category (`Notes`, `Assignments`, `Circulars`, `Syllabus`, `Lab Manuals`, `Previous Papers`, `Faculty Documents`)
-- `GET /api/notes/download/:id`: Download file
+- `GET /api/timetable/my`: Personalized schedule for logged-in user
+- `POST /api/timetable/generate`: Autonomous AI timetable generation with constraint validation
+- `POST /api/timetable/adjust-absence`: Dynamic substitution adjustment for absent teachers
+- `GET /api/timetable/export/pdf`: Download timetable PDF
+- `GET /api/timetable/export/excel`: Download timetable Excel
 
 ### 🤖 AI Multi-Agent Core (`/api/ai`)
-- `POST /api/ai/chat`: Central agent orchestrator (Node ↔ Python FastAPI ↔ Groq LLM ↔ Qdrant RAG ↔ MongoDB Memory)
+- `POST /api/ai/chat`: Central agent orchestrator (Node ↔ Python FastAPI ↔ Groq LLM ↔ Qdrant RAG ↔ MongoDB Memory ↔ PostgreSQL)
 - `GET /api/ai/suggestions`: Contextual prompts tailored for student, faculty, or admin
 - `POST /api/ai/rag/search`: Hybrid search across Qdrant vector collections
-- `GET /api/ai/memory`: Retrieve user's long-term memory facts and learning profile

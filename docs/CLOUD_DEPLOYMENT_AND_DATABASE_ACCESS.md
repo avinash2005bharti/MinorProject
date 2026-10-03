@@ -1,53 +1,87 @@
 # ☁️ Cloud Deployment & Direct Database Access Guide
 ## CSE Department Agentic ERP System
 
-This guide outlines how to host the system on cloud services and connect directly to the relational and document databases using **MySQL Workbench** and **MongoDB Compass**.
+This guide outlines how to host the system on cloud services (Render, Docker VPS, AWS) and connect directly to the relational and document databases using **pgAdmin / DBeaver / psql** and **MongoDB Compass**.
 
 ---
 
-## 1. 🗄️ Connecting to MySQL via MySQL Workbench
+## 1. 🐘 Connecting to PostgreSQL via pgAdmin, DBeaver, or psql
 
-MySQL is the **authoritative source of truth** for all academic records (Students, Faculty, Subjects, Classrooms, Sections, Timetables, Attendance, Assignments, Substitutions, Notes, Notices, and Requests).
+PostgreSQL is the **authoritative source of truth** for all academic and ERP relational records:
+* Students, Faculty, HODs, and Departments
+* Subjects, Classes, and Classrooms
+* Timetables, Scheduling Constraints, and Teacher Availability
+* Attendance, Leave Requests, and Attendance Correction Queries
 
-### Connection Parameters
+---
 
-#### A. If using Cloud MySQL (AWS RDS / Railway / Aiven / DigitalOcean)
+### A. If using Render Managed PostgreSQL
+Render provides an **Internal Connection String** (for backend services deployed within Render) and an **External Connection String** (for direct connections from your laptop via pgAdmin, DBeaver, or `psql`).
+
 | Parameter | Setting |
 | :--- | :--- |
-| **Connection Name** | `CSE ERP Cloud Production` |
-| **Connection Method** | `Standard (TCP/IP)` |
-| **Hostname** | Your Cloud Host (e.g. `cse-db.cxxxxxx.us-east-1.rds.amazonaws.com` or `roundhouse.proxy.rlwy.net`) |
-| **Port** | `3306` (or Railway external port, e.g. `45678`) |
-| **Username** | `root` or `admin` or your assigned cloud DB username |
-| **Password** | Click **Store in Vault ...** and enter your password |
-| **Default Schema** | `cse_erp` |
-| **SSL Tab** | Set **Use SSL** to `Require` (or `Require and Verify CA` if using AWS RDS CA) |
+| **Connection Name** | `Render PostgreSQL Production` |
+| **Host** | Found in Render Dashboard (`dpg-xxxxxx-a.oregon-postgres.render.com`) |
+| **Port** | `5432` |
+| **Database** | `cse_erp` (or database name assigned by Render) |
+| **Username** | `cse_user` (or assigned user) |
+| **Password** | Found in Render Dashboard |
+| **SSL Mode** | `Require` (SSL enabled is mandatory on Render) |
 
-#### B. If using Docker on a Cloud VPS (AWS EC2 / DigitalOcean Droplet / Linode)
+#### Quick Connect via `psql` CLI:
+```bash
+psql "postgresql://cse_user:<PASSWORD>@dpg-xxxxxx-a.oregon-postgres.render.com:5432/cse_erp?sslmode=require"
+```
+
+#### Connecting with pgAdmin:
+1. Open **pgAdmin 4** -> Right-click **Servers** -> **Register** -> **Server...**.
+2. **General tab**: Enter Name (e.g. `Render CSE ERP`).
+3. **Connection tab**:
+   - Host name/address: `dpg-xxxxxx-a.oregon-postgres.render.com`
+   - Port: `5432`
+   - Maintenance database: `cse_erp`
+   - Username: `cse_user`
+   - Password: Paste Render password (check *Save password*).
+4. **Parameters / SSL tab**:
+   - SSL mode: `Require`.
+5. Click **Save**.
+
+#### Connecting with DBeaver:
+1. Open **DBeaver** -> Click **New Database Connection** -> Select **PostgreSQL**.
+2. Enter Host, Port (`5432`), Database name, Username, and Password.
+3. Switch to the **SSL** tab -> Check **Use SSL** -> SSL mode: `require`.
+4. Click **Test Connection ...** -> Once verified, click **Finish**.
+
+---
+
+### B. If using Docker on a Cloud VPS / Local Development
 When using the included [`docker-compose.yml`](../docker-compose.yml):
+
 | Parameter | Setting |
 | :--- | :--- |
-| **Hostname** | Your VPS Public IP Address (e.g. `203.0.113.25`) |
-| **Port** | `3306` |
-| **Username** | `root` (or `cse_user`) |
-| **Password** | `rootpassword123` (or `cse_password123`) |
-| **Default Schema** | `cse_erp` |
+| **Hostname** | `localhost` (local) or VPS Public IP Address (e.g. `203.0.113.25`) |
+| **Port** | `5432` |
+| **Database** | `cse_erp` |
+| **Username** | `cse_user` |
+| **Password** | `cse_password123` |
+| **SSL Mode** | `Disable` or `Allow` |
 
-### Step-by-Step in MySQL Workbench:
-1. Open **MySQL Workbench**.
-2. Click the **`+`** icon next to *MySQL Connections*.
-3. Enter the Hostname, Port, Username, and Default Schema from above.
-4. Click **Test Connection** — ensure the test reports *"Successfully made the MySQL connection"*.
-5. Click **OK** to save and open the SQL Query Editor.
-6. Run queries across normalized tables:
-   ```sql
-   USE cse_erp;
-   SHOW TABLES;
-   SELECT * FROM students;
-   SELECT * FROM faculty;
-   SELECT * FROM timetable WHERE section = 'A';
-   SELECT * FROM student_requests;
-   ```
+---
+
+### Step-by-Step SQL Verification:
+Run queries across the normalized tables:
+```sql
+-- View all tables
+\dt
+
+-- Check students, faculty, and timetable
+SELECT * FROM students LIMIT 10;
+SELECT * FROM faculty;
+SELECT * FROM timetables WHERE section = 'A';
+SELECT * FROM leave_requests;
+SELECT * FROM attendance_queries;
+SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 10;
+```
 
 ---
 
@@ -82,8 +116,24 @@ mongodb://<YOUR_VPS_PUBLIC_IP>:27017/cse_erp
 
 ## 3. 🚀 Cloud Deployment Options
 
-### Option 1: Full-Stack Docker Compose on Cloud VPS (Fastest & Simplest)
-Deploy all 6 services on any Linux VPS (AWS EC2 Ubuntu, DigitalOcean Droplet, Linode, GCP Compute Engine):
+### Option 1: Render Blueprint Deployment (Recommended for Production)
+The repository includes a ready-to-use [`render.yaml`](../render.yaml) specification:
+
+1. Connect your GitHub repository to [Render](https://dashboard.render.com).
+2. Go to **Blueprints** -> Click **New Blueprint Instance**.
+3. Select your repository (`MinorProject`).
+4. Render will automatically configure:
+   - **PostgreSQL Database** (`cse-erp-postgres`)
+   - **Node.js Backend** (`cse-erp-backend`) with `npm run migrate && npm start`
+   - **Python AI Microservice** (`cse-erp-ai-service`) with `uvicorn main:app --host 0.0.0.0 --port $PORT`
+   - **React Frontend** (`cse-erp-frontend`) static site
+5. Fill in the sensitive environment variables (such as `GROQ_API_KEY`, `MONGODB_URI`, `QDRANT_API_KEY`).
+6. Click **Apply** to launch the deployment.
+
+---
+
+### Option 2: Full-Stack Docker Compose on Cloud VPS
+Deploy all services on any Linux VPS (AWS EC2 Ubuntu, DigitalOcean Droplet, Linode, GCP Compute Engine):
 
 1. **Clone the repository on the cloud server:**
    ```bash
@@ -95,7 +145,7 @@ Deploy all 6 services on any Linux VPS (AWS EC2 Ubuntu, DigitalOcean Droplet, Li
    cp .env.example .env
    nano .env
    ```
-   Add your `GROQ_API_KEY` and credentials.
+   Add your `GROQ_API_KEY`, `DATABASE_URL`, and credentials.
 3. **Launch all services in background:**
    ```bash
    docker compose up -d --build
@@ -105,51 +155,15 @@ Deploy all 6 services on any Linux VPS (AWS EC2 Ubuntu, DigitalOcean Droplet, Li
    - Node API Gateway: `http://<YOUR_SERVER_IP>:5000/api`
    - Interactive Swagger Docs: `http://<YOUR_SERVER_IP>:5000/api-docs`
    - Python AI Microservice: `http://<YOUR_SERVER_IP>:8000/docs`
-   - MySQL (Workbench): `<YOUR_SERVER_IP>:3306`
+   - PostgreSQL (pgAdmin/psql): `<YOUR_SERVER_IP>:5432`
    - MongoDB (Compass): `mongodb://<YOUR_SERVER_IP>:27017/cse_erp`
 
 ---
 
-### Option 2: Managed Cloud Platforms (Serverless / Microservices)
-
-#### Frontend on Vercel or Netlify:
-- **Build Command:** `npm run build`
-- **Output Directory:** `dist`
-- **Root Directory:** `frontend`
-- **Environment Variables:**
-  - `VITE_API_URL`: `https://api.yourcloud.com` (Your cloud backend URL)
-
-#### Backend on Render, Railway, or AWS ECS:
-- **Root Directory:** `backend`
-- **Start Command:** `npm start`
-- **Environment Variables:**
-  - `NODE_ENV=production`
-  - `PORT=5000`
-  - `MYSQL_DATABASE_URL=mysql://<user>:<pass>@<rds_host>:3306/cse_erp`
-  - `MYSQL_SSL=true`
-  - `MONGODB_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/cse_erp`
-  - `PYTHON_AI_SERVICE_URL=https://ai-service.yourcloud.com`
-  - `CLIENT_URL=https://your-frontend.vercel.app`
-  - `CORS_ORIGIN=*`
-
-#### AI Microservice on Railway, Render, or AWS App Runner:
-- **Root Directory:** `ai-service`
-- **Start Command:** `uvicorn main:app --host 0.0.0.0 --port 8000`
-- **Environment Variables:**
-  - `LLM_PROVIDER=groq`
-  - `GROQ_API_KEY=gsk_...`
-  - `MYSQL_DATABASE_URL=mysql://<user>:<pass>@<rds_host>:3306/cse_erp`
-  - `MYSQL_SSL=true`
-  - `MONGODB_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/cse_erp`
-  - `QDRANT_URL=https://xxxx.cloud.qdrant.io:6333`
-  - `QDRANT_API_KEY=...`
-
----
-
 ## 4. 🔒 Cloud Database Security & Firewall Tips
-1. **MySQL Workbench (AWS RDS):**
-   - Ensure the AWS Security Group for your RDS instance has an inbound rule for TCP Port `3306` from your IP address or VPS IP.
-   - Set **Publicly Accessible: Yes** if connecting directly from your local laptop's MySQL Workbench.
+1. **Render PostgreSQL:**
+   - Render internal connections within the same region are encrypted and bypass public routing.
+   - For external connections (e.g., pgAdmin from your workstation), Render requires SSL (`sslmode=require`).
 2. **MongoDB Compass (Atlas):**
    - In MongoDB Atlas, go to **Network Access** -> **IP Access List**.
-   - Add your current IP (or `0.0.0.0/0` with secure strong passwords for unrestricted cloud access).
+   - Add your current IP (or configure trusted VPC peering / Render IP ranges).

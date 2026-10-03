@@ -2,7 +2,7 @@ import time
 from typing import Dict, Any, List
 from loguru import logger
 
-from tools.mysql_tools import mysql_tools
+from tools.postgres_tools import postgres_tools
 from llm.groq_client import groq_client
 from memory.mongo_memory import mongo_memory
 
@@ -16,7 +16,7 @@ class AdminAssistant:
     - Identify missing class attendance registers
     """
     def __init__(self):
-        self.sql = mysql_tools
+        self.sql = postgres_tools
         self.llm = groq_client
 
     def handle_query(

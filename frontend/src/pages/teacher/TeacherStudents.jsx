@@ -17,11 +17,16 @@ export default function TeacherStudents() {
   const [filterRisk, setFilterRisk] = useState(false);
 
   const filteredStudents = students.filter((st) => {
-    const matches =
-      st.name.toLowerCase().includes(search.toLowerCase()) ||
-      st.rollNo.toLowerCase().includes(search.toLowerCase());
+    const studentName = (st.name || '').toLowerCase();
+    const roll = (st.rollNo || st.enrollment_no || '').toLowerCase();
+    const q = search.toLowerCase();
+    const matches = studentName.includes(q) || roll.includes(q);
+
     if (!matches) return false;
-    if (filterRisk) return st.attendance < 75;
+    const att = st.attendance === null || st.attendance === undefined || st.attendance === ''
+      ? null
+      : Number(st.attendance);
+    if (filterRisk) return att !== null && Number.isFinite(att) && att < 75;
     return true;
   });
 
@@ -33,7 +38,7 @@ export default function TeacherStudents() {
           <div>
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Assigned Students Roster</h1>
             <p className="text-xs text-slate-500 mt-0.5">
-              Section CSE-3A (Data Structures & Algorithms CS301) • Profile audits & feedback
+              Section roster • Profile audits & feedback
             </p>
           </div>
 
@@ -61,61 +66,77 @@ export default function TeacherStudents() {
         </div>
 
         {/* Student Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-          {filteredStudents.map((st) => (
-            <div key={st.id} className="card flex flex-col justify-between gap-3">
-              <div>
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-800 font-extrabold flex items-center justify-center text-sm">
-                      {st.name.split(' ').map((n) => n[0]).join('')}
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">{st.name}</h4>
-                      <span className="text-[11px] font-mono text-slate-500">{st.rollNo}</span>
-                    </div>
-                  </div>
+        {filteredStudents.length === 0 ? (
+          <div className="card text-center py-12 text-slate-400">
+            <Users size={36} className="mx-auto mb-2 opacity-40 text-slate-400" />
+            <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>No students found</h3>
+            <p className="text-xs text-slate-500 mt-1">No enrolled students found in database.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {filteredStudents.map((st) => {
+              const roll = st.enrollment_no || st.rollNo || 'N/A';
+              const att = st.attendance === null || st.attendance === undefined || st.attendance === ''
+                ? null
+                : Number(st.attendance);
+              const hasAttendance = att !== null && Number.isFinite(att);
 
-                  <span className={`badge ${st.attendance >= 75 ? 'badge-emerald' : 'badge-rose'} text-xs`}>
-                    {st.attendance}% Att
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100 text-xs">
+              return (
+                <div key={st.id} className="card flex flex-col justify-between gap-3">
                   <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Academic CGPA</span>
-                    <span className="text-sm font-bold text-slate-800">{st.cgpa} / 10</span>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-800 font-extrabold flex items-center justify-center text-sm">
+                          {(st.name || 'S').split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900">{st.name}</h4>
+                          <span className="text-[11px] font-mono text-slate-500">{roll}</span>
+                        </div>
+                      </div>
+
+                      <span className={`badge ${!hasAttendance ? 'badge-slate' : att >= 75 ? 'badge-emerald' : 'badge-rose'} text-xs`}>
+                        {hasAttendance ? `${att}% Att` : 'N/A Att'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100 text-xs">
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Section</span>
+                        <span className="text-sm font-bold text-slate-800">{st.section || 'Unassigned'}{st.semester ? ` (Sem ${st.semester})` : ''}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Status</span>
+                        <span className={`text-xs font-semibold ${!hasAttendance ? 'text-slate-500' : att >= 75 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                          {!hasAttendance ? 'Not available' : att >= 75 ? 'Eligible' : 'Shortage Alert'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px] uppercase font-bold">Status</span>
-                    <span className={`text-xs font-semibold ${st.attendance >= 75 ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {st.attendance >= 75 ? 'Eligible' : 'Shortage Alert'}
-                    </span>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => openModal('studentFeedback', { studentRoll: roll })}
+                      className="btn btn-sm btn-outline text-xs flex-1 py-1.5"
+                    >
+                      <MessageSquarePlus size={13} />
+                      <span>Give Feedback</span>
+                    </button>
+
+                    <button
+                      onClick={() => openModal('studentDetail', { student: st })}
+                      className="btn btn-sm btn-primary text-xs flex-1 py-1.5"
+                    >
+                      <span>Profile</span>
+                      <ChevronRight size={13} />
+                    </button>
                   </div>
                 </div>
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-                <button
-                  onClick={() => openModal('studentFeedback', { studentRoll: st.rollNo })}
-                  className="btn btn-sm btn-outline text-xs flex-1 py-1.5"
-                >
-                  <MessageSquarePlus size={13} />
-                  <span>Give Feedback</span>
-                </button>
-
-                <button
-                  onClick={() => openModal('studentDetail', { student: st })}
-                  className="btn btn-sm btn-primary text-xs flex-1 py-1.5"
-                >
-                  <span>Profile</span>
-                  <ChevronRight size={13} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

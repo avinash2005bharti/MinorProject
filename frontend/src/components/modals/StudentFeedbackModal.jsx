@@ -5,11 +5,12 @@ import { X, MessageSquarePlus, User, Award, ShieldAlert } from 'lucide-react';
 export default function StudentFeedbackModal({ data, onClose }) {
   const { createFeedback, students } = useERP();
 
-  const [studentRoll, setStudentRoll] = useState(data?.studentRoll || '21CSE084');
+  const initialRoll = data?.studentRoll || (students[0]?.enrollment_no || students[0]?.rollNo || '');
+  const [studentRoll, setStudentRoll] = useState(initialRoll);
   const [category, setCategory] = useState('Academic');
   const [feedback, setFeedback] = useState('');
 
-  const selectedStudent = students.find((s) => s.rollNo === studentRoll) || students[0];
+  const selectedStudent = students.find((s) => (s.enrollment_no || s.rollNo) === studentRoll) || students[0];
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -58,11 +59,14 @@ export default function StudentFeedbackModal({ data, onClose }) {
               onChange={(e) => setStudentRoll(e.target.value)}
               className="input-field"
             >
-              {students.map((st) => (
-                <option key={st.id} value={st.rollNo}>
-                  {st.name} ({st.rollNo}) - Att: {st.attendance}%
-                </option>
-              ))}
+              {students.map((st) => {
+                const r = st.enrollment_no || st.rollNo || 'N/A';
+                return (
+                  <option key={st.id} value={r}>
+                    {st.name} ({r}) {st.attendance !== undefined && st.attendance !== null ? `- Att: ${st.attendance}%` : ''}
+                  </option>
+                );
+              })}
             </select>
           </div>
 

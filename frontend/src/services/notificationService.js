@@ -1,39 +1,25 @@
 // ==========================================================================
 // CampusFlow – Notification Service
-// Dispatch notifications and floating toast alerts across the ERP
+// Dispatch notifications across the ERP via real backend API
 // ==========================================================================
 
-import { apiClient } from './api';
+import { notificationApi } from '../api/notificationApi';
 
 export const notificationService = {
   createNotification(title, message, recipient = 'student', type = 'info') {
-    return {
-      id: `notif-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      title,
-      message,
-      recipient,
-      type,
-      time: 'Just now',
-      read: false
-    };
+    return notificationApi.createNotification({ title, message, recipient, type });
   },
 
-  // Backend API calls
   async fetchNotificationsApi(role = 'student') {
-    try {
-      const res = await apiClient.get(`/notifications?role=${role}`);
-      return res.data;
-    } catch (e) {
-      console.warn('[notificationService] Notification fetch fallback:', e.message);
-      return [];
-    }
+    const res = await notificationApi.getNotifications(role);
+    return res.notifications || [];
   },
 
   async markReadApi(id) {
-    return apiClient.put(`/notifications/${id}/read`, {});
+    return notificationApi.markRead(id);
   },
 
   async clearAllApi(role = 'student') {
-    return apiClient.put(`/notifications/clear/all?role=${role}`, {});
+    return notificationApi.clearAll(role);
   }
 };

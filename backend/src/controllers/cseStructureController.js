@@ -1,5 +1,4 @@
-const AcademicStructure = require('../models/AcademicStructure');
-const Subject = require('../models/Subject');
+const { Subject, Section } = require('../models/postgres');
 
 const DEFAULT_CSE_YEARS = [
   {

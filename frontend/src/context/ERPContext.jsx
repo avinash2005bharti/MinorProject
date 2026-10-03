@@ -1,1335 +1,714 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
-  INITIAL_USERS,
-  CSE_SUBJECTS,
-  ENROLLED_STUDENTS_CSE3A,
-  INITIAL_ATTENDANCE_REQUESTS,
-  INITIAL_ATTENDANCE_QUERIES,
-  INITIAL_LEAVE_REQUESTS,
-  INITIAL_AGENT_ACTIVITIES,
-  INITIAL_TIMETABLE_CSE3A,
-  INITIAL_NOTIFICATIONS,
-  INITIAL_CLASSES,
-  INITIAL_SECTIONS,
-  INITIAL_ASSIGNMENTS,
-  INITIAL_SUBMISSIONS,
-  INITIAL_NOTICES,
-  INITIAL_TESTS,
-  INITIAL_FEEDBACK
-} from '../data/mockData';
-import { agentService } from '../services/agentService';
-import { notificationService } from '../services/notificationService';
-import { attendanceService } from '../services/attendanceService';
-import { leaveService } from '../services/leaveService';
-import { requestService } from '../services/requestService';
-import { timetableService } from '../services/timetableService';
-import { apiClient } from '../services/api';
+  apiClient,
+  authApi,
+  dashboardApi,
+  studentApi,
+  teacherApi,
+  attendanceApi,
+  requestApi,
+  timetableApi,
+  teacherSchedulerApi,
+  academicApi,
+  notificationApi,
+  noticeApi
+} from '../api';
 
 const ERPContext = createContext(null);
 
 export function ERPProvider({ children }) {
-  // Authentication & session state
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    const saved = localStorage.getItem('oist_auth');
-    return saved === 'true'; // Unauthenticated by default so user sees the login page first
-  });
-
-  // Current active role
-  const [currentRole, setCurrentRole] = useState(() => {
-    return localStorage.getItem('oist_role') || 'student';
-  });
-  const [users, setUsers] = useState(INITIAL_USERS);
-  const currentUser = users[currentRole];
-
-  // Login handler
-  const login = async (role = 'student', credentials = {}) => {
-    const targetRole = role || 'student';
-    setCurrentRole(targetRole);
-    setIsAuthenticated(true);
-    localStorage.setItem('oist_auth', 'true');
-    localStorage.setItem('oist_role', targetRole);
-
-    // Call backend login API
+  // Session & Authentication state
+  const [token, setToken] = useState(() => apiClient.getToken());
+  const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const res = await apiClient.post('/auth/login', {
-        email: credentials.collegeId,
-        password: credentials.password,
-        role: targetRole
-      });
-      if (res && (res.token || res.accessToken)) {
-        apiClient.setToken(res.token || res.accessToken);
-        if (res.user) {
-          setUsers((prev) => ({
-            ...prev,
-            [targetRole]: {
-              ...prev[targetRole],
-              ...res.user
-            }
-          }));
-        }
+      const stored = localStorage.getItem('oist_user');
+      if (!stored) return null;
+      const parsed = JSON.parse(stored);
+      // Normalize cached association objects to plain strings
+      if (parsed.section && typeof parsed.section === 'object') {
+        parsed.section = parsed.section.name || 'A';
       }
-    } catch (e) {
-      console.warn('[ERPContext] Backend login notice:', e.message);
+      if (parsed.department && typeof parsed.department === 'object') {
+        parsed.department = parsed.department.name || 'CSE';
+      }
+      return parsed;
+    } catch {
+      return null;
     }
+  });
 
-    addToast(
-      'Authenticated Successfully',
-      `Welcome to OIST CSE ERP, ${users[targetRole]?.name || 'User'}!`,
-      'success'
-    );
-  };
+  const [currentRole, setCurrentRole] = useState(() => {
+    return localStorage.getItem('oist_role') || (currentUser?.role || 'student');
+  });
 
-  // Logout handler
-  const logout = () => {
-    setIsAuthenticated(false);
-    localStorage.setItem('oist_auth', 'false');
-    apiClient.setToken(null);
-    addToast(
-      'Logged Out',
-      'You have been securely signed out of OIST CSE ERP.',
-      'info'
-    );
-  };
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return !!apiClient.getToken();
+  });
 
-  // Core entities (Hydrated dynamically from Cloud Backend)
-  const [students, setStudents] = useState(ENROLLED_STUDENTS_CSE3A);
-  const [subjects, setSubjects] = useState(CSE_SUBJECTS);
-  const [classes, setClasses] = useState(INITIAL_CLASSES);
-  const [sections, setSections] = useState(INITIAL_SECTIONS);
-  const [assignments, setAssignments] = useState(INITIAL_ASSIGNMENTS);
-  const [submissions, setSubmissions] = useState(INITIAL_SUBMISSIONS);
-  const [notices, setNotices] = useState(INITIAL_NOTICES);
-  const [tests, setTests] = useState(INITIAL_TESTS);
-  const [feedbackList, setFeedbackList] = useState(INITIAL_FEEDBACK);
-  const [attendanceRequests, setAttendanceRequests] = useState(INITIAL_ATTENDANCE_REQUESTS);
-  const [attendanceQueries, setAttendanceQueries] = useState(INITIAL_ATTENDANCE_QUERIES);
-  const [leaveRequests, setLeaveRequests] = useState(INITIAL_LEAVE_REQUESTS);
-  const [timetable, setTimetable] = useState(INITIAL_TIMETABLE_CSE3A);
-  const [agentActivityLogs, setAgentActivityLogs] = useState(INITIAL_AGENT_ACTIVITIES);
-  const [notifications, setNotifications] = useState(INITIAL_NOTIFICATIONS);
+  const [loadingAuth, setLoadingAuth] = useState(true);
+
+  // Department Relational Entities (Source of Truth: Real Backend)
+  const [students, setStudents] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [attendanceRequests, setAttendanceRequests] = useState([]);
+  const [attendanceQueries, setAttendanceQueries] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [timetable, setTimetable] = useState({
+    Monday: [],
+    Tuesday: [],
+    Wednesday: [],
+    Thursday: [],
+    Friday: []
+  });
+  const [notices, setNotices] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [sections, setSections] = useState([]);
+  const [academicHierarchy, setAcademicHierarchy] = useState(null);
+
+  // Dashboard cached data
+  const [dashboardData, setDashboardData] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState(null);
+
+  // UI Modals & Toasts
   const [toasts, setToasts] = useState([]);
-
-  // Live Backend Data Synchronization Hook (Eliminating static mock reliance, strictly MySQL)
-  useEffect(() => {
-    let isMounted = true;
-
-    const syncLiveBackendData = async () => {
-      try {
-        // 1. Live Students from MySQL
-        apiClient.get('/students').then((res) => {
-          if (!isMounted) return;
-          const list = res?.students || (Array.isArray(res) ? res : res?.data);
-          if (Array.isArray(list) && list.length > 0) {
-            const formatted = list.map((st) => ({
-              id: st.id,
-              rollNo: st.enrollment_no || st.rollNo || `0103CS21100${st.id}`,
-              name: st.name || st.user?.name,
-              attendance: 84,
-              cgpa: 8.42,
-              section: st.section || 'A',
-              year: st.year || '3rd Year',
-              semester: st.semester || 5,
-              status: 'present',
-              autoUpdated: false
-            }));
-            setStudents(formatted);
-          }
-        }).catch(() => {});
-
-        // 2. Live Subjects & Sections from MySQL
-        apiClient.get('/academic/subjects').then((res) => {
-          if (!isMounted) return;
-          const list = res?.subjects || (Array.isArray(res) ? res : res?.data);
-          if (Array.isArray(list) && list.length > 0) setSubjects(list);
-        }).catch(() => {});
-
-        apiClient.get('/academic/sections').then((res) => {
-          if (!isMounted) return;
-          const list = res?.sections || (Array.isArray(res) ? res : res?.data);
-          if (Array.isArray(list) && list.length > 0) setSections(list);
-        }).catch(() => {});
-
-        // 3. Live Timetable from MySQL Timetable Table
-        timetableService.getTimetableApi('3rd Year', 5, 'A').then((res) => {
-          if (!isMounted) return;
-          if (res && (res.Monday?.length > 0 || res.Tuesday?.length > 0)) {
-            setTimetable(res);
-          } else if (res && res.grid) {
-            setTimetable(res.grid);
-          }
-        }).catch(() => {});
-
-        // 4. Live Requests from MySQL (Attendance Considerations, Leaves, Queries)
-        requestService.fetchAllRequestsApi().then((res) => {
-          if (!isMounted) return;
-          if (res?.data) {
-            if (Array.isArray(res.data.attendanceRequests)) setAttendanceRequests(res.data.attendanceRequests);
-            if (Array.isArray(res.data.leaveRequests)) setLeaveRequests(res.data.leaveRequests);
-            if (Array.isArray(res.data.attendanceQueries)) setAttendanceQueries(res.data.attendanceQueries);
-          } else if (Array.isArray(res?.requests)) {
-            const att = res.requests.filter((r) => r.requestType === 'attendance_consideration');
-            const lvs = res.requests.filter((r) => r.requestType === 'leave_request');
-            const qrs = res.requests.filter((r) => r.requestType === 'attendance_query');
-            setAttendanceRequests(att);
-            setLeaveRequests(lvs);
-            setAttendanceQueries(qrs);
-          }
-        }).catch(() => {});
-
-        // 5. Live Notices from MySQL
-        apiClient.get('/notices').then((res) => {
-          if (!isMounted) return;
-          const list = res?.data || (Array.isArray(res) ? res : res?.notices);
-          if (Array.isArray(list) && list.length > 0) setNotices(list);
-        }).catch(() => {});
-
-        // 6. Live Notifications from MySQL
-        apiClient.get('/notifications').then((res) => {
-          if (!isMounted) return;
-          const list = res?.data || (Array.isArray(res) ? res : res?.notifications);
-          if (Array.isArray(list) && list.length > 0) setNotifications(list);
-        }).catch(() => {});
-
-        // 7. Live Assignments from MySQL
-        apiClient.get('/assignments').then((res) => {
-          if (!isMounted) return;
-          const list = res?.assignments || (Array.isArray(res) ? res : res?.data);
-          if (Array.isArray(list) && list.length > 0) setAssignments(list);
-        }).catch(() => {});
-      } catch (e) {
-        console.warn('[ERPContext] Live backend synchronization notice:', e.message);
-      }
-    };
-
-    syncLiveBackendData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [isAuthenticated, currentRole]);
-
-  // Universal Quick Action Interactive Modal state
-  const [modalState, setModalState] = useState({ name: null, data: null });
-  const openModal = (name, data = null) => setModalState({ name, data });
-  const closeModal = () => setModalState({ name: null, data: null });
-
-  // TG Availability state for demoing fallback routing
-  const [tgAvailable, setTgAvailable] = useState(true);
-
-  // Timetable AI states
-  const [timetableGenerated, setTimetableGenerated] = useState(true);
-  const [timetableConflicts, setTimetableConflicts] = useState([]);
-  const [isTimetableConflictResolved, setIsTimetableConflictResolved] = useState(true);
-
-  // Live Agent simulation modal state
+  const [activeModal, setActiveModal] = useState(null);
   const [agentModal, setAgentModal] = useState({
     isOpen: false,
     title: '',
     subtitle: '',
-    agentType: 'attendance',
     steps: [],
     activeStepIndex: 0,
-    isComplete: false
+    isComplete: false,
+    agentType: ''
   });
 
-  // Switch role handler
-  const switchRole = (newRole) => {
-    if (users[newRole]) {
-      setCurrentRole(newRole);
-      localStorage.setItem('oist_role', newRole);
-      addToast(
-        `Switched to ${newRole.toUpperCase()} View`,
-        `Logged in as ${users[newRole].name} (${users[newRole].department || 'Administration'})`,
-        'info'
-      );
-    }
-  };
-
-  // Toast dispatcher
-  const addToast = (title, message, type = 'info') => {
+  const addToast = useCallback((title, message, type = 'info') => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
-    const newToast = { id, title, message, type };
-    setToasts((prev) => [...prev, newToast]);
-
+    const newToast = { id, title, message, type, time: 'Just now' };
+    setToasts((prev) => [newToast, ...prev.slice(0, 4)]);
     setTimeout(() => {
-      removeToast(id);
-    }, 4500);
-  };
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 5000);
+  }, []);
 
-  const removeToast = (id) => {
+  const removeToast = useCallback((id) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-  };
+  }, []);
 
-  // Toggle TG availability
-  const toggleTgAvailability = () => {
-    const nextState = !tgAvailable;
-    setTgAvailable(nextState);
+  const openModal = useCallback((name, data = {}) => {
+    setActiveModal({ name, data });
+  }, []);
 
-    // Also update users.tg
-    setUsers((prev) => ({
-      ...prev,
-      tg: { ...prev.tg, available: nextState }
-    }));
+  const closeModal = useCallback(() => {
+    setActiveModal(null);
+  }, []);
 
-    if (!nextState) {
-      addToast(
-        'TG Status: Marked Unavailable',
-        'Mentor Prof. K. Sen is now on leave. Future student leaves will autonomously route directly to HOD.',
-        'warning'
-      );
-      // Append agent activity
-      logAgentActivity(
-        'Leave Agent',
-        'TG status update: Prof. K. Sen marked unavailable.',
-        'Telemetry confirmed mentor unavailability. Dynamic clearance rules updated to direct HOD route.',
-        'leave'
-      );
-    } else {
-      addToast(
-        'TG Status: Available in Office',
-        'Prof. K. Sen is back. Standard 3-stage clearance pipeline restored.',
-        'success'
-      );
-    }
-  };
-
-  // Log an agent activity
-  const logAgentActivity = (agentName, summary, details, type = 'attendance') => {
-    const newLog = {
-      id: `act-${Date.now()}`,
-      agentName,
-      icon: type === 'attendance' ? 'fact_check' : type === 'leave' ? 'edit_calendar' : type === 'timetable' ? 'schedule' : 'notifications_active',
-      timestamp: 'Just now',
-      type,
-      summary,
-      details
-    };
-    setAgentActivityLogs((prev) => [newLog, ...prev]);
-  };
-
-  // ==========================================================================
-  // WORKFLOW 1: Autonomous Attendance Consideration
-  // ==========================================================================
-
-  // Student submits attendance consideration request
-  const submitAttendanceConsideration = (formData) => {
-    const newReqId = `REQ-ATT-${Date.now().toString().slice(-4)}`;
-    const newReq = {
-      id: newReqId,
-      type: 'attendance_consideration',
-      title: 'Attendance Consideration Request',
-      studentId: currentUser.id,
-      studentName: currentUser.name,
-      rollNo: currentUser.rollNo,
-      department: currentUser.department,
-      semester: currentUser.semester,
-      section: currentUser.section,
-      startDate: formData.startDate || '2025-09-10',
-      endDate: formData.endDate || '2025-09-15',
-      dateRangeLabel: formData.dateRangeLabel || `${formData.startDate} to ${formData.endDate}`,
-      reason: formData.reason || 'Official representation in University Hackathon/Sports event.',
-      supportingDoc: formData.supportingDoc || 'official_od_certificate.pdf',
-      currentAttendance: currentUser.attendance,
-      expectedAttendance: 84,
-      status: 'pending_tg',
-      tgRecommendation: '',
-      appliedAt: 'Just now',
-      affectedClasses: [
-        { subject: 'Data Structures & Algorithms', code: 'CS301', date: '10 Sept', period: 'Period 2' },
-        { subject: 'Database Management Systems', code: 'CS302', date: '11 Sept', period: 'Period 1' },
-        { subject: 'Operating Systems', code: 'CS303', date: '12 Sept', period: 'Period 3' },
-        { subject: 'Computer Networks', code: 'CS304', date: '13 Sept', period: 'Period 2' },
-        { subject: 'Data Structures Lab', code: 'CS306', date: '14 Sept', period: 'Period 4-5' },
-        { subject: 'Software Engineering', code: 'CS305', date: '15 Sept', period: 'Period 1' }
-      ],
-      timeline: [
-        { step: 'Submitted by Student', actor: currentUser.name, time: 'Just now', completed: true },
-        { step: 'TG / Mentor Review', actor: 'Prof. K. Sen', time: 'In Queue', completed: false, active: true },
-        { step: 'HOD Approval & Clearance', actor: 'Dr. S. Roy', time: 'Awaiting TG', completed: false },
-        { step: 'Attendance Agent Execution', actor: 'Autonomous Agent', time: 'Pending', completed: false }
-      ]
-    };
-
-    setAttendanceRequests((prev) => [newReq, ...prev]);
-
-    // Backend API Call
-    requestService.submitAttendanceConsiderationApi(formData).catch(() => {});
-
-    addToast(
-      'Consideration Request Submitted',
-      'Sent to your mentor Prof. K. Sen for verification.',
-      'info'
-    );
-
-    // Notify TG
-    setNotifications((prev) => [
-      notificationService.createNotification(
-        'New Attendance Request from Rahul Sharma',
-        'Review attendance consideration for 10 Sept - 15 Sept.',
-        'tg',
-        'approval'
-      ),
-      ...prev
-    ]);
-  };
-
-  // TG reviews & recommends attendance consideration
-  const tgReviewAttendanceConsideration = (requestId, recommendation) => {
-    // Backend API Call
-    requestService.tgReviewAttendanceConsiderationApi(requestId, recommendation).catch(() => {});
-
-    setAttendanceRequests((prev) =>
-      prev.map((req) => {
-        if (req.id === requestId) {
-          return {
-            ...req,
-            status: 'pending_hod',
-            tgRecommendation: recommendation || 'Verified by Mentor: Genuine institutional participation. Recommended for full attendance credit.',
-            timeline: [
-              { ...req.timeline[0], completed: true },
-              { step: 'TG / Mentor Review', actor: 'Prof. K. Sen (Recommended)', time: 'Just now', completed: true },
-              { step: 'HOD Approval & Clearance', actor: 'Dr. S. Roy', time: 'In Queue', completed: false, active: true },
-              { ...req.timeline[3] }
-            ]
-          };
-        }
-        return req;
-      })
-    );
-
-    addToast(
-      'Verified & Forwarded to HOD',
-      'Request forwarded to Dr. S. Roy with your recommendation note.',
-      'success'
-    );
-
-    // Notify HOD
-    setNotifications((prev) => [
-      notificationService.createNotification(
-        'Attendance Request Forwarded by TG',
-        'Prof. K. Sen recommended attendance consideration for Rahul Sharma (21CSE084).',
-        'hod',
-        'approval'
-      ),
-      ...prev
-    ]);
-  };
-
-  // HOD approves attendance consideration -> LAUNCHES AUTONOMOUS ATTENDANCE AGENT
-  const hodApproveAttendanceConsideration = (requestId) => {
-    const targetReq = attendanceRequests.find((r) => r.id === requestId);
-    if (!targetReq) return;
-
-    // Backend API Call
-    agentService.runAttendanceAgentApi({
-      requestId,
-      studentRoll: targetReq.rollNo,
-      section: targetReq.section,
-      dateRange: targetReq.dateRangeLabel
-    }).catch(() => {});
-
-    const steps = agentService.getAttendanceAgentSteps(
-      targetReq.studentName,
-      targetReq.section,
-      targetReq.dateRangeLabel
-    );
-
-    // Open Agent Modal with streaming progress
+  const openAgentModal = useCallback((config = {}) => {
     setAgentModal({
       isOpen: true,
-      title: 'Autonomous Attendance Agent',
-      subtitle: `Propagating section-wise duty adjustments for ${targetReq.studentName} (${targetReq.section})`,
-      agentType: 'attendance',
-      steps,
+      title: config.title || 'Autonomous Agent Flow',
+      subtitle: config.subtitle || 'Synchronizing department records...',
+      steps: config.steps || [],
       activeStepIndex: 0,
-      isComplete: false
+      isComplete: false,
+      agentType: config.agentType || 'default'
     });
+  }, []);
 
-    // Run step by step simulation
-    steps.forEach((step, index) => {
-      setTimeout(() => {
-        setAgentModal((prev) => ({
-          ...prev,
-          activeStepIndex: index + 1,
-          isComplete: index === steps.length - 1
-        }));
-
-        // When all steps finish
-        if (index === steps.length - 1) {
-          const wasTgPending = targetReq.status === 'pending_tg';
-
-          // 1. Update Request state to completed
-          setAttendanceRequests((prevReqs) =>
-            prevReqs.map((req) => {
-              if (req.id === requestId) {
-                return {
-                  ...req,
-                  status: 'completed',
-                  tgBypassed: wasTgPending,
-                  timeline: [
-                    { ...(req.timeline[0] || { step: 'Consideration Submitted', actor: req.studentName }), completed: true },
-                    wasTgPending
-                      ? { step: 'TG Review (Bypassed by HOD Direct Action)', actor: 'TG Mentor (Bypassed)', time: 'Bypassed', completed: true, warning: true }
-                      : { ...(req.timeline[1] || { step: 'TG Review', actor: 'Prof. K. Sen (Verified)' }), completed: true },
-                    { step: 'HOD Direct Clearance Granted', actor: 'HOD Office (Approved)', time: 'Just now', completed: true },
-                    { step: 'Attendance Agent Execution', actor: 'Attendance Agent (Synced)', time: 'Completed', completed: true }
-                  ]
-                };
-              }
-              return req;
-            })
-          );
-
-          // 2. Update Student attendance in users.student (72% -> 84%)
-          setUsers((prev) => ({
-            ...prev,
-            student: {
-              ...prev.student,
-              attendance: 84
-            }
-          }));
-
-          // 3. Update enrolled students roster (CSE-3A)
-          setStudents((prev) =>
-            prev.map((st) =>
-              st.rollNo === '21CSE084'
-                ? { ...st, attendance: 84, status: 'present', autoUpdated: true }
-                : st
-            )
-          );
-
-          // 4. Update CSE subjects attended counts
-          setSubjects((prev) =>
-            prev.map((sub) => ({
-              ...sub,
-              attended: sub.attended + 1
-            }))
-          );
-
-          // 5. Append Agent Activity Log
-          logAgentActivity(
-            'Attendance Agent',
-            'Propagated Section CSE-3A attendance adjustment for Rahul Sharma.',
-            `HOD approval verified. 6 classes across 5 subjects automatically credited for 10-15 Sept. Recalculated attendance aggregate to 84% (Safe Status).`,
-            'attendance'
-          );
-
-          // 6. Push notifications
-          setNotifications((prev) => [
-            notificationService.createNotification(
-              'Attendance Consideration Approved 🎉',
-              'Attendance Agent updated 6 affected lectures. Overall attendance raised from 72% to 84% (Safe Status).',
-              'student',
-              'success'
-            ),
-            notificationService.createNotification(
-              'Section CSE-3A Attendance Auto-Updated',
-              'Attendance Agent auto-adjusted Rahul Sharma attendance for CS301 (Duty credit granted by HOD). No manual update needed.',
-              'teacher',
-              'attendance'
-            ),
-            ...prev
-          ]);
-
-          addToast(
-            'Autonomous Update Complete!',
-            'Section CSE-3A classes synchronized. Student attendance increased to 84%.',
-            'success'
-          );
-        }
-      }, step.delay);
-    });
-  };
-
-  // HOD rejects attendance consideration
-  const hodRejectAttendanceConsideration = (requestId, reason = 'Rejected by HOD') => {
-    requestService.hodRejectAttendanceConsiderationApi(requestId, reason).catch(() => {});
-    setAttendanceRequests((prevReqs) =>
-      prevReqs.map((req) =>
-        req.id === requestId
-          ? {
-              ...req,
-              status: 'rejected',
-              rejectionReason: reason,
-              timeline: [
-                ...req.timeline.map((t) => ({ ...t, active: false })),
-                { step: 'HOD Rejection', actor: 'HOD Office (Rejected)', time: 'Just now', completed: true }
-              ]
-            }
-          : req
-      )
-    );
-    addToast('Consideration Rejected', 'Attendance consideration was rejected by HOD.', 'info');
-  };
-
-  const closeAgentModal = () => {
+  const closeAgentModal = useCallback(() => {
     setAgentModal((prev) => ({ ...prev, isOpen: false }));
-  };
+  }, []);
 
-  // ==========================================================================
-  // WORKFLOW 2: Student Attendance Query System (Wrong Attendance)
-  // ==========================================================================
+  // 1. Initial Authentication Check via backend /api/auth/me
+  useEffect(() => {
+    let isMounted = true;
 
-  const submitAttendanceQuery = (formData) => {
-    const newQuery = {
-      id: `QRY-ATT-${Date.now().toString().slice(-4)}`,
-      type: 'attendance_query',
-      studentId: currentUser.id,
-      studentName: currentUser.name,
-      rollNo: currentUser.rollNo,
-      section: currentUser.section,
-      subject: formData.subject || 'Data Structures & Algorithms (CS301)',
-      faculty: formData.faculty || 'Dr. Rajesh Verma',
-      date: formData.date || '12 Sept 2025',
-      period: formData.period || 'Period 2 (10:30 AM - 11:30 AM)',
-      currentStatus: 'Absent',
-      expectedStatus: 'Present',
-      reason: formData.reason || 'Attended lecture and submitted practical lab work. Marked absent in roll call.',
-      supportingDoc: formData.supportingDoc || 'screenshot_proof.png',
-      status: 'pending_tg',
-      appliedAt: 'Just now'
-    };
-
-    setAttendanceQueries((prev) => [newQuery, ...prev]);
-
-    // Backend API Call
-    requestService.submitAttendanceQueryApi(formData).catch(() => {});
-
-    addToast(
-      'Attendance Query Submitted',
-      'Your query has been sent to TG Prof. K. Sen and HOD for digital review.',
-      'info'
-    );
-  };
-
-  const tgReviewAttendanceQuery = (queryId) => {
-    setAttendanceQueries((prev) =>
-      prev.map((q) => (q.id === queryId ? { ...q, status: 'pending_hod' } : q))
-    );
-
-    addToast(
-      'Attendance Query Verified by TG',
-      'Forwarded to HOD Dr. S. Roy for final correction approval.',
-      'success'
-    );
-  };
-
-  const hodApproveAttendanceQuery = (queryId) => {
-    const query = attendanceQueries.find((q) => q.id === queryId);
-    if (!query) return;
-
-    const steps = agentService.getAttendanceQuerySteps(
-      query.studentName,
-      query.subject,
-      query.date
-    );
-
-    setAgentModal({
-      isOpen: true,
-      title: 'Attendance Correction Agent',
-      subtitle: `Correcting ledger error: ${query.subject} on ${query.date}`,
-      agentType: 'attendance',
-      steps,
-      activeStepIndex: 0,
-      isComplete: false
-    });
-
-    steps.forEach((step, index) => {
-      setTimeout(() => {
-        setAgentModal((prev) => ({
-          ...prev,
-          activeStepIndex: index + 1,
-          isComplete: index === steps.length - 1
-        }));
-
-        if (index === steps.length - 1) {
-          // Mark query completed
-          setAttendanceQueries((prev) =>
-            prev.map((q) => (q.id === queryId ? { ...q, status: 'completed' } : q))
-          );
-
-          // Increment attended count
-          setUsers((prev) => ({
-            ...prev,
-            student: {
-              ...prev.student,
-              attendance: Math.min(100, prev.student.attendance + 1)
-            }
-          }));
-
-          logAgentActivity(
-            'Attendance Agent',
-            `Corrected absent entry for ${query.studentName}.`,
-            `${query.subject} on ${query.date} modified to Present. Synchronized across student record.`,
-            'attendance'
-          );
-
-          setNotifications((prev) => [
-            notificationService.createNotification(
-              'Attendance Query Resolved',
-              `Your query for ${query.subject} on ${query.date} was approved. Attendance status changed to Present.`,
-              'student',
-              'success'
-            ),
-            ...prev
-          ]);
-
-          addToast(
-            'Attendance Corrected!',
-            `${query.subject} marked Present. No teacher manual edit needed.`,
-            'success'
-          );
+    const verifySession = async () => {
+      const activeToken = apiClient.getToken();
+      if (!activeToken) {
+        if (isMounted) {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          setLoadingAuth(false);
         }
-      }, step.delay);
-    });
-  };
+        return;
+      }
 
-  // ==========================================================================
-  // WORKFLOW 3: Leave Management with TG Fallback
-  // ==========================================================================
+      try {
+        const res = await authApi.getMe();
+        if (isMounted && res?.user) {
+          const user = res.user;
+          // Flatten profile data for convenient consumption in existing components
+          const combinedUser = {
+            ...user,
+            ...(user.studentProfile || {}),
+            ...(user.facultyProfile || {}),
+            id: user.id,
+            role: user.role
+          };
+          // Normalize association objects (section, department) to plain strings
+          if (combinedUser.section && typeof combinedUser.section === 'object') {
+            combinedUser.section = combinedUser.section.name || 'A';
+          }
+          if (combinedUser.department && typeof combinedUser.department === 'object') {
+            combinedUser.department = combinedUser.department.name || 'CSE';
+          }
 
-  const applyLeave = (formData) => {
-    const isDirectToHod = !tgAvailable;
-    const newLeave = {
-      id: `REQ-LV-${Date.now().toString().slice(-4)}`,
-      type: 'leave_request',
-      title: `${formData.leaveType || 'General'} Leave Application`,
-      studentId: currentUser.id,
-      studentName: currentUser.name,
-      rollNo: currentUser.rollNo,
-      section: currentUser.section,
-      leaveType: formData.leaveType || 'Medical',
-      startDate: formData.startDate || '2025-09-28',
-      endDate: formData.endDate || '2025-09-30',
-      dateRangeLabel: formData.dateRangeLabel || `${formData.startDate} – ${formData.endDate}`,
-      reason: formData.reason || 'Medical checkup and prescribed bed rest.',
-      supportingDoc: formData.supportingDoc || 'prescription_slip.pdf',
-      status: isDirectToHod ? 'pending_hod_direct' : 'pending_tg',
-      appliedAt: 'Just now',
-      tgUnavailable: isDirectToHod,
-      timeline: isDirectToHod
-        ? [
-            { step: 'Leave Submitted', actor: currentUser.name, time: 'Just now', completed: true },
-            { step: 'TG Telemetry Check', actor: 'Prof. K. Sen (Unavailable / On Leave)', time: 'Bypassed', completed: true, warning: true },
-            { step: 'HOD Direct Clearance', actor: 'Dr. S. Roy', time: 'In Queue', completed: false, active: true }
-          ]
-        : [
-            { step: 'Leave Submitted', actor: currentUser.name, time: 'Just now', completed: true },
-            { step: 'TG Review', actor: 'Prof. K. Sen', time: 'In Queue', completed: false, active: true },
-            { step: 'HOD Approval', actor: 'Dr. S. Roy', time: 'Awaiting TG', completed: false }
-          ]
+          setCurrentUser(combinedUser);
+          setIsAuthenticated(true);
+          localStorage.setItem('oist_user', JSON.stringify(combinedUser));
+
+          // Set role based on backend user: If teacher is appointed as TG by HOD, route to TG dashboard
+          let normalizedRole = (user.role || '').toLowerCase();
+          const isAppointedTg = Boolean(
+            normalizedRole === 'tg' ||
+            user.isTG ||
+            user.isTg ||
+            combinedUser.isTG ||
+            combinedUser.isTg ||
+            (user.mentorGroups && user.mentorGroups.length > 0) ||
+            (combinedUser.mentorGroups && combinedUser.mentorGroups.length > 0) ||
+            (combinedUser.designation || '').toLowerCase().includes('(tg)') ||
+            (combinedUser.designation || '').toLowerCase().includes('tg')
+          );
+
+          if (normalizedRole === 'faculty') {
+            normalizedRole = 'teacher';
+          }
+          const savedRole = localStorage.getItem('oist_role');
+          if (isAppointedTg && savedRole === 'tg') {
+            normalizedRole = 'tg';
+          }
+          combinedUser.isTG = isAppointedTg;
+          combinedUser.isTg = isAppointedTg;
+          combinedUser.isAppointedTg = isAppointedTg;
+          setCurrentRole(normalizedRole);
+          localStorage.setItem('oist_role', normalizedRole);
+        }
+      } catch (err) {
+        console.warn('[ERPContext] Session verification error:', err.message);
+        if (isMounted) {
+          apiClient.clearSession();
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+        }
+      } finally {
+        if (isMounted) setLoadingAuth(false);
+      }
     };
 
-    setLeaveRequests((prev) => [newLeave, ...prev]);
+    verifySession();
 
-    // Backend API Call
-    leaveService.applyLeaveApi({ ...formData, isTgAvailable: !isDirectToHod }).catch(() => {});
+    // Listen for global auth events dispatched by API client
+    const handleUnauthorized = () => {
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      addToast('Session Expired', 'Your authentication session has expired. Please sign in again.', 'warning');
+    };
 
-    if (isDirectToHod) {
-      addToast(
-        'Direct HOD Routing Activated',
-        'Mentor Prof. K. Sen is marked unavailable. Leave routed directly to HOD to prevent delay.',
-        'warning'
-      );
-      logAgentActivity(
-        'Leave Agent',
-        'Autonomous Fallback Routing triggered.',
-        `Routed leave request for ${currentUser.name} directly to HOD Dr. S. Roy because TG is currently unavailable.`,
-        'leave'
-      );
-    } else {
-      addToast(
-        'Leave Application Submitted',
-        'Sent to mentor Prof. K. Sen for 3-tier clearance.',
-        'info'
-      );
+    const handleForbidden = (e) => {
+      addToast('Access Denied', e.detail?.message || 'You do not have permission to access this resource.', 'error');
+    };
+
+    window.addEventListener('erp:auth:unauthorized', handleUnauthorized);
+    window.addEventListener('erp:auth:forbidden', handleForbidden);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('erp:auth:unauthorized', handleUnauthorized);
+      window.removeEventListener('erp:auth:forbidden', handleForbidden);
+    };
+  }, [addToast]);
+
+  // 2. Fetch Core Relational Data When Authenticated
+  const refreshAllData = useCallback(async () => {
+    if (!apiClient.getToken()) return;
+
+    try {
+      // Parallel fetch from real endpoints
+      const [
+        studentsRes,
+        teachersRes,
+        requestsRes,
+        noticesRes,
+        notificationsRes,
+        subjectsRes,
+        sectionsRes
+      ] = await Promise.allSettled([
+        studentApi.getStudents({ limit: 100 }),
+        teacherApi.getFaculty(),
+        requestApi.getAllRequests(),
+        noticeApi.getNotices(),
+        notificationApi.getNotifications(currentRole),
+        academicApi.getSubjects(),
+        academicApi.getSections()
+      ]);
+
+      if (studentsRes.status === 'fulfilled' && studentsRes.value?.students) {
+        setStudents(studentsRes.value.students);
+      }
+      if (teachersRes.status === 'fulfilled' && teachersRes.value?.faculty) {
+        setTeachers(teachersRes.value.faculty);
+      }
+      if (requestsRes.status === 'fulfilled' && requestsRes.value) {
+        const val = requestsRes.value;
+        const data = val.data || val;
+        const considerations = data.attendanceRequests || data.considerationRequests || [];
+        const queries = data.attendanceQueries || data.correctionRequests || [];
+        const leaves = data.leaveRequests || [];
+        setAttendanceRequests(considerations);
+        setAttendanceQueries(queries);
+        setLeaveRequests(leaves);
+      }
+      if (noticesRes.status === 'fulfilled' && noticesRes.value?.notices) {
+        setNotices(noticesRes.value.notices);
+      }
+      if (notificationsRes.status === 'fulfilled' && notificationsRes.value?.notifications) {
+        setNotifications(notificationsRes.value.notifications);
+      }
+      if (subjectsRes.status === 'fulfilled' && subjectsRes.value?.subjects) {
+        setSubjects(subjectsRes.value.subjects);
+      }
+      if (sectionsRes.status === 'fulfilled' && sectionsRes.value?.sections) {
+        setSections(sectionsRes.value.sections);
+      }
+    } catch (e) {
+      console.warn('[ERPContext] Error syncing live records:', e.message);
+    }
+  }, [currentRole]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshAllData();
+    }
+  }, [isAuthenticated, refreshAllData]);
+
+  // 3. Fetch Role-Specific Dashboard Data
+  const fetchDashboard = useCallback(async () => {
+    if (!apiClient.getToken()) return;
+    setDashboardLoading(true);
+    setDashboardError(null);
+
+    try {
+      let res = null;
+      if (currentRole === 'student') {
+        res = await dashboardApi.getStudentDashboard();
+      } else if (currentRole === 'teacher') {
+        res = await dashboardApi.getTeacherDashboard();
+      } else if (currentRole === 'tg') {
+        res = await dashboardApi.getTgDashboard();
+      } else if (currentRole === 'hod') {
+        res = await dashboardApi.getHodDashboard();
+      } else if (currentRole === 'admin') {
+        res = await dashboardApi.getAdminDashboard();
+      }
+
+      if (res?.data) {
+        setDashboardData(res.data);
+      }
+    } catch (err) {
+      setDashboardError(err.message || 'Unable to load dashboard data. Please try again.');
+    } finally {
+      setDashboardLoading(false);
+    }
+  }, [currentRole]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchDashboard();
+    }
+  }, [isAuthenticated, currentRole, fetchDashboard]);
+
+  // 4. Fetch Section Timetable
+  const refreshTimetable = useCallback(async (year = '3rd Year', semester = 5, section = 'A') => {
+    try {
+      let res;
+      if (currentRole === 'teacher' || currentRole === 'faculty' || currentRole === 'tg') {
+        try {
+          res = await timetableApi.getMyTimetable();
+        } catch {
+          res = await timetableApi.getTimetable({ year, semester, section });
+        }
+      } else {
+        res = await timetableApi.getTimetable({ year, semester, section });
+      }
+
+      let flatSlots = [];
+      if (Array.isArray(res?.slots)) {
+        flatSlots = res.slots;
+      } else if (Array.isArray(res?.timetable)) {
+        flatSlots = res.timetable;
+      } else if (res?.timetable && typeof res.timetable === 'object') {
+        flatSlots = Object.values(res.timetable).flat();
+      }
+
+      const grid = { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [] };
+      flatSlots.forEach((s) => {
+        const day = s.day || s.dayOfWeek;
+        if (grid[day]) {
+          grid[day].push({
+            id: s.id,
+            period: s.period || s.periodNumber,
+            time: s.time || `${s.startTime || s.start_time || ''} - ${s.endTime || s.end_time || ''}`,
+            code: s.code || s.subjectCode || (s.subject ? s.subject.split(' ').map((w) => w[0]).join('').slice(0, 5).toUpperCase() : 'CS'),
+            subject: s.subject || s.subjectName,
+            faculty: s.faculty || s.teacherName,
+            room: s.room || s.roomNumber,
+            type: s.type || (s.isLab ? 'Lab' : 'Lecture'),
+            section: s.section || s.sectionName
+          });
+        }
+      });
+      setTimetable(grid);
+      return grid;
+    } catch (err) {
+      console.warn('[ERPContext] Timetable fetch notice:', err.message);
+      return { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [] };
+    }
+  }, [currentRole]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshTimetable();
+    }
+  }, [isAuthenticated, refreshTimetable]);
+
+  // Login handler with authoritative role verification
+  const login = async ({ email, password, role }) => {
+    const res = await authApi.login({ email, password, role });
+    if (!res || !res.token) {
+      throw new Error(res?.message || 'Login failed. Invalid response from server.');
+    }
+
+    const user = res.user;
+    const combinedUser = {
+      ...user,
+      ...(user.studentProfile || {}),
+      ...(user.facultyProfile || {}),
+      id: user.id,
+      role: user.role
+    };
+    // Normalize association objects (section, department) to plain strings
+    if (combinedUser.section && typeof combinedUser.section === 'object') {
+      combinedUser.section = combinedUser.section.name || 'A';
+    }
+    if (combinedUser.department && typeof combinedUser.department === 'object') {
+      combinedUser.department = combinedUser.department.name || 'CSE';
+    }
+
+    let targetRole = (user.role || 'student').toLowerCase();
+    const isAppointedTg = Boolean(
+      targetRole === 'tg' ||
+      user.isTG ||
+      user.isTg ||
+      combinedUser.isTG ||
+      combinedUser.isTg ||
+      (user.mentorGroups && user.mentorGroups.length > 0) ||
+      (combinedUser.mentorGroups && combinedUser.mentorGroups.length > 0) ||
+      (combinedUser.designation || '').toLowerCase().includes('(tg)') ||
+      (combinedUser.designation || '').toLowerCase().includes('tg')
+    );
+
+    if (targetRole === 'faculty') {
+      targetRole = 'teacher';
+    }
+    if ((targetRole === 'tg' || isAppointedTg) && role === 'tg') {
+      targetRole = 'tg';
+    }
+
+    combinedUser.isTG = isAppointedTg;
+    combinedUser.isTg = isAppointedTg;
+    combinedUser.isAppointedTg = isAppointedTg;
+
+    setToken(res.token);
+    setCurrentUser(combinedUser);
+    setCurrentRole(targetRole);
+    setIsAuthenticated(true);
+
+    localStorage.setItem('oist_user', JSON.stringify(combinedUser));
+    localStorage.setItem('oist_role', targetRole);
+    localStorage.setItem('oist_auth', 'true');
+
+    addToast('Authenticated Successfully', `Welcome to OIST CSE ERP, ${combinedUser.name}!`, 'success');
+    return combinedUser;
+  };
+
+  // Logout handler
+  const logout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // ignore
+    } finally {
+      apiClient.clearSession();
+      setIsAuthenticated(false);
+      setCurrentUser(null);
+      setDashboardData(null);
+      addToast('Logged Out', 'You have been securely signed out of CSE Department ERP.', 'info');
     }
   };
 
-  const tgReviewLeave = (leaveId, approved = true) => {
-    // Backend API Call
-    leaveService.tgReviewLeaveApi(leaveId, approved).catch(() => {});
+  // =========================================================================
+  // Real Backend Mutation Actions
+  // =========================================================================
 
-    setLeaveRequests((prev) =>
-      prev.map((lv) => {
-        if (lv.id === leaveId) {
-          return {
-            ...lv,
-            status: approved ? 'pending_hod' : 'rejected',
-            timeline: [
-              { ...lv.timeline[0], completed: true },
-              { step: 'TG Review', actor: 'Prof. K. Sen (Verified)', time: 'Just now', completed: true },
-              { step: 'HOD Approval', actor: 'Dr. S. Roy', time: 'In Queue', completed: false, active: true }
-            ]
-          };
-        }
-        return lv;
-      })
-    );
-
-    addToast('Leave Verified', 'Forwarded to HOD for final sign-off.', 'success');
+  // Mark Attendance
+  const markAttendance = async (data) => {
+    const res = await attendanceApi.markAttendance(data);
+    addToast('Attendance Recorded', 'Roll call entry saved successfully in database.', 'success');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  const hodApproveLeave = (leaveId, isBypass = false) => {
-    // Backend API Call
-    leaveService.hodApproveLeaveApi(leaveId).catch(() => {});
-
-    let wasTgBypassed = false;
-    setLeaveRequests((prev) =>
-      prev.map((lv) => {
-        if (lv.id === leaveId) {
-          const isPendingTg = lv.status === 'pending_tg' || isBypass;
-          wasTgBypassed = isPendingTg;
-          const newTimeline = isPendingTg
-            ? [
-                { ...(lv.timeline[0] || { step: 'Leave Submitted', actor: lv.studentName }), completed: true },
-                { step: 'TG Review (Bypassed by HOD Direct Action)', actor: 'TG Mentor (Bypassed)', time: 'Bypassed', completed: true, warning: true },
-                { step: 'HOD Direct Clearance Granted', actor: 'HOD Office (Granted)', time: 'Just now', completed: true }
-              ]
-            : lv.timeline.map((item) => ({ ...item, completed: true, active: false }));
-
-          return {
-            ...lv,
-            status: 'completed',
-            tgBypassed: isPendingTg,
-            timeline: newTimeline
-          };
-        }
-        return lv;
-      })
-    );
-
-    logAgentActivity(
-      'Leave Agent',
-      wasTgBypassed ? 'Direct HOD leave consideration applied (TG bypassed).' : 'Leave clearance signed and credited.',
-      `HOD approved leave request #${leaveId}${wasTgBypassed ? ' bypassing TG queue directly' : ''}. Portal records updated.`,
-      'leave'
-    );
-
-    setNotifications((prev) => [
-      notificationService.createNotification(
-        'Leave Approved by HOD',
-        'Your leave application has received administrative clearance from HOD Office.',
-        'student',
-        'success'
-      ),
-      ...prev
-    ]);
-
-    addToast(
-      wasTgBypassed ? 'Leave Directly Considered!' : 'Leave Approved',
-      wasTgBypassed ? 'Bypassed TG queue and granted immediate HOD approval.' : 'Leave cleared for student.',
-      'success'
-    );
+  const bulkMarkAttendance = async (data) => {
+    const res = await attendanceApi.bulkMarkAttendance(data);
+    addToast('Bulk Roll Call Saved', 'Section attendance ledger updated in database.', 'success');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  const hodRejectLeave = (leaveId, reason = 'Rejected by HOD') => {
-    leaveService.hodRejectLeaveApi(leaveId, reason).catch(() => {});
-    setLeaveRequests((prev) =>
-      prev.map((lv) =>
-        lv.id === leaveId
-          ? {
-              ...lv,
-              status: 'rejected',
-              rejectionReason: reason,
-              timeline: [
-                ...lv.timeline.map((t) => ({ ...t, active: false })),
-                { step: 'HOD Rejection', actor: 'HOD Office (Rejected)', time: 'Just now', completed: true }
-              ]
-            }
-          : lv
-      )
-    );
-    addToast('Leave Rejected', 'Leave application was rejected by HOD.', 'info');
+  // Attendance Consideration (Duty/Hackathon)
+  const submitAttendanceConsideration = async (formData) => {
+    const res = await requestApi.submitAttendanceConsideration(formData);
+    addToast('Request Submitted', 'Attendance consideration lodged. Forwarded to mentor for verification.', 'success');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  // ==========================================================================
-  // WORKFLOW 4: AI-Based Timetable Generation & Autonomous Conflict Resolution
-  // ==========================================================================
-
-  const generateTimetableAI = (constraints) => {
-    const steps = agentService.getTimetableAgentSteps();
-
-    // Backend API Call
-    timetableService.analyzeConstraintsApi(constraints).catch(() => {});
-
-    setAgentModal({
-      isOpen: true,
-      title: 'AI Timetable Generator Agent',
-      subtitle: `Synthesizing schedule for Dept. of CSE (Sections CSE-3A & 3B)`,
-      agentType: 'timetable',
-      steps,
-      activeStepIndex: 0,
-      isComplete: false
-    });
-
-    steps.forEach((step, index) => {
-      setTimeout(() => {
-        setAgentModal((prev) => ({
-          ...prev,
-          activeStepIndex: index + 1,
-          isComplete: index === steps.length - 1
-        }));
-
-        if (index === steps.length - 1) {
-          setTimetableGenerated(true);
-          setTimetableConflicts([
-            {
-              id: 'conf-1',
-              title: 'Room Double-Booking Collision',
-              room: 'Room 204',
-              time: 'Wednesday • Period 3 (11:45 AM)',
-              detail: 'CS304 (Prof. Amit K.) & CS402 (Prof. Raman) assigned to Room 204 simultaneously.',
-              severity: 'High'
-            },
-            {
-              id: 'conf-2',
-              title: 'Faculty Workload Continuous Overlap',
-              faculty: 'Dr. Meenakshi S.',
-              time: 'Tuesday • Period 4',
-              detail: '4 consecutive hours allocated without mandatory 30-minute academic break interval.',
-              severity: 'Medium'
-            }
-          ]);
-          setIsTimetableConflictResolved(false);
-
-          logAgentActivity(
-            'Timetable Agent',
-            'Generated draft schedule; 2 conflicts detected.',
-            'Multi-variable constraint engine completed run. Flagged Room 204 collision and faculty workload spike for automated resolution.',
-            'timetable'
-          );
-
-          addToast(
-            'Timetable Generated',
-            'AI schedule matrix built. 2 scheduling conflicts flagged for resolution.',
-            'warning'
-          );
-        }
-      }, step.delay);
-    });
+  const tgReviewAttendanceConsideration = async (id, recommendation) => {
+    const res = await requestApi.tgReviewAttendanceConsideration(id, recommendation);
+    addToast('Recommendation Submitted', 'Attendance request verified by TG; forwarded to HOD for clearance.', 'success');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  const resolveTimetableConflictsAI = () => {
-    const steps = agentService.getTimetableResolutionSteps();
-
-    // Backend API Call
-    timetableService.resolveTimetableApi('CSE-3A').catch(() => {});
-
-    setAgentModal({
-      isOpen: true,
-      title: 'Timetable Autonomous Healing Agent',
-      subtitle: 'Resolving Room 204 collision and balancing faculty workload intervals',
-      agentType: 'timetable',
-      steps,
-      activeStepIndex: 0,
-      isComplete: false
-    });
-
-    steps.forEach((step, index) => {
-      setTimeout(() => {
-        setAgentModal((prev) => ({
-          ...prev,
-          activeStepIndex: index + 1,
-          isComplete: index === steps.length - 1
-        }));
-
-        if (index === steps.length - 1) {
-          setTimetableConflicts([]);
-          setIsTimetableConflictResolved(true);
-
-          logAgentActivity(
-            'Timetable Agent',
-            'Resolved 2 scheduling conflicts autonomously.',
-            'Re-routed CS402 to Smart Classroom 205 and balanced Dr. Meenakshi S. timetable with statutory break. Master grid locked.',
-            'timetable'
-          );
-
-          addToast(
-            'Conflicts Resolved Automagically!',
-            'Zero collisions remaining. Master timetable locked and published.',
-            'success'
-          );
-        }
-      }, step.delay);
-    });
+  const hodApproveAttendanceConsideration = async (id) => {
+    const res = await requestApi.hodApproveAttendanceConsideration(id);
+    addToast('Duty Credit Granted', 'HOD clearance approved. Attendance credit synchronized in database.', 'success');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  // ==========================================================================
-  // TEACHER ATTENDANCE MARKING
-  // ==========================================================================
-
-  const markStudentAttendance = (studentId, status) => {
-    setStudents((prev) =>
-      prev.map((st) => (st.id === studentId ? { ...st, status } : st))
-    );
+  const hodRejectAttendanceConsideration = async (id, reason) => {
+    const res = await requestApi.hodRejectAttendanceConsideration(id, reason);
+    addToast('Request Rejected', 'Attendance consideration request was rejected by HOD.', 'warning');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  const markAllStudentsPresent = () => {
-    setStudents((prev) =>
-      prev.map((st) => ({ ...st, status: 'present' }))
-    );
-    addToast('Roll Call Updated', 'All 10 students marked Present.', 'info');
+  // Attendance Query (Dispute absent record)
+  const submitAttendanceQuery = async (formData) => {
+    const res = await requestApi.submitAttendanceQuery(formData);
+    addToast('Dispute Lodged', 'Attendance query lodged. Forwarded for review.', 'info');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  const submitTeacherAttendanceRollCall = (classDetails) => {
-    const presentCount = students.filter((s) => s.status === 'present').length;
-    addToast(
-      'Attendance Locked & Synchronized',
-      `Locked session for ${classDetails.subject} (${presentCount} Present, ${students.length - presentCount} Absent).`,
-      'success'
-    );
-    logAgentActivity(
-      'Attendance Agent',
-      `Live session locked by Dr. Rajesh Verma for ${classDetails.subject}.`,
-      `Verified digital roster. ${presentCount}/${students.length} students confirmed present. Portal synchronized.`,
-      'attendance'
-    );
+  const tgReviewAttendanceQuery = async (id) => {
+    const res = await requestApi.tgReviewAttendanceQuery(id);
+    addToast('Dispute Verified', 'Attendance query verified by TG; forwarded to HOD.', 'info');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  // ==========================================================================
-  // FLOW 5: HOD Class & Section Management
-  // ==========================================================================
-
-  const addSection = (sectionData) => {
-    const newSecId = `sec-${Date.now().toString().slice(-4)}`;
-    const newSection = {
-      id: newSecId,
-      name: sectionData.name || 'CSE-3C',
-      classId: sectionData.classId || 'cls-1',
-      className: sectionData.className || 'CSE 3rd Year',
-      semester: sectionData.semester || '6th Semester',
-      tgName: sectionData.tgName || 'Prof. K. Sen',
-      room: sectionData.room || 'Room 206',
-      studentsCount: parseInt(sectionData.studentsCount) || 55,
-      subjects: sectionData.subjects || ['Data Structures', 'DBMS', 'Operating Systems']
-    };
-
-    setSections((prev) => [...prev, newSection]);
-
-    setClasses((prev) =>
-      prev.map((c) =>
-        c.id === newSection.classId
-          ? {
-              ...c,
-              sections: [...c.sections, newSection.name],
-              studentsCount: c.studentsCount + newSection.studentsCount
-            }
-          : c
-      )
-    );
-
-    addToast(
-      'New Section Created! 🏫',
-      `Section ${newSection.name} added to ${newSection.className}. Live across roll calls and timetables.`,
-      'success'
-    );
-
-    logAgentActivity(
-      'Department Admin Agent',
-      `New Section ${newSection.name} provisioned for ${newSection.className}.`,
-      `Room ${newSection.room} allocated. TG mentor ${newSection.tgName} assigned. System rosters synchronized.`,
-      'notification'
-    );
+  const hodApproveAttendanceQuery = async (id) => {
+    const res = await requestApi.hodApproveAttendanceQuery(id);
+    addToast('Attendance Corrected', 'Absent record corrected to Present in relational database.', 'success');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  const addClass = (classData) => {
-    const newClass = {
-      id: `cls-${Date.now().toString().slice(-4)}`,
-      name: classData.name,
-      semester: classData.semester || '1st Semester',
-      batch: classData.batch || '2024-2028',
-      department: 'Computer Science & Engineering',
-      sections: classData.sections || ['A'],
-      studentsCount: parseInt(classData.studentsCount) || 60,
-      coordinator: classData.coordinator || 'Faculty Coordinator'
-    };
-    setClasses((prev) => [...prev, newClass]);
-    addToast('New Class Added', `${newClass.name} registered under Dept of CSE.`, 'success');
+  // Leave Requests
+  const applyLeave = async (formData) => {
+    const res = await requestApi.applyLeave(formData);
+    addToast('Leave Applied', res.message || 'Leave application registered in database.', 'info');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  // ==========================================================================
-  // FLOW 4: Coursework & Assignments Management
-  // ==========================================================================
-
-  const createAssignment = (asgData) => {
-    const newAsg = {
-      id: `asg-${Date.now().toString().slice(-4)}`,
-      title: asgData.title || 'Data Structures Lab Problem Set',
-      subject: asgData.subject || 'Data Structures & Algorithms',
-      subjectCode: asgData.subjectCode || 'CS301',
-      faculty: currentUser.name || 'Dr. Rajesh Verma',
-      section: asgData.section || 'CSE-3A',
-      className: asgData.className || 'CSE 3rd Year',
-      dueDate: asgData.dueDate || '2025-10-15',
-      dueDaysLeft: '7 days left',
-      totalMarks: parseInt(asgData.totalMarks) || 20,
-      description: asgData.description || 'Complete programming exercises and upload verified source code archive.',
-      attachmentName: asgData.attachmentName || 'Assignment_ProblemSet.pdf',
-      status: 'active',
-      submissionsCount: 0
-    };
-
-    setAssignments((prev) => [newAsg, ...prev]);
-
-    addToast(
-      'Assignment Published! 📚',
-      `Published "${newAsg.title}" for Section ${newAsg.section}. Due on ${newAsg.dueDate}.`,
-      'success'
-    );
-
-    setNotifications((prev) => [
-      notificationService.createNotification(
-        `New Assignment: ${newAsg.title}`,
-        `Published by ${newAsg.faculty} for ${newAsg.subject}. Deadline: ${newAsg.dueDate}.`,
-        'student',
-        'notice'
-      ),
-      ...prev
-    ]);
-
-    logAgentActivity(
-      'Academic Notice Agent',
-      `Dispatched coursework alert to Section ${newAsg.section}.`,
-      `${newAsg.title} published by ${newAsg.faculty}. Student submission portals activated.`,
-      'notification'
-    );
+  const tgReviewLeave = async (id, approved = true) => {
+    const res = await requestApi.tgReviewLeave(id, approved);
+    addToast(approved ? 'Leave Recommended' : 'Leave Rejected', res.message || 'Leave updated.', approved ? 'info' : 'warning');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  const submitAssignment = (assignmentId, submData) => {
-    const targetAsg = assignments.find((a) => a.id === assignmentId);
-    const newSubm = {
-      id: `subm-${Date.now().toString().slice(-4)}`,
-      assignmentId,
-      assignmentTitle: targetAsg?.title || 'Assignment',
-      studentId: currentUser.id,
-      studentName: currentUser.name,
-      rollNo: currentUser.rollNo,
-      section: currentUser.section,
-      submittedAt: 'Just now',
-      fileName: submData.fileName || 'Solution_Archive.pdf',
-      fileSize: submData.fileSize || '2.1 MB',
-      status: 'submitted',
-      marks: null,
-      totalMarks: targetAsg?.totalMarks || 20,
-      feedback: ''
-    };
-
-    setSubmissions((prev) => [newSubm, ...prev]);
-
-    setAssignments((prev) =>
-      prev.map((a) => (a.id === assignmentId ? { ...a, submissionsCount: a.submissionsCount + 1 } : a))
-    );
-
-    addToast(
-      'Assignment Submitted Successfully! 📄',
-      `Submitted ${newSubm.fileName} for ${newSubm.assignmentTitle}.`,
-      'success'
-    );
-
-    setNotifications((prev) => [
-      notificationService.createNotification(
-        `New Submission from ${currentUser.name}`,
-        `Submitted work for ${targetAsg?.title || 'Assignment'} (${currentUser.section}).`,
-        'teacher',
-        'approval'
-      ),
-      ...prev
-    ]);
+  const hodApproveLeave = async (id) => {
+    const res = await requestApi.hodApproveLeave(id);
+    addToast('Leave Granted', 'Leave officially approved by HOD.', 'success');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  const gradeSubmission = (submId, marks, feedback) => {
-    setSubmissions((prev) =>
-      prev.map((s) =>
-        s.id === submId
-          ? { ...s, marks: parseInt(marks), feedback, status: 'graded' }
-          : s
-      )
-    );
-    addToast('Submission Graded', 'Score and feedback recorded and published to student portal.', 'success');
+  const hodRejectLeave = async (id, reason) => {
+    const res = await requestApi.hodRejectLeave(id, reason);
+    addToast('Leave Rejected', 'Leave application was rejected by HOD.', 'warning');
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  // ==========================================================================
-  // FLOW 7: Notice Broadcast Agent
-  // ==========================================================================
-
-  const sendNotice = (noticeData) => {
-    const newNotice = {
-      id: `not-${Date.now().toString().slice(-4)}`,
-      title: noticeData.title,
-      content: noticeData.content,
-      authorRole: currentUser.role === 'hod' ? 'HOD Office' : currentUser.role === 'teacher' ? 'Faculty' : 'TG / Mentor',
-      authorName: currentUser.name,
-      targetType: noticeData.targetType || 'Section',
-      targetValue: noticeData.targetValue || 'CSE-3A',
-      date: 'Just now',
-      priority: noticeData.priority || 'normal',
-      pinned: !!noticeData.pinned
-    };
-
-    setNotices((prev) => [newNotice, ...prev]);
-
-    setNotifications((prev) => [
-      notificationService.createNotification(
-        `Notice: ${newNotice.title}`,
-        newNotice.content.slice(0, 95) + '...',
-        'student',
-        newNotice.priority === 'urgent' ? 'alert' : 'notice'
-      ),
-      ...prev
-    ]);
-
-    addToast(
-      'Notice Broadcast Sent! 📢',
-      `Delivered to ${newNotice.targetType}: ${newNotice.targetValue}. All enrolled students notified.`,
-      'success'
-    );
-
-    logAgentActivity(
-      'Notice Agent',
-      `Autonomous circular broadcast to ${newNotice.targetType} [${newNotice.targetValue}].`,
-      `Notice "${newNotice.title}" published by ${newNotice.authorName}. Distributed to student portals and alert feeds.`,
-      'notification'
-    );
+  // Timetable AI Actions
+  const generateTimetableAI = async (params) => {
+    addToast('AI Scheduler Active', 'Generating deterministic collision-free timetable...', 'info');
+    const res = await timetableApi.generateTimetable(params);
+    addToast('Timetable Generated', `Version v${res?.version || 1} generated successfully.`, 'success');
+    refreshTimetable(params.year, params.semester, params.section);
+    refreshAllData();
+    fetchDashboard();
+    return res;
   };
 
-  // ==========================================================================
-  // Online Tests, Feedback, and Lecture Scheduling
-  // ==========================================================================
-
-  const createTest = (testData) => {
-    const newTest = {
-      id: `tst-${Date.now().toString().slice(-4)}`,
-      title: testData.title,
-      subject: testData.subject || 'Data Structures',
-      subjectCode: testData.subjectCode || 'CS301',
-      section: testData.section || 'CSE-3A',
-      duration: `${testData.duration || 30} mins`,
-      totalQuestions: parseInt(testData.totalQuestions) || 15,
-      totalMarks: parseInt(testData.totalMarks) || 30,
-      status: 'Upcoming',
-      averageScore: null,
-      submissionCount: 0,
-      date: testData.date || 'Tomorrow'
-    };
-    setTests((prev) => [newTest, ...prev]);
-    addToast('Online Test Created', `${newTest.title} scheduled for ${newTest.section}.`, 'success');
+  const approveTimetable = async (id) => {
+    const res = await timetableApi.approveTimetable(id);
+    addToast('Timetable Approved', 'Timetable version approved by HOD.', 'success');
+    refreshTimetable();
+    fetchDashboard();
+    return res;
   };
 
-  const createFeedback = (fbData) => {
-    const newFb = {
-      id: `fb-${Date.now().toString().slice(-4)}`,
-      studentRoll: fbData.studentRoll || '21CSE084',
-      studentName: fbData.studentName || 'Rahul Sharma',
-      teacherName: currentUser.name || 'Dr. Rajesh Verma',
-      category: fbData.category || 'Academic',
-      feedback: fbData.feedback,
-      date: 'Today'
-    };
-    setFeedbackList((prev) => [newFb, ...prev]);
-    addToast('Student Feedback Recorded', `Logged ${newFb.category} feedback for ${newFb.studentName}.`, 'success');
+  const publishTimetable = async (id) => {
+    const res = await timetableApi.publishTimetable(id);
+    addToast('Timetable Published', 'Timetable officially published and broadcasted to department!', 'success');
+    refreshTimetable();
+    fetchDashboard();
+    return res;
   };
 
-  const scheduleLecture = (lectureData) => {
-    addToast(
-      'Lecture Scheduled',
-      `${lectureData.subject} (${lectureData.section}) confirmed for ${lectureData.day || 'Today'} in ${lectureData.room || 'Room 204'}.`,
-      'success'
-    );
-    logAgentActivity(
-      'Timetable Agent',
-      `Class session scheduled for ${lectureData.subject} (${lectureData.section}).`,
-      `Room ${lectureData.room} verified free. Synchronized to student timetable grids.`,
-      'timetable'
-    );
+  // Notices
+  const broadcastNotice = async (noticeData) => {
+    const res = await noticeApi.createNotice(noticeData);
+    addToast('Notice Broadcasted', 'New department notice broadcasted across portals.', 'success');
+    refreshAllData();
+    return res;
   };
 
-  const markNotificationRead = (notifId) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === notifId ? { ...n, read: true } : n))
-    );
+  const deleteNotice = async (id) => {
+    try {
+      await noticeApi.deleteNotice(id);
+      setNotices((prev) => (Array.isArray(prev) ? prev.filter((n) => n.id !== id) : []));
+      addToast('Circular Deleted', 'Notice circular has been permanently removed.', 'info');
+      refreshAllData();
+      return true;
+    } catch (err) {
+      addToast('Delete Failed', err.message || 'Could not delete notice circular.', 'error');
+      throw err;
+    }
   };
 
-  const clearAllNotifications = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    addToast('Notifications Cleared', 'All notices marked as read.', 'info');
+  // Notifications
+  const markNotificationRead = async (id) => {
+    await notificationApi.markRead(id);
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
   };
 
-  return (
-    <ERPContext.Provider
-      value={{
-        isAuthenticated,
-        login,
-        logout,
-        currentRole,
-        switchRole,
-        currentUser,
-        users,
-        students,
-        subjects,
-        classes,
-        sections,
-        assignments,
-        submissions,
-        notices,
-        tests,
-        feedbackList,
-        attendanceRequests,
-        attendanceQueries,
-        leaveRequests,
-        timetable,
-        agentActivityLogs,
-        notifications,
-        markNotificationRead,
-        clearAllNotifications,
-        toasts,
-        addToast,
-        removeToast,
-        tgAvailable,
-        toggleTgAvailability,
-        agentModal,
-        closeAgentModal,
-        // Interactive modal state
-        modalState,
-        openModal,
-        closeModal,
-        // Workflow actions
-        submitAttendanceConsideration,
-        tgReviewAttendanceConsideration,
-        hodApproveAttendanceConsideration,
-        hodRejectAttendanceConsideration,
-        submitAttendanceQuery,
-        tgReviewAttendanceQuery,
-        hodApproveAttendanceQuery,
-        applyLeave,
-        tgReviewLeave,
-        hodApproveLeave,
-        hodRejectLeave,
-        // Timetable actions
-        timetableGenerated,
-        timetableConflicts,
-        isTimetableConflictResolved,
-        generateTimetableAI,
-        resolveTimetableConflictsAI,
-        // Teacher actions
-        markStudentAttendance,
-        markAllStudentsPresent,
-        submitTeacherAttendanceRollCall,
-        // New management actions
-        addSection,
-        addClass,
-        createAssignment,
-        submitAssignment,
-        gradeSubmission,
-        sendNotice,
-        createTest,
-        createFeedback,
-        scheduleLecture
-      }}
-    >
-      {children}
-    </ERPContext.Provider>
-  );
+  const clearAllNotifications = async () => {
+    await notificationApi.clearAll(currentRole);
+    setNotifications([]);
+    addToast('Notifications Cleared', 'All alerts cleared.', 'info');
+  };
+
+  // Safe fallback mock-free state for components
+  const contextValue = {
+    // Auth & Identity
+    isAuthenticated,
+    loadingAuth,
+    currentUser: currentUser || {
+      name: 'User',
+      email: '',
+      role: currentRole,
+      department: 'Computer Science & Engineering'
+    },
+    currentRole,
+    users: {
+      student: currentRole === 'student' ? currentUser : null,
+      teacher: currentRole === 'teacher' ? currentUser : null,
+      tg: currentRole === 'tg' ? currentUser : null,
+      hod: currentRole === 'hod' ? currentUser : null,
+      admin: currentRole === 'admin' ? currentUser : null
+    },
+    login,
+    logout,
+
+    // Real Entities
+    students,
+    teachers,
+    subjects,
+    sections,
+    academicHierarchy,
+    timetable,
+    timetableConflicts: [],
+    attendanceRequests,
+    attendanceQueries,
+    leaveRequests,
+    notices,
+    notifications,
+
+    // Empty initial arrays for assignments, submissions, tests (ready for real backends)
+    assignments: [],
+    submissions: [],
+    tests: [],
+    feedbackList: [],
+    classes: [],
+
+    // Dashboard
+    dashboardData,
+    dashboardLoading,
+    dashboardError,
+    fetchDashboard,
+    refreshAllData,
+    refreshTimetable,
+
+    // Actions
+    markAttendance,
+    bulkMarkAttendance,
+    submitAttendanceConsideration,
+    tgReviewAttendanceConsideration,
+    hodApproveAttendanceConsideration,
+    hodRejectAttendanceConsideration,
+    submitAttendanceQuery,
+    tgReviewAttendanceQuery,
+    hodApproveAttendanceQuery,
+    applyLeave,
+    tgReviewLeave,
+    hodApproveLeave,
+    hodRejectLeave,
+    generateTimetableAI,
+    approveTimetable,
+    publishTimetable,
+    broadcastNotice,
+    deleteNotice,
+    markNotificationRead,
+    clearAllNotifications,
+
+    // UI Feedback
+    toasts,
+    addToast,
+    removeToast,
+    openModal,
+    closeModal,
+    activeModal,
+    modalState: activeModal,
+    agentModal,
+    openAgentModal,
+    closeAgentModal
+  };
+
+  return <ERPContext.Provider value={contextValue}>{children}</ERPContext.Provider>;
 }
 
 export function useERP() {

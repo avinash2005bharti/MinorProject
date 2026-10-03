@@ -1,530 +1,435 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import AttendanceProgress from '../../components/AttendanceProgress';
-import DocumentUploader from '../../components/common/DocumentUploader';
+import { attendanceApi } from '../../api/attendanceApi';
+import { requestApi } from '../../api/requestApi';
 import {
   Calendar,
   Clock,
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  FileQuestion,
   Sparkles,
-  PlusCircle,
   FileText,
   Upload,
   ArrowRight,
   ShieldCheck,
+  RefreshCw,
+  AlertCircle,
+  HelpCircle,
   X
 } from 'lucide-react';
 
 export default function StudentAttendance() {
-  const { currentUser, subjects, submitAttendanceConsideration, submitAttendanceQuery, openModal } = useERP();
+  const { currentUser, addToast } = useERP();
+
+  const [stats, setStats] = useState(null);
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Modals state
   const [considerationModalOpen, setConsiderationModalOpen] = useState(false);
   const [queryModalOpen, setQueryModalOpen] = useState(false);
-  const [selectedClassForQuery, setSelectedClassForQuery] = useState(null);
+  const [selectedSession, setSelectedSession] = useState(null);
 
-  // Consideration form
-  const [startDate, setStartDate] = useState('2025-09-10');
-  const [endDate, setEndDate] = useState('2025-09-15');
-  const [reason, setReason] = useState('Official representation in National Inter-College Hackathon (Team OIST)');
-  const [supportingDoc, setSupportingDoc] = useState('SIH_Duty_Verification_Signed.pdf');
-  const [description, setDescription] = useState('Participated in Grand Finale from 10 Sept to 15 Sept under Dr. Rajesh Verma guidance. Verified by Sports/Academic cell.');
+  // Consideration Form
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [title, setTitle] = useState('Official Duty / Event Representation');
+  const [reason, setReason] = useState('Smart India Hackathon Finalist representation.');
+  const [submittingConsideration, setSubmittingConsideration] = useState(false);
 
-  // Query form
-  const [queryReason, setQueryReason] = useState('Marked absent even though I attended the lecture and committed my lab practical assignment on Git.');
-  const [queryDoc, setQueryDoc] = useState('github_commit_and_notes.png');
+  // Query Form
+  const [queryReason, setQueryReason] = useState('');
+  const [submittingQuery, setSubmittingQuery] = useState(false);
 
-  // Handle submit consideration
-  const handleConsiderationSubmit = (e) => {
-    e.preventDefault();
-    submitAttendanceConsideration({
-      startDate,
-      endDate,
-      dateRangeLabel: `${startDate} to ${endDate}`,
-      reason,
-      supportingDoc,
-      description
-    });
-    setConsiderationModalOpen(false);
+  const fetchAttendanceData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await attendanceApi.getStudentStats();
+      if (res) {
+        setStats(res);
+        setSessions(res.sessions || res.records || res.history || []);
+      }
+    } catch (err) {
+      setError(err.message || 'Unable to load attendance records from database.');
+    } finally {
+      setLoading(false);
+    }
   };
-
-  // Handle open query modal
-  const handleOpenQueryModal = (classItem) => {
-    setSelectedClassForQuery(classItem);
-    setQueryModalOpen(true);
-  };
-
-  // Handle submit query
-  const handleQuerySubmit = (e) => {
-    e.preventDefault();
-    submitAttendanceQuery({
-      subject: selectedClassForQuery?.subject || 'Data Structures & Algorithms',
-      date: selectedClassForQuery?.date || '12 Sept 2025',
-      period: selectedClassForQuery?.period || 'Period 2',
-      reason: queryReason,
-      supportingDoc: queryDoc
-    });
-    setQueryModalOpen(false);
-  };
-
-  // Synchronized class sessions ledger for student section
-  const [sessionsList, setSessionsList] = useState([]);
 
   useEffect(() => {
-    attendanceService.fetchStudentAttendance(currentUser?.id).then((res) => {
-      if (res && Array.isArray(res.sessions)) {
-        setSessionsList(res.sessions);
-      }
-    }).catch(() => {});
-  }, [currentUser?.id]);
+    fetchAttendanceData();
+  }, []);
 
-  const classSessions = sessionsList.length > 0 ? sessionsList : [
-    { id: 'sess-1', date: '12 Sept 2025', subject: 'Data Structures & Algorithms', code: 'CS301', period: 'Period 2 (10:30 AM - 11:30 AM)', faculty: 'Dr. Rajesh Verma', status: 'absent', queryEligible: true },
-    { id: 'sess-2', date: '11 Sept 2025', subject: 'Database Management Systems', code: 'CS302', period: 'Period 1 (09:00 AM - 10:00 AM)', faculty: 'Prof. Anita Sharma', status: (currentUser?.attendance || 72) >= 80 ? 'present' : 'absent', autoUpdated: (currentUser?.attendance || 72) >= 80 },
-    { id: 'sess-3', date: '10 Sept 2025', subject: 'Operating Systems', code: 'CS303', period: 'Period 3 (11:15 AM - 12:15 PM)', faculty: 'Dr. Meenakshi S.', status: (currentUser?.attendance || 72) >= 80 ? 'present' : 'absent', autoUpdated: (currentUser?.attendance || 72) >= 80 },
-    { id: 'sess-4', date: '09 Sept 2025', subject: 'Computer Networks', code: 'CS304', period: 'Period 2 (10:00 AM - 11:00 AM)', faculty: 'Prof. Amit K.', status: 'present' },
-    { id: 'sess-5', date: '08 Sept 2025', subject: 'Software Engineering', code: 'CS305', period: 'Period 1 (09:00 AM - 10:00 AM)', faculty: 'Prof. K. Sen', status: 'present' }
-  ];
+  const percentage = stats?.percentage !== undefined ? stats.percentage : (stats?.overallPercentage || 0);
+  const totalClasses = stats?.totalClasses || stats?.total || 0;
+  const attendedClasses = stats?.attendedClasses || stats?.attended || 0;
+
+  const handleConsiderationSubmit = async (e) => {
+    e.preventDefault();
+    setSubmittingConsideration(true);
+    try {
+      await requestApi.submitAttendanceConsideration({
+        title,
+        startDate,
+        endDate,
+        dateRangeLabel: `${startDate} to ${endDate}`,
+        reason
+      });
+      addToast('Consideration Submitted', 'Forwarded to your Mentor / TG for review.', 'success');
+      setConsiderationModalOpen(false);
+      fetchAttendanceData();
+    } catch (err) {
+      addToast('Submission Failed', err.message || 'Error lodging consideration.', 'error');
+    } finally {
+      setSubmittingConsideration(false);
+    }
+  };
+
+  const handleQuerySubmit = async (e) => {
+    e.preventDefault();
+    if (!queryReason.trim()) {
+      addToast('Reason Required', 'Please provide a reason for the attendance dispute.', 'warning');
+      return;
+    }
+    setSubmittingQuery(true);
+    try {
+      await requestApi.submitAttendanceQuery({
+        subjectId: selectedSession?.subjectId || selectedSession?.subject?.id || null,
+        subject: selectedSession?.subject?.name || selectedSession?.subject || 'Lecture',
+        date: selectedSession?.date || new Date().toISOString().split('T')[0],
+        period: selectedSession?.period ? `Period ${selectedSession.period}` : 'Class Period',
+        reason: queryReason
+      });
+      addToast('Dispute Lodged', 'Attendance query forwarded to mentor & HOD for correction approval.', 'success');
+      setQueryModalOpen(false);
+      setQueryReason('');
+      fetchAttendanceData();
+    } catch (err) {
+      addToast('Dispute Failed', err.message || 'Error submitting query.', 'error');
+    } finally {
+      setSubmittingQuery(false);
+    }
+  };
 
   return (
     <div className="page-wrapper">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {/* Header with Title and "Request Consideration" Button */}
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-              My Attendance & Audit
+              My Attendance & Academic Standing
             </h1>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Real-time synchronization across Section {currentUser.section}
+              Relational attendance records for {currentUser.name} (Section {currentUser.section || 'A'})
             </p>
           </div>
 
-          <button
-            onClick={() => openModal('requestConsideration')}
-            className="btn btn-primary"
-            style={{ borderRadius: 'var(--radius-full)', padding: '0.65rem 1.25rem' }}
-            id="btn-attendance-request-od"
-          >
-            <Sparkles size={16} />
-            <span>Request Consideration (OD)</span>
-          </button>
-        </div>
-
-        {/* Hero Attendance Gauge Card */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div
-                style={{
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: 'var(--radius-xl)',
-                  backgroundColor: 'var(--primary-container)',
-                  color: 'var(--primary)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                <ShieldCheck size={20} />
-              </div>
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Aggregate Attendance Standing
-                </h3>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  Semester 6 • Total Classes Held: 109
-                </span>
-              </div>
-            </div>
-
-            {currentUser.attendance >= 75 ? (
-              <span className="badge badge-emerald">Eligible for End-Sem Exams</span>
-            ) : (
-              <span className="badge badge-rose">Shortage Alert (Action Needed)</span>
-            )}
-          </div>
-
-          <AttendanceProgress percentage={currentUser.attendance} />
-
-          {/* Banner explaining auto-sync if updated */}
-          {currentUser.attendance >= 80 && (
-            <div
-              style={{
-                backgroundColor: 'var(--secondary-container)',
-                padding: '0.75rem 1rem',
-                borderRadius: 'var(--radius-xl)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.65rem',
-                fontSize: '12px',
-                color: 'var(--on-secondary-container)'
-              }}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <button
+              onClick={() => setConsiderationModalOpen(true)}
+              className="btn btn-primary"
+              style={{ borderRadius: 'var(--radius-full)', padding: '0.65rem 1.25rem' }}
+              id="btn-attendance-request-od"
             >
-              <Sparkles size={16} style={{ flexShrink: 0 }} />
-              <div>
-                <strong>Autonomous Attendance Agent Applied Credit:</strong> 6 lectures for 10-15 Sept were credited following HOD approval. Attendance recalculated from 72% → {currentUser.attendance}%.
-              </div>
-            </div>
-          )}
-        </div>
+              <Sparkles size={16} />
+              <span>Request Consideration (OD)</span>
+            </button>
 
-        {/* Subject-Wise Attendance Breakdown */}
-        <div>
-          <h2 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
-            Subject-Wise Attendance Breakdown
-          </h2>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(1, 1fr)', gap: '0.75rem' }} className="sm:grid-cols-2 lg:grid-cols-3">
-            {subjects.map((sub) => {
-              const pct = Math.round((sub.attended / sub.totalHeld) * 100);
-              return (
-                <div key={sub.id} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
-                    <div>
-                      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', letterSpacing: '0.04em' }}>
-                        {sub.code}
-                      </span>
-                      <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px' }}>
-                        {sub.name}
-                      </h4>
-                      <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{sub.faculty}</span>
-                    </div>
-
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-heading)',
-                        fontSize: '18px',
-                        fontWeight: 800,
-                        color: pct >= 75 ? 'var(--secondary)' : 'var(--error)'
-                      }}
-                    >
-                      {pct}%
-                    </span>
-                  </div>
-
-                  <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--surface-high)', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
-                    <div
-                      style={{
-                        width: `${pct}%`,
-                        height: '100%',
-                        backgroundColor: pct >= 75 ? 'var(--secondary)' : 'var(--error)',
-                        borderRadius: 'var(--radius-full)'
-                      }}
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                    <span>Attended: {sub.attended} / {sub.totalHeld}</span>
-                    <span>{pct >= 75 ? 'Safe' : 'Shortage'}</span>
-                  </div>
-                </div>
-              );
-            })}
+            <button
+              onClick={fetchAttendanceData}
+              disabled={loading}
+              className="btn btn-outline text-xs py-2 px-3 flex items-center gap-1.5"
+            >
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              <span>Refresh</span>
+            </button>
           </div>
         </div>
 
-        {/* Daily Class Sessions Log (With "Raise Query" Trigger) */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                Recent Class Sessions & Roll Calls
-              </h3>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                Marked absent by mistake? Raise a digital attendance query directly below.
-              </p>
-            </div>
-            <span className="badge badge-slate">{classSessions.length} sessions logged</span>
+        {/* Loading / Error states */}
+        {loading && (
+          <div className="p-8 text-center text-slate-500 card flex flex-col items-center justify-center gap-2">
+            <div className="spinner-border text-primary" role="status" style={{ width: '2rem', height: '2rem' }} />
+            <span className="text-xs font-semibold">Loading Attendance Records from Database...</span>
           </div>
+        )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {classSessions.map((session) => (
-              <div
-                key={session.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '0.75rem',
-                  backgroundColor: 'var(--surface-low)',
-                  borderRadius: 'var(--radius-xl)',
-                  gap: '0.75rem',
-                  flexWrap: 'wrap'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '220px', flex: 1 }}>
+        {error && (
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={18} className="text-rose-600 shrink-0" />
+              <span>{error}</span>
+            </div>
+            <button onClick={fetchAttendanceData} className="btn btn-sm btn-primary text-xs">
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && (
+          <>
+            {/* Hero Attendance Gauge Card */}
+            <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <div
                     style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: 'var(--radius-lg)',
-                      backgroundColor: session.status === 'present' ? 'var(--secondary-container)' : 'var(--error-container)',
-                      color: session.status === 'present' ? 'var(--on-secondary-container)' : 'var(--on-error-container)',
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: 'var(--radius-xl)',
+                      backgroundColor: 'var(--primary-container)',
+                      color: 'var(--primary)',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0
+                      justifyContent: 'center'
                     }}
                   >
-                    {session.status === 'present' ? <CheckCircle2 size={18} /> : <XCircle size={18} />}
+                    <ShieldCheck size={20} />
                   </div>
-
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                        {session.subject}
-                      </h4>
-                      {session.autoUpdated && (
-                        <span className="badge badge-indigo" style={{ fontSize: '10px' }}>
-                          Auto-Credited by Agent
-                        </span>
-                      )}
-                    </div>
-                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'block' }}>
-                      {session.date} • {session.period} • {session.faculty}
+                  <div>
+                    <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                      Aggregate Attendance Standing
+                    </h3>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                      Total Sessions Recorded: {totalClasses} • Present: {attendedClasses}
                     </span>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span className={`badge ${session.status === 'present' ? 'badge-emerald' : 'badge-rose'}`}>
-                    {session.status === 'present' ? 'Present' : 'Absent'}
-                  </span>
+                <span className={`badge ${percentage >= 75 ? 'badge-emerald' : 'badge-rose'}`}>
+                  {percentage >= 75 ? 'Examination Eligible' : 'Shortage Alert'}
+                </span>
+              </div>
 
-                  {session.status === 'absent' && (
-                    <button
-                      onClick={() => handleOpenQueryModal(session)}
-                      className="btn btn-sm btn-primary"
-                      style={{ fontSize: '11px', padding: '0.3rem 0.65rem' }}
-                    >
-                      <FileQuestion size={13} />
-                      <span>Raise Attendance Query</span>
-                    </button>
-                  )}
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+                <span style={{ fontSize: '36px', fontWeight: 800, color: percentage >= 75 ? '#059669' : '#E11D48' }}>
+                  {percentage}%
+                </span>
+                <span style={{ fontSize: '12px', color: '#64748B' }}>
+                  (Statutory minimum threshold: 75%)
+                </span>
+              </div>
+
+              <AttendanceProgress percentage={percentage} showDetails={false} />
+            </div>
+
+            {/* Subject-Wise Attendance Breakdown */}
+            {stats?.subjectWise && stats.subjectWise.length > 0 && (
+              <div className="card">
+                <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
+                  Subject-Wise Attendance Ledger
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                  {stats.subjectWise.map((sub, idx) => (
+                    <div key={idx} className="p-3.5 rounded-xl border border-slate-200 bg-white flex flex-col gap-1.5 shadow-xs">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-slate-900 truncate" title={sub.subjectName}>
+                          {sub.subjectName || sub.subjectCode}
+                        </span>
+                        <span className={`font-bold ${sub.percentage >= 75 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {sub.percentage}%
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        Attended: {sub.present} / {sub.total} classes
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
+            )}
+
+            {/* Recent Recorded Sessions Ledger */}
+            <div className="card">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Calendar size={16} className="text-blue-600" />
+                  <h3 className="text-sm font-bold text-slate-900">Recorded Sessions History</h3>
+                </div>
+                <span className="badge badge-slate text-xs">{sessions.length} Recorded Entries</span>
+              </div>
+
+              {sessions.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 text-xs bg-slate-50 rounded-xl">
+                  No attendance records found.
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table" style={{ width: '100%', fontSize: '12px' }}>
+                    <thead>
+                      <tr className="text-slate-500 text-left border-b border-slate-200">
+                        <th className="pb-2 font-bold">Date</th>
+                        <th className="pb-2 font-bold">Subject</th>
+                        <th className="pb-2 font-bold">Period / Slot</th>
+                        <th className="pb-2 font-bold">Status</th>
+                        <th className="pb-2 font-bold text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sessions.map((sess, idx) => {
+                        const isAbsent = (sess.status || '').toLowerCase() === 'absent';
+                        return (
+                          <tr key={sess.id || idx} className="hover:bg-slate-50/50">
+                            <td className="py-2.5 text-slate-800 font-semibold">{sess.date}</td>
+                            <td className="py-2.5 font-bold text-slate-900">
+                              {sess.subject?.name || sess.subject || 'Lecture'}
+                            </td>
+                            <td className="py-2.5 text-slate-500">
+                              {sess.period ? `Period ${sess.period}` : 'Regular Slot'}
+                            </td>
+                            <td className="py-2.5">
+                              <span className={`badge ${!isAbsent ? 'badge-emerald' : 'badge-rose'} text-[10px]`}>
+                                {sess.status}
+                              </span>
+                            </td>
+                            <td className="py-2.5 text-right">
+                              {isAbsent && (
+                                <button
+                                  onClick={() => {
+                                    setSelectedSession(sess);
+                                    setQueryModalOpen(true);
+                                  }}
+                                  className="btn btn-sm btn-outline text-xs py-0.5 px-2 text-rose-600 border-rose-200 hover:bg-rose-50"
+                                >
+                                  Dispute Query
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
-      {/* ======================================================================
-          MODAL 1: Request Attendance Consideration (OD / Sports / Hackathon)
-          ====================================================================== */}
+      {/* Consideration (Duty) Modal */}
       {considerationModalOpen && (
-        <div className="modal-backdrop">
-          <div className="modal-content">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '520px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: 'var(--radius-lg)',
-                    backgroundColor: 'var(--primary-container)',
-                    color: 'var(--primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <Sparkles size={20} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Request Attendance Consideration
-                  </h3>
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    For Hackathons, On-Duty Sports, and Institutional Duties
-                  </p>
-                </div>
+                <Sparkles size={20} className="text-blue-600" />
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  Request Attendance Consideration (OD)
+                </h3>
               </div>
-
-              <button onClick={() => setConsiderationModalOpen(false)} style={{ color: 'var(--text-muted)' }}>
-                <X size={20} />
+              <button onClick={() => setConsiderationModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleConsiderationSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-                <div className="form-group">
-                  <label className="form-label">Start Date</label>
-                  <input
-                    type="date"
-                    className="input-field"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">End Date</label>
-                  <input
-                    type="date"
-                    className="input-field"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Reason for Consideration</label>
+            <form onSubmit={handleConsiderationSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Title / Event Name *</label>
                 <input
                   type="text"
+                  required
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
                   className="input-field"
+                  placeholder="e.g. Smart India Hackathon Finalist"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Start Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>End Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Detailed Reason *</label>
+                <textarea
+                  required
+                  rows={3}
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="e.g. Smart India Hackathon participation"
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Description & Event Details</label>
-                <textarea
                   className="input-field"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  required
+                  placeholder="Explain event participation and institutional representation..."
                 />
               </div>
 
-              <div className="form-group">
-                <DocumentUploader
-                  label="Supporting Document (OD Certificate / Invitation)"
-                  hint="Attach official OD approval or hackathon invitation"
-                  selectedFileName={supportingDoc}
-                  onFileSelect={(fileInfo) => setSupportingDoc(fileInfo.name)}
-                  onFileRemove={() => setSupportingDoc('')}
-                />
-              </div>
-
-              {/* Simulation projection box */}
-              <div style={{ backgroundColor: 'var(--primary-container)', padding: '0.85rem', borderRadius: 'var(--radius-xl)', fontSize: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                  <span style={{ fontWeight: 600, color: 'var(--primary)' }}>Projected Attendance Impact</span>
-                  <span className="badge badge-emerald">Safe Status</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-                  <span style={{ color: 'var(--text-secondary)' }}>Current: 72%</span>
-                  <ArrowRight size={12} color="var(--primary)" />
-                  <span style={{ fontWeight: 700, color: 'var(--secondary)' }}>Projected: 84% after HOD approval</span>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setConsiderationModalOpen(false)}
-                  className="btn btn-secondary"
-                  style={{ flex: 1 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{ flex: 1 }}
-                >
-                  Submit to Mentor (TG)
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={submittingConsideration}
+                className="btn btn-primary"
+                style={{ width: '100%', padding: '0.75rem', fontWeight: 700 }}
+              >
+                {submittingConsideration ? 'Submitting to Mentor...' : 'Submit Consideration Request'}
+              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* ======================================================================
-          MODAL 2: Student Attendance Query Modal (Wrong Attendance)
-          ====================================================================== */}
+      {/* Query Dispute Modal */}
       {queryModalOpen && (
-        <div className="modal-backdrop">
-          <div className="modal-content">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '1rem' }}>
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '16px', padding: '2rem', width: '100%', maxWidth: '460px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: 'var(--radius-lg)',
-                    backgroundColor: 'var(--error-container)',
-                    color: 'var(--error)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <FileQuestion size={20} />
-                </div>
-                <div>
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Raise Attendance Correction Query
-                  </h3>
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                    Rectify mistaken absent marking with digital proof
-                  </p>
-                </div>
+                <HelpCircle size={20} className="text-rose-600" />
+                <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  Dispute Absent Attendance
+                </h3>
               </div>
-
-              <button onClick={() => setQueryModalOpen(false)} style={{ color: 'var(--text-muted)' }}>
-                <X size={20} />
+              <button onClick={() => setQueryModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}>
+                <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleQuerySubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div style={{ backgroundColor: 'var(--surface-low)', padding: '0.75rem', borderRadius: 'var(--radius-lg)', fontSize: '12px' }}>
-                <div><strong>Subject:</strong> {selectedClassForQuery?.subject}</div>
-                <div><strong>Date:</strong> {selectedClassForQuery?.date} ({selectedClassForQuery?.period})</div>
-                <div><strong>Faculty:</strong> {selectedClassForQuery?.faculty}</div>
-                <div style={{ color: 'var(--error)', marginTop: '2px' }}><strong>Current Status:</strong> Absent</div>
-              </div>
+            <p style={{ fontSize: '13px', color: '#64748B', margin: '0 0 1rem' }}>
+              Session on <strong>{selectedSession?.date}</strong> for <strong>{selectedSession?.subject?.name || selectedSession?.subject}</strong>.
+            </p>
 
-              <div className="form-group">
-                <label className="form-label">Explanation / Discrepancy Reason</label>
+            <form onSubmit={handleQuerySubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Dispute Reason *</label>
                 <textarea
-                  className="input-field"
+                  required
+                  rows={3}
                   value={queryReason}
                   onChange={(e) => setQueryReason(e.target.value)}
-                  rows={3}
-                  required
+                  className="input-field"
+                  placeholder="e.g. Attended lecture and submitted lab practical. Roll call was missed..."
                 />
               </div>
 
-              <div className="form-group">
-                <DocumentUploader
-                  label="Supporting Proof (Screenshot / Lab Submission Slip)"
-                  hint="Attach screenshot or lab slip showing attendance attendance activity"
-                  selectedFileName={queryDoc}
-                  onFileSelect={(fileInfo) => setQueryDoc(fileInfo.name)}
-                  onFileRemove={() => setQueryDoc('')}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setQueryModalOpen(false)}
-                  className="btn btn-secondary"
-                  style={{ flex: 1 }}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  style={{ flex: 1 }}
-                >
-                  Submit Query to TG & HOD
-                </button>
-              </div>
+              <button
+                type="submit"
+                disabled={submittingQuery}
+                className="btn btn-primary"
+                style={{ width: '100%', padding: '0.75rem', fontWeight: 700 }}
+              >
+                {submittingQuery ? 'Submitting Dispute...' : 'Submit Dispute Query to HOD'}
+              </button>
             </form>
           </div>
         </div>

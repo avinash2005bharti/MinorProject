@@ -2,7 +2,7 @@ import time
 from typing import Dict, Any, List
 from loguru import logger
 
-from tools.mysql_tools import mysql_tools
+from tools.postgres_tools import postgres_tools
 from agents.rag_agent import rag_agent
 from agents.memory_agent import memory_agent
 from llm.groq_client import groq_client
@@ -17,10 +17,10 @@ class StudentAssistant:
     - Pending assignments and deadlines
     - Faculty office hours & contact info
     - Course syllabus and lecture notes
-    Uses: MySQL, MongoDB, Qdrant
+    Uses: PostgreSQL, MongoDB, Qdrant
     """
     def __init__(self):
-        self.sql = mysql_tools
+        self.sql = postgres_tools
         self.rag = rag_agent
         self.memory = memory_agent
         self.llm = groq_client

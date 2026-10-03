@@ -202,6 +202,88 @@ const swaggerDocument = {
         responses: { 200: { description: 'Attendance analytics and alerts' } }
       }
     },
+    '/attendance/student/{studentId}': {
+      get: {
+        tags: ['Attendance'],
+        summary: 'Get full attendance summary and lecture breakdown for a student',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'studentId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Student attendance statistics' } }
+      }
+    },
+    '/attendance/override': {
+      post: {
+        tags: ['Attendance'],
+        summary: 'Direct manual attendance override by HOD or Admin with immutable audit trail',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['student_id', 'subject_id', 'date', 'status'],
+                properties: {
+                  student_id: { type: 'string' },
+                  subject_id: { type: 'string' },
+                  date: { type: 'string', example: '2026-09-29' },
+                  status: { type: 'string', enum: ['Present', 'Absent'] },
+                  reason: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'Attendance manually overridden' } }
+      }
+    },
+    '/attendance/qr/generate': {
+      post: {
+        tags: ['Attendance'],
+        summary: 'Generate dynamic cryptographic QR code session for in-class attendance',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['subject_id', 'section'],
+                properties: {
+                  subject_id: { type: 'string' },
+                  section: { type: 'string' },
+                  semester: { type: 'integer', example: 5 },
+                  validity_seconds: { type: 'integer', example: 300 }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'QR session token and base64 code' } }
+      }
+    },
+    '/attendance/qr/scan': {
+      post: {
+        tags: ['Attendance'],
+        summary: 'Scan and verify dynamic QR attendance session for student',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['token'],
+                properties: {
+                  token: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'Attendance marked via QR verification' } }
+      }
+    },
 
     // Assignments Module
     '/assignments': {
@@ -399,6 +481,15 @@ const swaggerDocument = {
         responses: { 201: { description: 'Document uploaded and queued for vector embedding' } }
       }
     },
+    '/notes/status/{id}': {
+      get: {
+        tags: ['Notes'],
+        summary: 'Check vector embedding and indexing status of an uploaded document in Qdrant',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Document processing status (completed, processing, failed)' } }
+      }
+    },
 
     // AI Multi-Agent Core
     '/ai/chat': {
@@ -467,6 +558,149 @@ const swaggerDocument = {
         summary: 'Teaching workload and timetable distribution per faculty member',
         security: [{ bearerAuth: [] }],
         responses: { 200: { description: 'Faculty workload matrix' } }
+      }
+    },
+
+    // Chat & Conversations (Standardized Section 22 Endpoints)
+    '/chat': {
+      post: {
+        tags: ['AI Agentic Core'],
+        summary: 'Primary conversational endpoint supporting agent selection, STM memory, and tool calls',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['message'],
+                properties: {
+                  message: { type: 'string', example: 'What is the schedule for 3rd Year CSE Section A?' },
+                  conversation_id: { type: 'string' },
+                  agent: { type: 'string', example: 'timetable' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'Agentic assistant response' } }
+      }
+    },
+    '/chat/stream': {
+      post: {
+        tags: ['AI Agentic Core'],
+        summary: 'Server-Sent Events (SSE) streaming chat endpoint',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['message'],
+                properties: {
+                  message: { type: 'string' },
+                  conversation_id: { type: 'string' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 200: { description: 'SSE chunk stream' } }
+      }
+    },
+    '/chats': {
+      get: {
+        tags: ['AI Agentic Core'],
+        summary: 'List user chat conversation history from MongoDB STM',
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: 'List of conversations' } }
+      }
+    },
+    '/chats/{chatId}': {
+      get: {
+        tags: ['AI Agentic Core'],
+        summary: 'Get conversation details and message history',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'chatId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Conversation details' } }
+      },
+      delete: {
+        tags: ['AI Agentic Core'],
+        summary: 'Delete conversation and prune STM history',
+        security: [{ bearerAuth: [] }],
+        parameters: [{ name: 'chatId', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { 200: { description: 'Conversation deleted' } }
+      }
+    },
+
+    // Storage Module (ImageKit Cloud / Local Fallback)
+    '/storage/status': {
+      get: {
+        tags: ['Storage & Media (ImageKit)'],
+        summary: 'Check whether ImageKit Cloud CDN is active or local disk fallback is running',
+        responses: { 200: { description: 'Storage engine configuration and CDN status' } }
+      }
+    },
+    '/storage/auth': {
+      get: {
+        tags: ['Storage & Media (ImageKit)'],
+        summary: 'Generate client-side ImageKit upload parameters (signature, token, expire time)',
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: 'Client-side upload authentication payload' } }
+      }
+    },
+    '/storage/upload': {
+      post: {
+        tags: ['Storage & Media (ImageKit)'],
+        summary: 'Direct upload endpoint supporting ImageKit CDN with automatic local fallback',
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                properties: {
+                  file: { type: 'string', format: 'binary' },
+                  folder: { type: 'string', example: '/campusflow-erp' },
+                  tags: { type: 'string', example: 'syllabus,notes' }
+                }
+              }
+            }
+          }
+        },
+        responses: { 201: { description: 'File uploaded and CDN URL generated' } }
+      }
+    },
+
+    // System Health Checks (Section 45)
+    '/health': {
+      get: {
+        tags: ['System Health'],
+        summary: 'Overall API Gateway health check',
+        responses: { 200: { description: 'Gateway healthy' } }
+      }
+    },
+    '/health/db': {
+      get: {
+        tags: ['System Health'],
+        summary: 'PostgreSQL / Relational database connectivity check',
+        responses: { 200: { description: 'Database operational' } }
+      }
+    },
+    '/health/qdrant': {
+      get: {
+        tags: ['System Health'],
+        summary: 'Qdrant vector engine connectivity check',
+        responses: { 200: { description: 'Qdrant status' } }
+      }
+    },
+    '/health/ai': {
+      get: {
+        tags: ['System Health'],
+        summary: 'Python AI service and LLM connectivity check',
+        responses: { 200: { description: 'AI service status' } }
       }
     }
   }

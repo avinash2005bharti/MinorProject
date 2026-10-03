@@ -1,111 +1,179 @@
-import React, { useState } from 'react';
-import { Calendar, Clock, MapPin, Sparkles } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useERP } from '../../context/ERPContext';
+import { timetableApi } from '../../api/timetableApi';
+import { Calendar, Clock, MapPin, Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
 
 export default function TeacherTimetable() {
-  const [selectedDay, setSelectedDay] = useState('Wednesday');
+  const { currentUser } = useERP();
+  const [selectedDay, setSelectedDay] = useState('Monday');
+  const [slots, setSlots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-  const schedule = {
-    Monday: [
-      { period: 1, time: '09:00 - 10:00', code: 'CS301', subject: 'Data Structures & Algorithms', section: 'CSE-3A', room: 'Room 204' },
-      { period: 5, time: '02:15 - 04:15', code: 'CS306', subject: 'DSA Lab (Batch A1)', section: 'CSE-3A', room: 'Lab-3' }
-    ],
-    Tuesday: [
-      { period: 2, time: '10:00 - 11:00', code: 'CS301', subject: 'Data Structures & Algorithms', section: 'CSE-3A', room: 'Room 204' }
-    ],
-    Wednesday: [
-      { period: 2, time: '10:30 - 11:30', code: 'CS301', subject: 'Data Structures & Algorithms', section: 'CSE-3A', room: 'Room 204', isLive: true }
-    ],
-    Thursday: [
-      { period: 3, time: '11:15 - 12:15', code: 'CS301', subject: 'Data Structures & Algorithms', section: 'CSE-3A', room: 'Room 204' }
-    ],
-    Friday: [
-      { period: 2, time: '10:00 - 11:00', code: 'CS301', subject: 'Data Structures & Algorithms', section: 'CSE-3B', room: 'Room 205' }
-    ]
+  const fetchTimetable = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await timetableApi.getTimetable();
+      let allSlots = [];
+      if (Array.isArray(res?.slots)) {
+        allSlots = res.slots;
+      } else if (Array.isArray(res?.timetable)) {
+        allSlots = res.timetable;
+      } else if (res?.timetable && typeof res.timetable === 'object') {
+        allSlots = Object.values(res.timetable).flat();
+      }
+
+      // Filter by logged-in teacher's name if present, or show department slots
+      const teacherName = currentUser?.name ? currentUser.name.replace(/dr\.|prof\./gi, '').trim().toLowerCase() : '';
+      const filtered = teacherName
+        ? allSlots.filter((s) => s?.faculty?.toLowerCase().includes(teacherName) || s?.teacherName?.toLowerCase().includes(teacherName))
+        : allSlots;
+      setSlots(filtered.length > 0 ? filtered : allSlots);
+    } catch (err) {
+      setError(err.message || 'Unable to load teacher schedule.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const daySchedule = schedule[selectedDay] || [];
+  useEffect(() => {
+    fetchTimetable();
+  }, [currentUser]);
+
+  const daySchedule = Array.isArray(slots) ? slots.filter((s) => s && s.day === selectedDay) : [];
 
   return (
     <div className="page-wrapper">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
               Faculty Schedule & Timetable
             </h1>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Dr. Rajesh Verma • 14 Teaching Hours / Week
+              {currentUser.name || 'Faculty Member'} • Relational Workload Ledger
             </p>
           </div>
 
-          <span className="badge badge-emerald">
-            <Sparkles size={14} /> Workload Balanced by AI
-          </span>
-        </div>
-
-        {/* Day Pills */}
-        <div style={{ display: 'flex', backgroundColor: 'var(--surface-high)', borderRadius: 'var(--radius-full)', padding: '4px', gap: '4px', overflowX: 'auto' }}>
-          {days.map((day) => (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <button
-              key={day}
-              onClick={() => setSelectedDay(day)}
-              style={{
-                flex: 1,
-                padding: '0.5rem 1rem',
-                borderRadius: 'var(--radius-full)',
-                fontSize: '12px',
-                fontWeight: selectedDay === day ? 700 : 500,
-                backgroundColor: selectedDay === day ? '#FFFFFF' : 'transparent',
-                color: selectedDay === day ? 'var(--primary)' : 'var(--text-secondary)',
-                boxShadow: selectedDay === day ? 'var(--shadow-sm)' : 'none'
-              }}
+              onClick={fetchTimetable}
+              disabled={loading}
+              className="btn btn-outline text-xs py-2 px-3 flex items-center gap-1.5"
             >
-              {day}
+              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+              <span>Refresh</span>
             </button>
-          ))}
+            <span className="badge badge-emerald">
+              <Sparkles size={14} /> Synced with PostgreSQL
+            </span>
+          </div>
         </div>
 
-        {/* Schedule */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          {daySchedule.map((cls, idx) => (
-            <div
-              key={idx}
-              className="card"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '1rem',
-                gap: '1rem',
-                backgroundColor: cls.isLive ? 'var(--primary-container)' : '#FFFFFF',
-                borderColor: cls.isLive ? '#BFDBFE' : 'var(--border-subtle)',
-                flexWrap: 'wrap'
-              }}
-            >
-              <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)' }}>{cls.code}</span>
-                  <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{cls.subject}</h4>
-                  <span className="badge badge-indigo">{cls.section}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '4px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Clock size={13} /> {cls.time}</span>
-                  <span>•</span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><MapPin size={13} /> {cls.room}</span>
-                </div>
-              </div>
+        {/* Loading / Error states */}
+        {loading && (
+          <div className="p-8 text-center text-slate-500 card flex flex-col items-center justify-center gap-2">
+            <div className="spinner-border text-primary" role="status" style={{ width: '2rem', height: '2rem' }} />
+            <span className="text-xs font-semibold">Loading Teaching Schedule from Database...</span>
+          </div>
+        )}
 
-              {cls.isLive && (
-                <span className="badge badge-emerald">
-                  <span className="agent-pulse" style={{ width: '6px', height: '6px' }} />
-                  Live Slot
-                </span>
+        {error && (
+          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={18} className="text-rose-600 shrink-0" />
+              <span>{error}</span>
+            </div>
+            <button onClick={fetchTimetable} className="btn btn-sm btn-primary text-xs">
+              Try Again
+            </button>
+          </div>
+        )}
+
+        {!loading && !error && (
+          <>
+            {/* Day Pills */}
+            <div style={{ display: 'flex', backgroundColor: '#F1F5F9', borderRadius: '9999px', padding: '4px', gap: '4px', overflowX: 'auto' }}>
+              {days.map((day) => (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => setSelectedDay(day)}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem 1rem',
+                    borderRadius: '9999px',
+                    fontSize: '12px',
+                    fontWeight: selectedDay === day ? 700 : 500,
+                    backgroundColor: selectedDay === day ? '#FFFFFF' : 'transparent',
+                    color: selectedDay === day ? '#1D4ED8' : '#64748B',
+                    boxShadow: selectedDay === day ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
+                  {day}
+                </button>
+              ))}
+            </div>
+
+            {/* Schedule */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {daySchedule.length === 0 ? (
+                <div className="p-8 text-center text-slate-500 text-xs card bg-slate-50">
+                  No timetable available
+                </div>
+              ) : (
+                daySchedule.map((cls, idx) => (
+                  <div
+                    key={idx}
+                    className="card"
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '1rem',
+                      gap: '1rem',
+                      backgroundColor: '#FFFFFF',
+                      flexWrap: 'wrap'
+                    }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB' }}>
+                          Period {cls.period}
+                        </span>
+                        <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', margin: 0 }}>
+                          {cls.subject}
+                        </h4>
+                        <span className="badge badge-indigo">Sec {cls.section}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '4px', fontSize: '12px', color: '#64748B' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <Clock size={13} /> {cls.start_time} - {cls.end_time}
+                        </span>
+                        <span>•</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
+                          <MapPin size={13} /> {cls.room}
+                        </span>
+                      </div>
+                    </div>
+
+                    <span className="badge badge-emerald">
+                      {cls.type || 'Lecture'}
+                    </span>
+                  </div>
+                ))
               )}
             </div>
-          ))}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

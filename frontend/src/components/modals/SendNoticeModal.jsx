@@ -1,34 +1,91 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { X, Send, Bot, AlertTriangle, Users, Building2, Bell } from 'lucide-react';
+import {
+  X,
+  Send,
+  Bot,
+  AlertTriangle,
+  Users,
+  Building2,
+  Bell,
+  Paperclip,
+  UploadCloud,
+  FileText,
+  Trash2,
+  CheckCircle2
+} from 'lucide-react';
 
 export default function SendNoticeModal({ data, onClose }) {
-  const { sendNotice, sections, classes, currentRole } = useERP();
+  const { broadcastNotice, sections = [], classes = [], currentRole, currentUser, addToast } = useERP();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [targetType, setTargetType] = useState(data?.defaultTarget || (currentRole === 'hod' ? 'Department' : 'Section'));
-  const [targetValue, setTargetValue] = useState(data?.targetValue || (targetType === 'Section' ? 'CSE-3A' : 'All Students & Faculty'));
+  const [targetValue, setTargetValue] = useState(data?.targetValue || (targetType === 'Department' ? currentUser?.department || 'CSE' : ''));
   const [priority, setPriority] = useState('normal');
   const [pinned, setPinned] = useState(false);
+  const [attachmentFile, setAttachmentFile] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e) => {
+  const fileInputRef = useRef(null);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 20 * 1024 * 1024) {
+        addToast('File too large', 'Please choose a file smaller than 20MB.', 'warning');
+        return;
+      }
+      setAttachmentFile(file);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setAttachmentFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!title.trim() || !content.trim()) {
-      alert('Please fill out both title and content.');
+    if (!title.trim() || !content.trim() || !targetValue.trim()) {
+      addToast('Notice Incomplete', 'Enter the notice and select a recipient.', 'warning');
       return;
     }
 
-    sendNotice({
-      title,
-      content,
-      targetType,
-      targetValue,
-      priority,
-      pinned
-    });
-
-    onClose();
+    setSaving(true);
+    try {
+      if (attachmentFile) {
+        const formData = new FormData();
+        formData.append('title', title);
+        formData.append('content', content);
+        formData.append('message', content);
+        formData.append('targetType', targetType);
+        formData.append('targetValue', targetValue);
+        formData.append('recipientRole', targetValue);
+        formData.append('priority', priority);
+        formData.append('pinned', pinned);
+        formData.append('attachment', attachmentFile);
+        await broadcastNotice(formData);
+      } else {
+        await broadcastNotice({
+          title,
+          content,
+          message: content,
+          targetType,
+          targetValue,
+          recipientRole: targetValue,
+          priority,
+          pinned
+        });
+      }
+      onClose();
+    } catch (err) {
+      addToast('Unable to Send Notice', err.message || 'The notice could not be saved.', 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -36,7 +93,7 @@ export default function SendNoticeModal({ data, onClose }) {
       <div
         className="modal-container"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: '540px', width: '92%' }}
+        style={{ maxWidth: '580px', width: '92%', maxHeight: '92vh', overflowY: 'auto' }}
       >
         <div className="modal-header">
           <div className="flex items-center gap-2.5">
@@ -44,8 +101,8 @@ export default function SendNoticeModal({ data, onClose }) {
               <Send size={18} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 leading-snug">Broadcast Notice</h3>
-              <p className="text-xs text-slate-500">Autonomous delivery via Notice Agent</p>
+              <h3 className="text-base font-bold text-slate-900 leading-snug">Broadcast Official Notice</h3>
+              <p className="text-xs text-slate-500">Autonomous delivery with document attachment</p>
             </div>
           </div>
           <button onClick={onClose} className="modal-close-btn" aria-label="Close modal">
@@ -57,7 +114,7 @@ export default function SendNoticeModal({ data, onClose }) {
         <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs flex items-center gap-2 text-slate-700">
           <Bot size={16} className="text-blue-600 shrink-0" />
           <span>
-            <strong>Notice Agent:</strong> Targeted circulars are automatically dispatched to all relevant student mobile and desktop notification centers instantly.
+            <strong>Notice Agent:</strong> Targeted circulars & attachments are instantly dispatched to all student and faculty notification hubs in PostgreSQL.
           </span>
         </div>
 
@@ -72,10 +129,9 @@ export default function SendNoticeModal({ data, onClose }) {
                   key={type}
                   onClick={() => {
                     setTargetType(type);
-                    if (type === 'Section') setTargetValue('CSE-3A');
-                    else if (type === 'Class') setTargetValue('CSE 3rd Year');
-                    else if (type === 'Department') setTargetValue('All Students & Faculty');
-                    else setTargetValue('Rahul Sharma (21CSE084)');
+                    if (type === 'Department') setTargetValue(currentUser?.department || 'CSE');
+                    else if (type === 'Section') setTargetValue(sections?.[0]?.name || 'A');
+                    else setTargetValue('');
                   }}
                   className={`py-2 px-2 rounded-xl text-xs font-semibold border transition-all ${
                     targetType === type
@@ -97,10 +153,12 @@ export default function SendNoticeModal({ data, onClose }) {
                 value={targetValue}
                 onChange={(e) => setTargetValue(e.target.value)}
                 className="input-field"
+                required
               >
-                {sections.map((sec) => (
+                <option value="">Select a section</option>
+                {(Array.isArray(sections) ? sections : []).map((sec) => (
                   <option key={sec.id} value={sec.name}>
-                    {sec.name} ({sec.className})
+                    Section {sec.name}
                   </option>
                 ))}
               </select>
@@ -111,8 +169,10 @@ export default function SendNoticeModal({ data, onClose }) {
                 value={targetValue}
                 onChange={(e) => setTargetValue(e.target.value)}
                 className="input-field"
+                required
               >
-                {classes.map((cls) => (
+                <option value="">Select a class</option>
+                {(Array.isArray(classes) ? classes : []).map((cls) => (
                   <option key={cls.id} value={cls.name}>
                     {cls.name} ({cls.semester})
                   </option>
@@ -136,6 +196,7 @@ export default function SendNoticeModal({ data, onClose }) {
                 onChange={(e) => setTargetValue(e.target.value)}
                 placeholder="Student Name or Roll Number"
                 className="input-field"
+                required
               />
             )}
           </div>
@@ -147,7 +208,7 @@ export default function SendNoticeModal({ data, onClose }) {
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Mandatory Lab Session / Exam Seating Announcement"
+              placeholder="e.g., Mid-Sem Exam Schedule / RGPV Practical Guidelines"
               className="input-field"
               required
               id="input-notice-title"
@@ -165,6 +226,98 @@ export default function SendNoticeModal({ data, onClose }) {
               rows={3}
               required
             />
+          </div>
+
+          {/* Document Attachment Upload Section */}
+          <div className="form-group mb-0">
+            <label className="form-label flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Paperclip size={13} className="text-slate-600" />
+                <span>Attach Circular Document (PDF, Image, Doc)</span>
+              </span>
+              <span className="text-[10px] text-slate-400 font-normal">Optional • Max 20MB</span>
+            </label>
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.pptx,.txt"
+              style={{ display: 'none' }}
+              id="notice-file-input"
+            />
+
+            {!attachmentFile ? (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  border: '1.5px dashed #CBD5E1',
+                  borderRadius: 'var(--radius-lg)',
+                  padding: '1rem',
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  backgroundColor: '#F8FAFC',
+                  transition: 'all 0.15s ease'
+                }}
+                className="hover:border-blue-400 hover:bg-blue-50/20"
+              >
+                <UploadCloud size={24} className="mx-auto text-blue-500 mb-1" />
+                <div style={{ fontSize: '12px', fontWeight: 600, color: '#334155' }}>
+                  Click to select file or drag & drop here
+                </div>
+                <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '2px' }}>
+                  Supports PDF circulars, official images, notices, and spreadsheets
+                </div>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '0.65rem 0.85rem',
+                  backgroundColor: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: 'var(--radius-lg)'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                  <FileText size={18} className="text-blue-600 shrink-0" />
+                  <div style={{ minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        color: '#1E40AF',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      {attachmentFile.name}
+                    </div>
+                    <div style={{ fontSize: '10px', color: '#64748B' }}>
+                      {(attachmentFile.size / 1024).toFixed(1)} KB • Ready for upload
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    color: '#EF4444',
+                    cursor: 'pointer',
+                    padding: '4px'
+                  }}
+                  title="Remove attachment"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Priority & Pin Options */}
@@ -203,11 +356,16 @@ export default function SendNoticeModal({ data, onClose }) {
           </div>
 
           <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
-            <button type="button" onClick={onClose} className="btn btn-outline text-xs py-2 px-4">
+            <button type="button" onClick={onClose} disabled={saving} className="btn btn-outline text-xs py-2 px-4">
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm" id="btn-send-notice-confirm">
-              Broadcast Notice
+            <button
+              type="submit"
+              disabled={saving}
+              className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm"
+              id="btn-send-notice-confirm"
+            >
+              {saving ? 'Publishing Circular...' : 'Broadcast Notice'}
             </button>
           </div>
         </form>

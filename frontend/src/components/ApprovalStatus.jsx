@@ -1,16 +1,22 @@
 import React from 'react';
 
 export default function ApprovalStatus({ status }) {
-  let label = 'Pending';
+  const norm = String(status || '').trim().toLowerCase();
+  let label = status || 'Pending';
   let badgeClass = 'badge-slate';
 
-  switch (status) {
+  switch (norm) {
     case 'pending_tg':
       label = 'TG Review';
       badgeClass = 'badge-indigo';
       break;
+    case 'recommended_by_tg':
+      label = 'Recommended by TG';
+      badgeClass = 'badge-indigo';
+      break;
     case 'pending_hod':
-      label = 'Pending HOD';
+    case 'pending':
+      label = 'Pending Review';
       badgeClass = 'badge-amber';
       break;
     case 'pending_hod_direct':
@@ -18,11 +24,13 @@ export default function ApprovalStatus({ status }) {
       badgeClass = 'badge-rose';
       break;
     case 'processing_agent':
+    case 'processing':
       label = 'Agent Syncing';
       badgeClass = 'badge-indigo';
       break;
     case 'completed':
     case 'approved':
+    case 'approved_by_hod':
       label = 'Approved';
       badgeClass = 'badge-emerald';
       break;
@@ -31,7 +39,7 @@ export default function ApprovalStatus({ status }) {
       badgeClass = 'badge-rose';
       break;
     default:
-      label = status;
+      label = status || 'Pending';
       badgeClass = 'badge-slate';
   }
 

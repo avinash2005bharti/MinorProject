@@ -4,12 +4,11 @@ import ApplyLeaveModal from './ApplyLeaveModal';
 import CreateAssignmentModal from './CreateAssignmentModal';
 import SubmitAssignmentModal from './SubmitAssignmentModal';
 import SendNoticeModal from './SendNoticeModal';
-import AddSectionModal from './AddSectionModal';
 import ScheduleLectureModal from './ScheduleLectureModal';
-import CreateTestModal from './CreateTestModal';
 import StudentFeedbackModal from './StudentFeedbackModal';
 import StudentDetailModal from './StudentDetailModal';
 import RequestConsiderationModal from './RequestConsiderationModal';
+import NoticeDetailModal from './NoticeDetailModal';
 
 export default function GlobalModals() {
   const { modalState, closeModal } = useERP();
@@ -27,12 +26,10 @@ export default function GlobalModals() {
       return <SubmitAssignmentModal data={modalState.data} onClose={closeModal} />;
     case 'sendNotice':
       return <SendNoticeModal data={modalState.data} onClose={closeModal} />;
-    case 'addSection':
-      return <AddSectionModal data={modalState.data} onClose={closeModal} />;
+    case 'viewNotice':
+      return <NoticeDetailModal notice={modalState.data} onClose={closeModal} />;
     case 'scheduleLecture':
       return <ScheduleLectureModal data={modalState.data} onClose={closeModal} />;
-    case 'createTest':
-      return <CreateTestModal data={modalState.data} onClose={closeModal} />;
     case 'studentFeedback':
       return <StudentFeedbackModal data={modalState.data} onClose={closeModal} />;
     case 'studentDetail':

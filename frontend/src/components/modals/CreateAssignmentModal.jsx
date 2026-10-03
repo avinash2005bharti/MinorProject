@@ -1,40 +1,43 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
+import { apiClient } from '../../api/client';
 import { X, FileText, Calendar, Layers, BookOpen, Upload, Check } from 'lucide-react';
 import DocumentUploader from '../common/DocumentUploader';
 
 export default function CreateAssignmentModal({ onClose }) {
-  const { createAssignment, sections, classes } = useERP();
+  const { subjects, addToast, refreshAllData } = useERP();
 
   const [title, setTitle] = useState('');
-  const [subject, setSubject] = useState('Data Structures & Algorithms');
-  const [subjectCode, setSubjectCode] = useState('CS301');
-  const [section, setSection] = useState('CSE-3A');
-  const [dueDate, setDueDate] = useState('2025-10-15');
-  const [totalMarks, setTotalMarks] = useState('20');
+  const [subjectId, setSubjectId] = useState('');
+  const [dueDate, setDueDate] = useState(() => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [totalMarks, setTotalMarks] = useState('');
   const [description, setDescription] = useState('');
-  const [attachedFile, setAttachedFile] = useState({ name: '', size: '' });
+  const [attachedFile, setAttachedFile] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!title.trim()) {
-      alert('Please enter assignment title.');
-      return;
+    if (!title.trim() || !subjectId || !dueDate || !totalMarks) return;
+
+    const payload = new FormData();
+    payload.append('title', title.trim());
+    payload.append('subject_id', subjectId);
+    payload.append('deadline', new Date(`${dueDate}T23:59:00`).toISOString());
+    payload.append('max_marks', totalMarks);
+    payload.append('description', description.trim());
+    if (attachedFile) payload.append('file', attachedFile);
+
+    setSaving(true);
+    try {
+      await apiClient.post('/assignments', payload);
+      addToast('Assignment Published', 'The assignment was saved.', 'success');
+      await refreshAllData();
+      onClose();
+    } catch (err) {
+      addToast('Unable to Publish', err.message || 'The assignment could not be saved.', 'error');
+    } finally {
+      setSaving(false);
     }
-
-    createAssignment({
-      title,
-      subject,
-      subjectCode,
-      section,
-      className: 'CSE 3rd Year',
-      dueDate,
-      totalMarks,
-      description: description || 'Complete the exercises and upload PDF or ZIP.',
-      attachmentName: attachedFile.name || (title ? `${title.replace(/\s+/g, '_')}_Spec.pdf` : 'Coursework_Spec.pdf')
-    });
-
-    onClose();
   };
 
   return (
@@ -74,42 +77,19 @@ export default function CreateAssignmentModal({ onClose }) {
             />
           </div>
 
-          {/* Subject & Section Row */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="form-group mb-0">
+          <div className="form-group mb-0">
               <label className="form-label">Subject</label>
               <select
-                value={subject}
-                onChange={(e) => {
-                  setSubject(e.target.value);
-                  if (e.target.value.includes('DBMS')) setSubjectCode('CS302');
-                  else if (e.target.value.includes('Operating')) setSubjectCode('CS303');
-                  else setSubjectCode('CS301');
-                }}
+                value={subjectId}
+                onChange={(e) => setSubjectId(e.target.value)}
                 className="input-field"
+                required
               >
-                <option value="Data Structures & Algorithms">Data Structures & Algorithms (CS301)</option>
-                <option value="Database Management Systems">Database Management Systems (CS302)</option>
-                <option value="Operating Systems">Operating Systems (CS303)</option>
-                <option value="Computer Networks">Computer Networks (CS304)</option>
-                <option value="Software Engineering">Software Engineering (CS305)</option>
-              </select>
-            </div>
-
-            <div className="form-group mb-0">
-              <label className="form-label">Target Section</label>
-              <select
-                value={section}
-                onChange={(e) => setSection(e.target.value)}
-                className="input-field"
-              >
-                {sections.map((sec) => (
-                  <option key={sec.id} value={sec.name}>
-                    {sec.name} ({sec.className})
-                  </option>
+                <option value="">Select a subject</option>
+                {subjects.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name} ({item.code})</option>
                 ))}
               </select>
-            </div>
           </div>
 
           {/* Due Date & Marks */}
@@ -131,7 +111,7 @@ export default function CreateAssignmentModal({ onClose }) {
                 value={totalMarks}
                 onChange={(e) => setTotalMarks(e.target.value)}
                 className="input-field"
-                min="5"
+                min="1"
                 max="100"
                 required
               />
@@ -155,15 +135,15 @@ export default function CreateAssignmentModal({ onClose }) {
             <DocumentUploader
               label="Attachment Specification (Problem PDF / Lab Data)"
               hint="Attach question paper, lab problem statement, or code skeleton (PDF/ZIP/DOCX)"
-              selectedFileName={attachedFile.name}
-              selectedFileSize={attachedFile.size}
+              selectedFileName={attachedFile?.name || ''}
+              selectedFileSize={attachedFile?.size || ''}
               onFileSelect={(fileInfo) => {
-                setAttachedFile({ name: fileInfo.name, size: fileInfo.size });
+                setAttachedFile(fileInfo.file);
                 if (!title.trim()) {
                   setTitle(fileInfo.name.replace(/\.[^/.]+$/, ''));
                 }
               }}
-              onFileRemove={() => setAttachedFile({ name: '', size: '' })}
+              onFileRemove={() => setAttachedFile(null)}
             />
           </div>
 
@@ -171,7 +151,7 @@ export default function CreateAssignmentModal({ onClose }) {
             <button type="button" onClick={onClose} className="btn btn-outline text-xs py-2 px-4">
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm" id="btn-create-assignment-confirm">
+            <button type="submit" disabled={saving || subjects.length === 0} className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm disabled:opacity-50" id="btn-create-assignment-confirm">
               Publish Assignment
             </button>
           </div>

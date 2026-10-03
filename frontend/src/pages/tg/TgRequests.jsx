@@ -11,10 +11,13 @@ export default function TgRequests() {
     tgReviewAttendanceConsideration,
     tgReviewAttendanceQuery,
     tgReviewLeave,
-    tgAvailable
+    currentUser
   } = useERP();
 
-  const [activeTab, setActiveTab] = useState('attendance');
+  const isAwaitingTg = (status) => {
+    const s = String(status || '').toLowerCase();
+    return s === 'pending' || s === 'pending_tg';
+  };
 
   return (
     <div className="page-wrapper">
@@ -29,13 +32,6 @@ export default function TgRequests() {
               1st-tier verification pipeline before forwarding to Head of Department
             </p>
           </div>
-
-          {!tgAvailable && (
-            <span className="badge badge-rose">
-              <AlertTriangle size={14} />
-              <span>TG Marked Unavailable: Leaves Auto-Bypass to HOD</span>
-            </span>
-          )}
         </div>
 
         {/* Request Category Tabs */}
@@ -78,43 +74,67 @@ export default function TgRequests() {
         {/* Requests List */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
           {activeTab === 'attendance' && (
-            attendanceRequests.map((req) => (
-              <RequestCard
-                key={req.id}
-                request={req}
-                showActions={req.status === 'pending_tg'}
-                role="tg"
-                onRecommend={() => tgReviewAttendanceConsideration(req.id, 'Verified by Mentor Prof. K. Sen: Valid duty certificate. Strongly recommended.')}
-              />
-            ))
+            attendanceRequests.length === 0 ? (
+              <div className="card text-center" style={{ padding: '2.5rem', color: 'var(--text-secondary)' }}>
+                <FileText size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
+                <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>No records found.</h3>
+                <p style={{ fontSize: '13px', margin: '0.25rem 0 0' }}>No attendance consideration requests submitted yet.</p>
+              </div>
+            ) : (
+              attendanceRequests.map((req) => (
+                <RequestCard
+                  key={req.id}
+                  request={req}
+                  showActions={isAwaitingTg(req.status)}
+                  role="tg"
+                  onRecommend={() => tgReviewAttendanceConsideration(req.id, `Verified by Mentor ${currentUser?.name || ''}: Valid documentation verified.`)}
+                />
+              ))
+            )
           )}
 
           {activeTab === 'queries' && (
-            attendanceQueries.map((q) => (
-              <RequestCard
-                key={q.id}
-                request={{
-                  ...q,
-                  title: `Attendance Query: ${q.subject}`,
-                  dateRangeLabel: q.date
-                }}
-                showActions={q.status === 'pending_tg'}
-                role="tg"
-                onRecommend={() => tgReviewAttendanceQuery(q.id)}
-              />
-            ))
+            attendanceQueries.length === 0 ? (
+              <div className="card text-center" style={{ padding: '2.5rem', color: 'var(--text-secondary)' }}>
+                <FileText size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
+                <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>No records found.</h3>
+                <p style={{ fontSize: '13px', margin: '0.25rem 0 0' }}>No attendance queries or disputes submitted yet.</p>
+              </div>
+            ) : (
+              attendanceQueries.map((q) => (
+                <RequestCard
+                  key={q.id}
+                  request={{
+                    ...q,
+                    title: `Attendance Query: ${q.subjectName || q.subject || 'Dispute'}`,
+                    dateRangeLabel: q.dateRangeLabel || q.date
+                  }}
+                  showActions={isAwaitingTg(q.status)}
+                  role="tg"
+                  onRecommend={() => tgReviewAttendanceQuery(q.id)}
+                />
+              ))
+            )
           )}
 
           {activeTab === 'leave' && (
-            leaveRequests.map((lv) => (
-              <RequestCard
-                key={lv.id}
-                request={lv}
-                showActions={lv.status === 'pending_tg'}
-                role="tg"
-                onRecommend={() => tgReviewLeave(lv.id, true)}
-              />
-            ))
+            leaveRequests.length === 0 ? (
+              <div className="card text-center" style={{ padding: '2.5rem', color: 'var(--text-secondary)' }}>
+                <FileText size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
+                <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>No records found.</h3>
+                <p style={{ fontSize: '13px', margin: '0.25rem 0 0' }}>No student leave applications submitted yet.</p>
+              </div>
+            ) : (
+              leaveRequests.map((lv) => (
+                <RequestCard
+                  key={lv.id}
+                  request={lv}
+                  showActions={isAwaitingTg(lv.status)}
+                  role="tg"
+                  onRecommend={() => tgReviewLeave(lv.id, true)}
+                />
+              ))
+            )
           )}
         </div>
       </div>

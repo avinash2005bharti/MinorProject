@@ -1,103 +1,181 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { authApi } from '../../api/authApi';
 import {
   Lock,
-  User,
+  Mail,
   Eye,
   EyeOff,
-  Fingerprint,
-  CheckCircle2,
-  Loader2,
-  Sparkles,
-  HelpCircle,
-  ShieldCheck,
-  ArrowRight,
   Building2,
   GraduationCap,
+  Briefcase,
+  Shield,
   Award,
+  ShieldCheck,
   Zap,
-  Bot,
-  MapPin,
-  Check
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
+  HelpCircle,
+  KeyRound,
+  X
 } from 'lucide-react';
 
 export default function LoginPage() {
-  const { login, users } = useERP();
+  const { login } = useERP();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [selectedRole, setSelectedRole] = useState('student');
-  const [collegeId, setCollegeId] = useState('21cse084@oist.ac.in');
-  const [password, setPassword] = useState('••••••••••••');
+  const searchParams = new URLSearchParams(location.search);
+  const initialRole = searchParams.get('role') || 'student';
+  const [selectedRole, setSelectedRole] = useState(initialRole);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberDevice, setRememberDevice] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [successNotice, setSuccessNotice] = useState('');
 
-  const demoAccounts = {
-    student: { id: '21cse084@oist.ac.in', name: 'Rahul Sharma', title: 'Student (Section CSE-3A)' },
-    teacher: { id: 'r.verma@oist.ac.in', name: 'Dr. Rajesh Verma', title: 'Faculty (Associate Professor)' },
-    tg: { id: 'k.sen@oist.ac.in', name: 'Prof. K. Sen', title: 'Mentor / Teacher Guardian' },
-    hod: { id: 's.roy@oist.ac.in', name: 'Dr. S. Roy', title: 'Head of Department (CSE)' },
-    admin: { id: 'admin@oist.ac.in', name: 'System Administrator', title: 'Campus IT Infrastructure' }
-  };
+  // Forgot password modal state
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotStep, setForgotStep] = useState(1); // 1 = enter email, 2 = enter otp & new pass
+  const [otpCode, setOtpCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState('');
 
-  const handleSelectRole = (role) => {
-    setSelectedRole(role);
-    setCollegeId(demoAccounts[role].id);
-    setPassword('••••••••••••');
-  };
+  // Pre-seed inputs when navigating from registration
+  useEffect(() => {
+    if (location.state?.registeredEmail) {
+      setEmail(location.state.registeredEmail);
+      setPassword('');
+      setSuccessNotice('Account registered successfully! Please log in with your credentials.');
+    }
+  }, [location.state]);
 
-  const handleCollegeIdChange = (val) => {
-    setCollegeId(val);
-    const low = val.toLowerCase();
-    if (low.includes('admin') || low.includes('sysadmin')) {
-      setSelectedRole('admin');
-    } else if (low.includes('hod') || low.includes('head') || low.includes('s.roy')) {
-      setSelectedRole('hod');
-    } else if (low.includes('mentor') || low.includes('tg') || low.includes('k.sen')) {
-      setSelectedRole('tg');
-    } else if (low.includes('prof') || low.includes('fac') || low.includes('r.verma')) {
-      setSelectedRole('teacher');
-    } else {
-      setSelectedRole('student');
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessNotice('');
+
+    if (!email.trim() || !password) {
+      setError('Please provide both email and password.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const user = await login({
+        email: email.trim().toLowerCase(),
+        password,
+        role: selectedRole
+      });
+
+      // Role routing based on authoritative backend verification
+      const userRole = (user.role || '').toLowerCase();
+      if (selectedRole === 'admin' || userRole === 'admin') {
+        navigate('/admin');
+      } else if (selectedRole === 'hod' || userRole === 'hod') {
+        navigate('/hod');
+      } else if (selectedRole === 'tg' || user.isTG || user.isAppointedTg) {
+        navigate('/tg');
+      } else if (selectedRole === 'faculty' || userRole === 'faculty' || userRole === 'teacher') {
+        navigate('/teacher');
+      } else {
+        navigate('/student');
+      }
+    } catch (err) {
+      setError(err.message || 'Invalid credentials. User not found in CSE records.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSubmit = (e) => {
+  // Forgot password modal handlers
+  const handleOpenForgotModal = () => {
+    setForgotEmail(email.trim().toLowerCase() || '');
+    setForgotStep(1);
+    setForgotError('');
+    setForgotSuccess('');
+    setOtpCode('');
+    setNewPassword('');
+    setShowForgotModal(true);
+  };
+
+  const handleCloseForgotModal = () => {
+    setShowForgotModal(false);
+    setForgotStep(1);
+    setForgotError('');
+    setForgotSuccess('');
+    setOtpCode('');
+    setNewPassword('');
+  };
+
+  const handleSendOtp = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    setForgotError('');
+    setForgotSuccess('');
+    if (!forgotEmail.trim()) {
+      setForgotError('Please enter your registered email address.');
+      return;
+    }
 
-    setTimeout(() => {
-      login(selectedRole, { collegeId, password });
-      setLoading(false);
-      navigate(`/${selectedRole}`);
-    }, 750);
+    setForgotLoading(true);
+    try {
+      const res = await authApi.forgotPassword(forgotEmail.trim().toLowerCase());
+      if (res.otp) {
+        setOtpCode(res.otp);
+        setForgotSuccess((res.message || 'OTP sent to your email.') + ` (Dev Code: ${res.otp})`);
+      } else {
+        setForgotSuccess(res.message || 'OTP sent to your email.');
+      }
+      setForgotStep(2);
+    } catch (err) {
+      setForgotError(err.message || 'Failed to send OTP. Please verify email.');
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
-  const handleBiometric = () => {
-    setLoading(true);
-    setTimeout(() => {
-      login(selectedRole, { collegeId, biometric: true });
-      setLoading(false);
-      navigate(`/${selectedRole}`);
-    }, 550);
-  };
+  const handleVerifyOtp = async (e) => {
+    e.preventDefault();
+    setForgotError('');
+    setForgotSuccess('');
+    if (!otpCode.trim() || !newPassword) {
+      setForgotError('OTP and new password are required.');
+      return;
+    }
 
-  const roleLabelMap = {
-    student: 'Student',
-    teacher: 'Faculty',
-    tg: 'Mentor / TG',
-    hod: 'HOD',
-    admin: 'Admin'
+    setForgotLoading(true);
+    try {
+      const res = await authApi.verifyOtp({
+        email: forgotEmail.trim().toLowerCase(),
+        otp: otpCode.trim(),
+        newPassword
+      });
+      setForgotSuccess(res.message || 'Password successfully reset!');
+      setTimeout(() => {
+        handleCloseForgotModal();
+        setPassword('');
+        setEmail(forgotEmail.trim().toLowerCase());
+      }, 1500);
+    } catch (err) {
+      setForgotError(err.message || 'Failed to verify OTP.');
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
-    <div className="split-login-container">
+    <div className="split-login-container" style={{ minHeight: '100vh', display: 'flex' }}>
       {/* ========================================================================= */}
-      {/* LEFT HALF: College Name, Logos, Branding, Accreditations & Key Highlights  */}
+      {/* LEFT HALF: College Name, Accreditations & Key Highlights                   */}
       {/* ========================================================================= */}
       <div className="split-login-brand">
-        {/* Top Header Badge */}
         <div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginBottom: '2rem' }}>
             <span className="accreditation-pill">
@@ -106,12 +184,11 @@ export default function LoginPage() {
             </span>
           </div>
 
-          {/* Logo & College Identity Box */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', marginBottom: '1.5rem' }}>
             <div className="brand-emblem-box">
               <img
                 src="/oist.png"
-                alt="Oriental Institute of Science & Technology Logo"
+                alt="Oriental Institute of Science & Technology"
                 className="brand-emblem-img"
               />
             </div>
@@ -129,11 +206,10 @@ export default function LoginPage() {
           </div>
 
           <p style={{ fontSize: '14px', color: '#94A3B8', lineHeight: 1.6, maxWidth: '520px', marginBottom: '1.75rem' }}>
-            Unified Digital CampusFlow Platform — Powering autonomous academic governance, AI-driven timetable scheduling, multi-tier clearances, and real-time student progression.
+            CampusFlow ERP — Enterprise academic management powering real-time attendance ledgers, timetable generation, multi-tier clearances, and transparent student governance.
           </p>
 
-          {/* Institutional Accreditations */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '2.5rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
             <span className="accreditation-pill">
               <Award size={13} color="#FBBF24" />
               NAAC 'A+' Grade Accredited
@@ -151,339 +227,389 @@ export default function LoginPage() {
               NBA Accredited Programmes
             </span>
           </div>
-
-          {/* Core System Highlights */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '520px' }}>
-            <div className="brand-feature-card">
-              <div className="brand-feature-icon">
-                <Zap size={18} />
-              </div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF' }}>
-                  Autonomous Attendance Agent
-                </div>
-                <div style={{ fontSize: '11px', color: '#CBD5E1', marginTop: '1px', lineHeight: 1.4 }}>
-                  Automates duty credits, recalculating aggregates (72% → 84%) across 6 lectures instantly with zero manual faculty burden.
-                </div>
-              </div>
-            </div>
-
-            <div className="brand-feature-card">
-              <div className="brand-feature-icon">
-                <Bot size={18} />
-              </div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF' }}>
-                  AI Timetable & Autonomous Conflict Resolution
-                </div>
-                <div style={{ fontSize: '11px', color: '#CBD5E1', marginTop: '1px', lineHeight: 1.4 }}>
-                  Constraint satisfaction engine that detects venue double-bookings and self-heals scheduling collisions.
-                </div>
-              </div>
-            </div>
-
-            <div className="brand-feature-card">
-              <div className="brand-feature-icon">
-                <ShieldCheck size={18} />
-              </div>
-              <div>
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF' }}>
-                  Role-Isolated Workspace Architecture
-                </div>
-                <div style={{ fontSize: '11px', color: '#CBD5E1', marginTop: '1px', lineHeight: 1.4 }}>
-                  Strict authenticated sessions ensuring each user enters only their dedicated, role-specific portal window.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Bottom Campus Footer */}
-        <div style={{ paddingTop: '2.5rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)', marginTop: '2.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#94A3B8', fontSize: '11px' }}>
-            <MapPin size={14} color="#60A5FA" />
-            <span>Oriental Campus, Raisen Road, Bhopal, Madhya Pradesh – 462021</span>
-          </div>
-          <p style={{ color: '#64748B', fontSize: '10px', marginTop: '4px' }}>
-            © {new Date().getFullYear()} Oriental Institute of Science & Technology. All rights reserved.
-          </p>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* RIGHT HALF: Authentication Form, Role Selector & Quick Fast Pass           */}
+      {/* RIGHT HALF: Real Authentication Form & Role Quick-Switch Tabs             */}
       {/* ========================================================================= */}
-      <div className="split-login-form-side">
-        <div className="split-form-wrapper">
-          {/* Card Header */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--primary)', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              <ShieldCheck size={15} />
-              <span>Campus Secure Single Sign-On</span>
+      <div className="split-login-form-area" style={{ flex: 1, padding: '2.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: '100%', maxWidth: '460px' }}>
+          {/* Centered Institutional Logo for Responsive Mode */}
+          <div className="mobile-login-logo">
+            <div className="mobile-logo-circle">
+              <img
+                src="/oist.png"
+                alt="Oriental Institute of Science & Technology"
+              />
             </div>
-            <h2 style={{ fontSize: '26px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.2 }}>
-              Portal Sign In
+            <h3>Oriental Institute of Science & Technology</h3>
+            <p>Department of Computer Science & Engineering</p>
+          </div>
+
+          {/* Header */}
+          <div style={{ marginBottom: '1.75rem' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Authentication Gateway
+            </span>
+            <h2 style={{ fontSize: '26px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', marginTop: '2px' }}>
+              Sign in to CampusFlow
             </h2>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Sign in with your credentials to open your designated role workspace.
+            <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>
+              Enter your registered official email address and password to sign in.
             </p>
           </div>
 
-          {/* Smart Role Selection Tabs */}
-          <div
-            style={{
-              backgroundColor: 'var(--surface-low)',
-              borderRadius: 'var(--radius-xl)',
-              padding: '0.75rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.5rem',
-              border: '1px solid var(--border-subtle)'
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 0.25rem' }}>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Select Role Workspace
-              </span>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Sparkles size={12} />
-                Demo Credentials Loaded
-              </span>
+          {error && (
+            <div className="p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+              <AlertCircle size={16} className="shrink-0 text-rose-600" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {successNotice && (
+            <div className="p-3 mb-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+              <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+              <span>{successNotice}</span>
+            </div>
+          )}
+
+          {/* Login Form */}
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {/* Role-Based Portal Selection Tabs */}
+            <div>
+              <label className="form-label" style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '0.4rem', display: 'block' }}>
+                Select Portal / Role
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.35rem', backgroundColor: '#F1F5F9', padding: '0.25rem', borderRadius: '10px' }}>
+                {[
+                  { role: 'student', label: 'Student', icon: <GraduationCap size={14} /> },
+                  { role: 'faculty', label: 'Faculty', icon: <Briefcase size={14} /> },
+                  { role: 'tg', label: 'TG', icon: <Award size={14} /> },
+                  { role: 'hod', label: 'HOD', icon: <Building2 size={14} /> },
+                  { role: 'admin', label: 'Admin', icon: <ShieldCheck size={14} /> }
+                ].map((item) => {
+                  const isActive = selectedRole === item.role;
+                  return (
+                    <button
+                      key={item.role}
+                      type="button"
+                      id={`tab-role-${item.role}`}
+                      onClick={() => {
+                        setSelectedRole(item.role);
+                        setError('');
+                      }}
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.2rem',
+                        padding: '0.45rem 0.2rem',
+                        borderRadius: '8px',
+                        border: 'none',
+                        backgroundColor: isActive ? '#FFFFFF' : 'transparent',
+                        color: isActive ? '#1D4ED8' : '#64748B',
+                        fontWeight: isActive ? 700 : 500,
+                        fontSize: '11px',
+                        boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
-              {[
-                { id: 'student', label: 'Student' },
-                { id: 'teacher', label: 'Faculty' },
-                { id: 'tg', label: 'Mentor / TG' },
-                { id: 'hod', label: 'HOD' },
-                { id: 'admin', label: 'Admin' }
-              ].map((role) => (
+            <div>
+              <label className="form-label" style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                Email Address
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="email"
+                  required
+                  placeholder="name@college.edu"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="input-field"
+                  style={{ paddingLeft: '2.5rem' }}
+                />
+                <Mail size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+              </div>
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                <label className="form-label" style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: 0 }}>
+                  Password
+                </label>
                 <button
-                  key={role.id}
                   type="button"
-                  onClick={() => handleSelectRole(role.id)}
-                  className={`login-role-tab ${selectedRole === role.id ? 'active' : ''}`}
+                  onClick={handleOpenForgotModal}
+                  style={{ fontSize: '11px', color: '#2563EB', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
                 >
-                  {role.label}
+                  Forgot Password?
                 </button>
-              ))}
+              </div>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="••••••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-field"
+                  style={{ paddingLeft: '2.5rem', paddingRight: '2.5rem' }}
+                />
+                <Lock size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{ position: 'absolute', right: '0.85rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
 
-            {/* Role Profile Info Chip */}
-            <div
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary"
               style={{
+                width: '100%',
+                padding: '0.85rem',
+                fontSize: '14px',
+                fontWeight: 700,
+                marginTop: '0.5rem',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '0.4rem 0.65rem',
-                backgroundColor: 'var(--surface)',
-                borderRadius: 'var(--radius-lg)',
-                border: '1px solid var(--border-subtle)',
-                fontSize: '11px'
+                justifyContent: 'center',
+                gap: '0.5rem'
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                <span className="agent-pulse" style={{ width: '6px', height: '6px' }} />
-                <span style={{ color: 'var(--text-muted)' }}>Active Persona:</span>
-                <strong style={{ color: 'var(--text-primary)' }}>{demoAccounts[selectedRole].name}</strong>
-              </div>
-              <span className="badge badge-indigo" style={{ fontSize: '10px', padding: '0.1rem 0.5rem' }}>
-                {demoAccounts[selectedRole].title}
-              </span>
-            </div>
-          </div>
+              {loading ? (
+                <>
+                  <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                  <span>Authenticating via Server...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In to ERP Portal</span>
+                  <ArrowRight size={16} />
+                </>
+              )}
+            </button>
+          </form>
 
-          {/* Form */}
-          <div
-            className="card"
-            style={{
-              padding: '1.75rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '1.25rem',
-              boxShadow: 'var(--shadow-lg)'
-            }}
-          >
-            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.15rem' }}>
-              {/* College ID or Email Field */}
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="form-label" htmlFor="collegeId">
-                    College ID or Institutional Email
-                  </label>
-                  <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 700 }}>
-                    Role: {selectedRole.toUpperCase()}
-                  </span>
-                </div>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <div style={{ position: 'absolute', left: '14px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
-                    <User size={18} />
-                  </div>
-                  <input
-                    id="collegeId"
-                    type="text"
-                    required
-                    value={collegeId}
-                    onChange={(e) => handleCollegeIdChange(e.target.value)}
-                    placeholder="e.g. 21cse084@oist.ac.in"
-                    className="input-field"
-                    style={{ paddingLeft: '40px', height: '46px', borderRadius: 'var(--radius-xl)', fontSize: '13px' }}
-                  />
-                </div>
-              </div>
-
-              {/* Password Field */}
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <label className="form-label" htmlFor="password">
-                    Password
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => alert('Password reset instructions have been dispatched to your institutional email.')}
-                    style={{ color: 'var(--primary)', fontWeight: 600, fontSize: '11px' }}
-                  >
-                    Forgot?
-                  </button>
-                </div>
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                  <div style={{ position: 'absolute', left: '14px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
-                    <Lock size={18} />
-                  </div>
-                  <input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••••••"
-                    className="input-field"
-                    style={{ paddingLeft: '40px', paddingRight: '40px', height: '46px', borderRadius: 'var(--radius-xl)', fontSize: '13px' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    style={{ position: 'absolute', right: '14px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
-                    aria-label="Toggle password visibility"
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Remember Device Checkbox */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', cursor: 'pointer', userSelect: 'none' }}>
-                  <input
-                    type="checkbox"
-                    checked={rememberDevice}
-                    onChange={(e) => setRememberDevice(e.target.checked)}
-                    style={{ accentColor: 'var(--primary)', width: '15px', height: '15px' }}
-                  />
-                  <span style={{ color: 'var(--text-secondary)' }}>Remember this workstation session</span>
-                </label>
-              </div>
-
-              {/* Submit Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="btn btn-primary btn-lg"
+          {/* Registration Links */}
+          <div style={{ marginTop: '2rem', borderTop: '1px solid #E2E8F0', paddingTop: '1.25rem' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', display: 'block', marginBottom: '0.75rem' }}>
+              Self-Registration Gateways
+            </span>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+              <Link
+                to="/register/student"
+                className="btn btn-outline"
                 style={{
-                  width: '100%',
-                  borderRadius: 'var(--radius-xl)',
-                  height: '48px',
-                  fontWeight: 700,
-                  fontSize: '14px',
-                  boxShadow: 'var(--shadow-md)',
-                  marginTop: '0.25rem'
+                  fontSize: '12px',
+                  padding: '0.6rem 0.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                  textDecoration: 'none'
                 }}
               >
-                {loading ? (
-                  <>
-                    <Loader2 size={18} className="animate-spin" />
-                    <span>Opening {roleLabelMap[selectedRole]} Portal...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Enter {roleLabelMap[selectedRole]} Workspace</span>
-                    <ArrowRight size={17} />
-                  </>
-                )}
-              </button>
-            </form>
+                <GraduationCap size={15} className="text-blue-600" />
+                <span>New Student?</span>
+              </Link>
 
-            {/* Biometric Quick Sign-In */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.65rem' }}>
-              <div style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <div style={{ width: '100%', height: '1px', backgroundColor: 'var(--border-subtle)' }} />
-                <span
-                  style={{
-                    position: 'absolute',
-                    backgroundColor: '#FFFFFF',
-                    padding: '0 0.65rem',
-                    fontSize: '11px',
-                    color: 'var(--text-muted)'
-                  }}
-                >
-                  or passwordless fast pass
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleBiometric}
-                className="btn btn-secondary"
+              <Link
+                to="/register/teacher"
+                className="btn btn-outline"
                 style={{
-                  width: '100%',
-                  borderRadius: 'var(--radius-xl)',
-                  height: '42px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  border: '1px solid var(--border-subtle)'
+                  fontSize: '12px',
+                  padding: '0.6rem 0.5rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.4rem',
+                  textDecoration: 'none'
                 }}
               >
-                <Fingerprint size={18} color="var(--primary)" />
-                <span>Biometric Touch / Face ID</span>
-              </button>
+                <Briefcase size={15} className="text-indigo-600" />
+                <span>New Faculty?</span>
+              </Link>
             </div>
-
-            {/* Assistance Box */}
-            <div
-              style={{
-                backgroundColor: 'var(--surface-low)',
-                borderRadius: 'var(--radius-xl)',
-                padding: '0.85rem 1rem',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '0.65rem',
-                fontSize: '11px',
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border-subtle)'
-              }}
-            >
-              <HelpCircle size={18} color="var(--primary)" style={{ flexShrink: 0, marginTop: '1px' }} />
-              <div>
-                <strong style={{ color: 'var(--text-primary)' }}>Need assistance? </strong>
-                Contact CSE Academic Cell (Block A) or email{' '}
-                <a href="mailto:support@oist.ac.in" style={{ color: 'var(--primary)', fontWeight: 600 }}>
-                  support@oist.ac.in
-                </a>
-              </div>
-            </div>
-          </div>
-
-          {/* Security & System Info Footer */}
-          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '3px', color: 'var(--text-muted)', fontSize: '11px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
-              <ShieldCheck size={14} color="var(--secondary)" />
-              <span>OIST ERP v3.2 • Secure Institutional Cloud</span>
-            </div>
-            <span>End-to-End 256-Bit SSL Encryption • ISO/IEC 27001 Certified</span>
           </div>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: '1rem'
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '16px',
+              padding: '2rem',
+              width: '100%',
+              maxWidth: '420px',
+              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <KeyRound size={20} className="text-blue-600" />
+                <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                  Reset Password
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseForgotModal}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {forgotError && (
+              <div className="p-3 mb-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+                {forgotError}
+              </div>
+            )}
+
+            {forgotSuccess && (
+              <div className="p-3 mb-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
+                {forgotSuccess}
+              </div>
+            )}
+
+            {forgotStep === 1 ? (
+              <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
+                  Enter your registered CSE email address. A 6-digit OTP code will be generated to reset your password.
+                </p>
+                <div>
+                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    autoFocus
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    className="input-field"
+                    placeholder="e.g. student@college.edu or admin@mail.in"
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={handleCloseForgotModal}
+                    className="btn btn-secondary"
+                    style={{ flex: 1, padding: '0.75rem', fontWeight: 600 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="btn btn-primary"
+                    style={{ flex: 2, padding: '0.75rem', fontWeight: 700 }}
+                  >
+                    {forgotLoading ? 'Sending OTP...' : 'Send Reset Code'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                  <span style={{ fontSize: '12px', color: '#64748B' }}>
+                    Email: <strong style={{ color: '#0F172A' }}>{forgotEmail}</strong>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotStep(1);
+                      setForgotError('');
+                      setForgotSuccess('');
+                    }}
+                    style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Change Email
+                  </button>
+                </div>
+                <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
+                  Enter the 6-digit verification OTP code and your new password.
+                </p>
+                <div>
+                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>6-Digit OTP Code</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                    className="input-field"
+                    placeholder="123456"
+                  />
+                </div>
+                <div>
+                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>New Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="input-field"
+                    placeholder="Min. 6 characters"
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotStep(1);
+                      setForgotError('');
+                      setForgotSuccess('');
+                    }}
+                    className="btn btn-secondary"
+                    style={{ flex: 1, padding: '0.75rem', fontWeight: 600 }}
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="btn btn-primary"
+                    style={{ flex: 2, padding: '0.75rem', fontWeight: 700 }}
+                  >
+                    {forgotLoading ? 'Updating Password...' : 'Verify & Reset'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

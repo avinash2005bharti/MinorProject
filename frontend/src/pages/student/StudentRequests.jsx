@@ -18,28 +18,30 @@ import {
 } from 'lucide-react';
 
 export default function StudentRequests() {
-  const { attendanceRequests, leaveRequests, attendanceQueries, applyLeave, tgAvailable } = useERP();
+  const { attendanceRequests, leaveRequests, attendanceQueries, applyLeave } = useERP();
   const [filter, setFilter] = useState('all');
   const [leaveModalOpen, setLeaveModalOpen] = useState(false);
 
-  // Leave form state
+  // Leave form state (clean initial defaults)
   const [leaveType, setLeaveType] = useState('Medical');
-  const [startDate, setStartDate] = useState('2025-09-28');
-  const [endDate, setEndDate] = useState('2025-09-30');
-  const [reason, setReason] = useState('Viral fever and doctor-prescribed clinical recovery.');
-  const [supportingDoc, setSupportingDoc] = useState('Doctor_Medical_Certificate.pdf');
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [reason, setReason] = useState('');
+  const [supportingDoc, setSupportingDoc] = useState('');
 
   const handleLeaveSubmit = (e) => {
     e.preventDefault();
+    if (!startDate || !endDate || !reason) return;
     applyLeave({
       leaveType,
       startDate,
       endDate,
       dateRangeLabel: `${startDate} to ${endDate}`,
       reason,
-      supportingDoc
+      supportingDoc: supportingDoc || 'Medical_Certificate.pdf'
     });
     setLeaveModalOpen(false);
+    setReason('');
   };
 
   // Combine requests
@@ -54,8 +56,9 @@ export default function StudentRequests() {
   ];
 
   const filteredRequests = allRequests.filter((req) => {
-    if (filter === 'active') return req.status.includes('pending') || req.status === 'processing_agent';
-    if (filter === 'completed') return req.status === 'completed' || req.status === 'approved';
+    const status = (req.status || '').toLowerCase();
+    if (filter === 'active') return status.includes('pending') || status === 'processing_agent';
+    if (filter === 'completed') return status === 'completed' || status === 'approved';
     return true;
   });
 
@@ -141,7 +144,7 @@ export default function StudentRequests() {
                 Mentor / TG Review
               </span>
               <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                {tgAvailable ? 'Verification' : 'Auto-Bypass if Unavailable'}
+                Approval workflow
               </span>
             </div>
 
@@ -207,14 +210,24 @@ export default function StudentRequests() {
 
         {/* Request Cards Container */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-          {filteredRequests.map((req) => (
-            <RequestCard
-              key={req.id}
-              request={req}
-              showActions={false}
-              role="student"
-            />
-          ))}
+          {filteredRequests.length === 0 ? (
+            <div className="card text-center" style={{ padding: '2.5rem', color: 'var(--text-secondary)' }}>
+              <Clock size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
+              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>No records found.</h3>
+              <p style={{ fontSize: '13px', margin: '0.25rem 0 0' }}>
+                No academic clearance or leave requests found for this filter.
+              </p>
+            </div>
+          ) : (
+            filteredRequests.map((req) => (
+              <RequestCard
+                key={req.id}
+                request={req}
+                showActions={false}
+                role="student"
+              />
+            ))
+          )}
         </div>
 
         {/* Quick Launchers (Action Tray matching Stitch) */}
@@ -361,23 +374,6 @@ export default function StudentRequests() {
                 <X size={20} />
               </button>
             </div>
-
-            {/* Banner showing TG Availability telemetry */}
-            {!tgAvailable && (
-              <div
-                style={{
-                  backgroundColor: 'var(--tertiary-container)',
-                  padding: '0.75rem',
-                  borderRadius: 'var(--radius-xl)',
-                  fontSize: '12px',
-                  color: 'var(--on-tertiary-container)',
-                  marginBottom: '0.75rem',
-                  border: '1px solid #FDE68A'
-                }}
-              >
-                <strong>Autonomous Fallback Routing Active:</strong> Mentor Prof. K. Sen is marked on leave. This application will be routed directly to HOD Dr. S. Roy.
-              </div>
-            )}
 
             <form onSubmit={handleLeaveSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
               <div className="form-group">

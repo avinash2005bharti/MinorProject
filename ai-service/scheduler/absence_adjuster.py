@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from loguru import logger
-from tools.mysql_tools import mysql_tools
+from tools.postgres_tools import postgres_tools
 
 class TeacherAbsenceAdjuster:
     """
@@ -14,7 +14,7 @@ class TeacherAbsenceAdjuster:
     - Generates ranked substitution proposals requiring HOD authorization.
     """
     def __init__(self):
-        self.sql = mysql_tools
+        self.sql = postgres_tools
 
     def analyze_and_propose(
         self,
@@ -26,7 +26,7 @@ class TeacherAbsenceAdjuster:
         """
         Calculates affected classes and ranks feasible substitutes deterministically.
         """
-        # 1. Identify teacher from MySQL
+        # 1. Identify teacher from PostgreSQL
         matched_faculty = self.sql.get_faculty_by_name(teacher_query, department=department)
         if not matched_faculty:
             # Fallback scan all faculty
@@ -57,7 +57,7 @@ class TeacherAbsenceAdjuster:
 
         logger.info(f"[Absence Adjuster] Analyzing absence for {absent_name} on {target_day} ({target_date})")
 
-        # 3. Retrieve affected classes from MySQL timetable
+        # 3. Retrieve affected classes from PostgreSQL timetable
         affected_slots = self.sql.get_affected_classes_for_absence(absent_name, target_day)
         if not affected_slots:
             # Try searching by day only for this teacher
@@ -213,7 +213,7 @@ class TeacherAbsenceAdjuster:
         approved_by: str = "Dr. Alok Verma (HOD)"
     ) -> Dict[str, Any]:
         """
-        Transactionally applies approved substitutions to MySQL database,
+        Transactionally applies approved substitutions to PostgreSQL database,
         creating substitution records, updating timetable entries, and recording audit logs.
         """
         absent_id = absence_data.get("teacher_id", 1)
@@ -221,7 +221,7 @@ class TeacherAbsenceAdjuster:
         date_str = absence_data.get("date", datetime.now().strftime("%Y-%m-%d"))
         proposals = absence_data.get("proposals", [])
 
-        # 1. Record absence in MySQL
+        # 1. Record absence in PostgreSQL
         absence_id = self.sql.create_absence_record(
             faculty_id=absent_id,
             faculty_name=absent_name,
@@ -236,7 +236,7 @@ class TeacherAbsenceAdjuster:
             if not p.get("proposed_substitute") or not p.get("substitute_id"):
                 continue
 
-            # 2. Record substitution in MySQL
+            # 2. Record substitution in PostgreSQL
             sub_id = self.sql.create_substitution_record(
                 absence_id=absence_id,
                 timetable_entry_id=p["timetable_entry_id"],
@@ -278,3 +278,4 @@ class TeacherAbsenceAdjuster:
         }
 
 absence_adjuster = TeacherAbsenceAdjuster()
+

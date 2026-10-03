@@ -1,98 +1,27 @@
 // ==========================================================================
 // CampusFlow – Teacher Management Service
+// Directly connected to real backend faculty APIs (No mock data fallback)
 // ==========================================================================
 
-import { apiClient } from './api';
+import { teacherApi } from '../api/teacherApi';
 
 export const teacherService = {
-  getDepartmentFaculty() {
-    return [
-      {
-        id: 'fac-1',
-        name: 'Dr. Rajesh Verma',
-        facultyId: 'FAC-102',
-        email: 'r.verma@oist.ac.in',
-        designation: 'Associate Professor',
-        department: 'Computer Science & Engineering',
-        specialization: 'Data Structures & Algorithms, Graph Theory',
-        assignedSections: ['CSE-3A', 'CSE-3B'],
-        weeklyHours: 14,
-        status: 'Active',
-        attendanceResponsibility: 'CS301, CS306 Lab'
-      },
-      {
-        id: 'fac-2',
-        name: 'Prof. Anita Sharma',
-        facultyId: 'FAC-104',
-        email: 'a.sharma@oist.ac.in',
-        designation: 'Assistant Professor',
-        department: 'Computer Science & Engineering',
-        specialization: 'Database Systems, Distributed SQL',
-        assignedSections: ['CSE-3A', 'CSE-5A'],
-        weeklyHours: 16,
-        status: 'Active',
-        attendanceResponsibility: 'CS302, CS307 Lab'
-      },
-      {
-        id: 'fac-3',
-        name: 'Dr. Meenakshi S.',
-        facultyId: 'FAC-108',
-        email: 'm.sundaram@oist.ac.in',
-        designation: 'Associate Professor',
-        department: 'Computer Science & Engineering',
-        specialization: 'Operating Systems, Kernel Architectures',
-        assignedSections: ['CSE-3A', 'CSE-7B'],
-        weeklyHours: 15,
-        status: 'Active',
-        attendanceResponsibility: 'CS303, CS502'
-      },
-      {
-        id: 'fac-4',
-        name: 'Prof. Amit K.',
-        facultyId: 'FAC-112',
-        email: 'a.kumar@oist.ac.in',
-        designation: 'Assistant Professor',
-        department: 'Computer Science & Engineering',
-        specialization: 'Computer Networks, SDN & Wireless Protocols',
-        assignedSections: ['CSE-3A', 'CSE-3B'],
-        weeklyHours: 14,
-        status: 'Active',
-        attendanceResponsibility: 'CS304, CS308 Lab'
-      },
-      {
-        id: 'fac-5',
-        name: 'Prof. K. Sen',
-        facultyId: 'FAC-088',
-        email: 'k.sen@oist.ac.in',
-        designation: 'Assistant Professor & TG',
-        department: 'Computer Science & Engineering',
-        specialization: 'Software Engineering, Agile Dev, CI/CD',
-        assignedSections: ['CSE-3A (TG Assigned)'],
-        weeklyHours: 12,
-        status: 'Active',
-        attendanceResponsibility: 'CS305, Mentorship Cell'
-      }
-    ];
-  },
-
-  // Backend API Call
-  async fetchDepartmentFacultyApi() {
-    try {
-      const res = await apiClient.get('/teachers');
-      return res.data;
-    } catch (e) {
-      console.warn('[teacherService] Falling back to local data:', e.message);
-      return this.getDepartmentFaculty();
-    }
+  // Fetch real faculty from backend API
+  async fetchDepartmentFacultyApi(params = {}) {
+    const res = await teacherApi.getFaculty(params);
+    return res.faculty || [];
   },
 
   async fetchTeacherProfileApi(id) {
-    try {
-      const res = await apiClient.get(`/teachers/${id || 'me'}`);
-      return res.data;
-    } catch (e) {
-      console.warn('[teacherService] Profile fetch warning:', e.message);
-      return null;
-    }
+    const res = await teacherApi.getFacultyById(id);
+    return res.faculty || null;
+  },
+
+  async appointTeacherAsTgApi(id, data = {}) {
+    return teacherApi.appointTg(id, data);
+  },
+
+  async revokeTeacherTgApi(id) {
+    return teacherApi.revokeTg(id);
   }
 };

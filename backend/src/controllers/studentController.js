@@ -1,45 +1,68 @@
-const { Op } = require('sequelize');
-const { Student, User, Attendance } = require('../models/mysql');
+// ============================================================================
+// Departmental ERP - Student Controller
+// Canonical Source of Truth: PostgreSQL via Prisma
+// ============================================================================
+
+const bcrypt = require('bcryptjs');
+const { prisma } = require('../config/postgres');
 const { logger } = require('../services/loggerService');
 
-// 1. Get All Students with Search, Year/Sem/Section filter, and Pagination
+// 1. Get All Students with Search, Semester/Section filter, and Pagination
 exports.getStudents = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
-    const offset = (page - 1) * limit;
+    const limit = parseInt(req.query.limit, 10) || 100;
+    const skip = (page - 1) * limit;
 
-    const { search, year, semester, section, batch, status } = req.query;
+    const { search, semester, section, status } = req.query;
 
     const where = {};
-
-    if (year) where.year = year;
     if (semester) where.semester = parseInt(semester, 10);
-    if (section) where.section = section.toUpperCase();
-    if (batch) where.batch = batch;
     if (status) where.status = status;
 
+    if (section) {
+      where.section = { name: section.toUpperCase() };
+    }
+
     if (search) {
-      where[Op.or] = [
-        { name: { [Op.like]: `%${search}%` } },
-        { enrollment_no: { [Op.like]: `%${search}%` } },
-        { email: { [Op.like]: `%${search}%` } }
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { enrollmentNo: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } }
       ];
     }
 
-    const { count, rows } = await Student.findAndCountAll({
-      where,
-      limit,
-      offset,
-      order: [['enrollment_no', 'ASC']]
-    });
+    const [total, students] = await Promise.all([
+      prisma.student.count({ where }),
+      prisma.student.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          department: true,
+          section: true,
+          tutorGuardian: true,
+          user: { select: { id: true, email: true, role: true } }
+        },
+        orderBy: { enrollmentNo: 'asc' }
+      })
+    ]);
+
+    const formattedStudents = students.map((s) => ({
+      ...s,
+      name: `${s.firstName} ${s.lastName || ''}`.trim(),
+      departmentName: s.department?.name || 'CSE',
+      sectionName: s.section?.name || 'A',
+      tgName: s.tutorGuardian ? `${s.tutorGuardian.firstName} ${s.tutorGuardian.lastName || ''}`.trim() : null
+    }));
 
     return res.status(200).json({
       success: true,
-      total: count,
+      total,
       page,
-      totalPages: Math.ceil(count / limit),
-      students: rows
+      totalPages: Math.ceil(total / limit),
+      students: formattedStudents
     });
   } catch (error) {
     logger.error(`[Student Controller] Error fetching students: ${error.message}`);
@@ -52,17 +75,44 @@ exports.getStudentById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const student = await Student.findOne({
-      where: isNaN(id) ? { enrollment_no: id } : { id },
-      include: [{ model: User, as: 'user', attributes: ['id', 'email', 'role'] }]
+    const student = await prisma.student.findFirst({
+      where: {
+        OR: [
+          { id: id.length === 36 ? id : undefined },
+          { enrollmentNo: id.toUpperCase() }
+        ].filter(Boolean)
+      },
+      include: {
+        department: true,
+        section: true,
+        tutorGuardian: true,
+        user: { select: { id: true, email: true, role: true } }
+      }
     });
 
     if (!student) {
-      return res.status(404).json({ success: false, message: 'Student record not found in CSE records.' });
+      return res.status(404).json({ success: false, message: 'Student record not found in ERP database.' });
     }
 
-    return res.status(200).json({ success: true, student });
+    // Compute student attendance stats
+    const totalRecords = await prisma.attendanceRecord.count({ where: { studentId: student.id } });
+    const presentRecords = await prisma.attendanceRecord.count({
+      where: { studentId: student.id, status: { in: ['PRESENT', 'Present'] } }
+    });
+    const attendancePct = totalRecords > 0 ? Math.round((presentRecords / totalRecords) * 100) : 0;
+
+    return res.status(200).json({
+      success: true,
+      student: {
+        ...student,
+        name: `${student.firstName} ${student.lastName || ''}`.trim(),
+        attendancePercentage: attendancePct,
+        totalClassesAttended: presentRecords,
+        totalClassesConducted: totalRecords
+      }
+    });
   } catch (error) {
+    logger.error(`[Student Controller] Error getting student ${req.params.id}: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -70,19 +120,38 @@ exports.getStudentById = async (req, res) => {
 // 3. Create Student
 exports.createStudent = async (req, res) => {
   try {
-    const { enrollment_no, name, email, phone, year, semester, section, batch, status } = req.body;
+    const {
+      enrollment_no,
+      enrollmentNo,
+      rollNo,
+      roll_no,
+      name,
+      firstName: inFirst,
+      lastName: inLast,
+      email,
+      phone,
+      semester,
+      sectionName,
+      section,
+      sectionId: inSectionId,
+      admissionYear,
+      year,
+      status
+    } = req.body;
 
-    if (!enrollment_no || !name || !email || !year || !semester || !section) {
+    const finalEnrollment = (enrollmentNo || enrollment_no || '').trim().toUpperCase();
+    const finalRoll = (rollNo || roll_no || '').trim() || null;
+    const finalEmail = (email || '').trim().toLowerCase();
+
+    if (!finalEnrollment || (!name && !inFirst) || !finalEmail) {
       return res.status(400).json({
         success: false,
-        message: 'Missing required student details (enrollment_no, name, email, year, semester, section).'
+        message: 'Name, email, and enrollment number are required.'
       });
     }
 
-    const existing = await Student.findOne({
-      where: {
-        [Op.or]: [{ enrollment_no }, { email }]
-      }
+    const existing = await prisma.student.findFirst({
+      where: { OR: [{ enrollmentNo: finalEnrollment }, { email: finalEmail }] }
     });
 
     if (existing) {
@@ -92,25 +161,90 @@ exports.createStudent = async (req, res) => {
       });
     }
 
-    const student = await Student.create({
-      enrollment_no,
-      name,
-      email,
-      phone,
-      year,
-      semester: parseInt(semester, 10),
-      section: section.toUpperCase(),
-      batch: batch || '2022-2026',
-      status: status || 'Active'
+    let firstName = inFirst ? inFirst.trim() : '';
+    let lastName = inLast ? inLast.trim() : '';
+    if (!firstName && name) {
+      const parts = name.trim().split(/\s+/);
+      firstName = parts[0] || 'Student';
+      lastName = parts.slice(1).join(' ') || '';
+    }
+
+    const defaultDept = await prisma.department.findFirst();
+    if (!defaultDept) {
+      return res.status(500).json({ success: false, message: 'No department found in ERP database.' });
+    }
+
+    // Resolve section
+    let resolvedSectionId = inSectionId || null;
+    const secTargetName = (sectionName || section || '').trim().toUpperCase();
+    if (!resolvedSectionId && secTargetName) {
+      const sec = await prisma.section.findFirst({
+        where: { departmentId: defaultDept.id, name: secTargetName }
+      });
+      if (sec) resolvedSectionId = sec.id;
+    }
+
+    const finalAdmissionYear = parseInt(admissionYear || year, 10) || new Date().getFullYear();
+    const finalSemester = parseInt(semester, 10) || 5;
+
+    // Transactionally create or link User + Student
+    const student = await prisma.$transaction(async (tx) => {
+      let userId = null;
+      const existingUser = await tx.user.findUnique({ where: { email: finalEmail } });
+      if (existingUser) {
+        userId = existingUser.id;
+      } else {
+        const studentRole = await tx.role.findFirst({
+          where: { name: { equals: 'STUDENT', mode: 'insensitive' } }
+        });
+        if (studentRole) {
+          const passwordHash = await bcrypt.hash('Student@123', 10);
+          const newUser = await tx.user.create({
+            data: {
+              name: `${firstName} ${lastName}`.trim(),
+              email: finalEmail,
+              passwordHash,
+              roleId: studentRole.id,
+              departmentId: defaultDept.id,
+              isActive: true
+            }
+          });
+          userId = newUser.id;
+        }
+      }
+
+      return tx.student.create({
+        data: {
+          userId,
+          enrollmentNo: finalEnrollment,
+          rollNo: finalRoll,
+          firstName,
+          lastName,
+          email: finalEmail,
+          phone: phone || null,
+          admissionYear: finalAdmissionYear,
+          semester: finalSemester,
+          departmentId: defaultDept.id,
+          sectionId: resolvedSectionId,
+          status: status || 'ACTIVE'
+        },
+        include: {
+          department: true,
+          section: true
+        }
+      });
     });
 
     return res.status(201).json({
       success: true,
-      message: 'Student created successfully.',
-      student
+      message: 'Student record created successfully.',
+      student: {
+        ...student,
+        name: `${student.firstName} ${student.lastName || ''}`.trim()
+      }
     });
   } catch (error) {
-    logger.error(`[Student Controller] Create error: ${error.message}`);
+    logger.error(`[Student Controller] Error creating student: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -119,30 +253,49 @@ exports.createStudent = async (req, res) => {
 exports.updateStudent = async (req, res) => {
   try {
     const { id } = req.params;
-    const student = await Student.findByPk(id);
+    const { name, phone, semester, status, tgTeacherId, rollNo, roll_no, sectionId, sectionName, section } = req.body;
 
-    if (!student) {
-      return res.status(404).json({ success: false, message: 'Student not found.' });
+    const data = {};
+    if (phone !== undefined) data.phone = phone;
+    if (semester !== undefined) data.semester = parseInt(semester, 10);
+    if (status !== undefined) data.status = status;
+    if (tgTeacherId !== undefined) data.tgTeacherId = tgTeacherId;
+    if (rollNo !== undefined || roll_no !== undefined) data.rollNo = (rollNo || roll_no || '').trim() || null;
+
+    if (sectionId) {
+      data.sectionId = sectionId;
+    } else if (sectionName || section) {
+      const secName = (sectionName || section).trim().toUpperCase();
+      const sec = await prisma.section.findFirst({ where: { name: secName } });
+      if (sec) data.sectionId = sec.id;
     }
 
-    const { name, phone, year, semester, section, batch, status } = req.body;
+    if (name) {
+      const parts = name.trim().split(/\s+/);
+      data.firstName = parts[0];
+      data.lastName = parts.slice(1).join(' ');
+    }
 
-    await student.update({
-      name: name || student.name,
-      phone: phone !== undefined ? phone : student.phone,
-      year: year || student.year,
-      semester: semester ? parseInt(semester, 10) : student.semester,
-      section: section ? section.toUpperCase() : student.section,
-      batch: batch || student.batch,
-      status: status || student.status
+    const updated = await prisma.student.update({
+      where: { id },
+      data,
+      include: {
+        department: true,
+        section: true,
+        tutorGuardian: true
+      }
     });
 
     return res.status(200).json({
       success: true,
       message: 'Student record updated successfully.',
-      student
+      student: {
+        ...updated,
+        name: `${updated.firstName} ${updated.lastName || ''}`.trim()
+      }
     });
   } catch (error) {
+    logger.error(`[Student Controller] Error updating student ${req.params.id}: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -151,18 +304,24 @@ exports.updateStudent = async (req, res) => {
 exports.deleteStudent = async (req, res) => {
   try {
     const { id } = req.params;
-    const student = await Student.findByPk(id);
 
-    if (!student) {
-      return res.status(404).json({ success: false, message: 'Student not found.' });
-    }
+    await prisma.$transaction(async (tx) => {
+      // Safe cascade delete of student records
+      await tx.attendanceCorrectionRequest.deleteMany({ where: { studentId: id } });
+      await tx.attendanceConsiderationRequest.deleteMany({ where: { studentId: id } });
+      await tx.leaveApplication.deleteMany({ where: { studentId: id } });
+      await tx.attendanceRecord.deleteMany({ where: { studentId: id } });
+      await tx.enrollment.deleteMany({ where: { studentId: id } });
 
-    await student.destroy();
-    return res.status(200).json({
-      success: true,
-      message: 'Student record deleted successfully from CSE department.'
+      const st = await tx.student.delete({ where: { id } });
+      if (st.userId) {
+        await tx.user.delete({ where: { id: st.userId } }).catch(() => {});
+      }
     });
+
+    return res.status(200).json({ success: true, message: 'Student record deleted successfully.' });
   } catch (error) {
+    logger.error(`[Student Controller] Error deleting student: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

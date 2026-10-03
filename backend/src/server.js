@@ -1,23 +1,21 @@
-require('dotenv').config();
-const http = require('http');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { Server } = require('socket.io');
 
-const { connectDB } = require('./config/db');
-const { connectMySQL } = require('./config/mysql');
+const { connectMongo, getMongoHealth } = require('./config/mongo');
+const { connectPostgres, getPostgresHealth } = require('./config/postgres');
+const { connectQdrant, getQdrantHealth } = require('./config/qdrant');
 const { setupSwagger } = require('./config/swagger');
 const { initSocket } = require('./sockets/socketHandler');
 const { logger } = require('./services/loggerService');
 const requestLogger = require('./middleware/requestLogger');
 const errorHandler = require('./middleware/errorHandler');
 const routes = require('./routes/index');
-const { User } = require('./models/mysql');
-const seedCseDatabase = require('./utils/seedData');
-
 const app = express();
 const server = http.createServer(app);
 
@@ -82,9 +80,36 @@ app.get('/', (req, res) => {
     department: 'Computer Science & Engineering (CSE)',
     system: 'CSE Department AI Agentic ERP Backend',
     version: '2.0.0',
+    architecture: {
+      relational: 'PostgreSQL + Prisma ORM (Source of Truth)',
+      application: 'MongoDB + Mongoose (User Data & LLM STM)',
+      vector: 'Qdrant (LLM LTM & RAG Knowledge)'
+    },
     documentation: '/api-docs',
     health: '/api/health',
+    databases: '/api/health/databases',
     status: 'Running'
+  });
+});
+
+// Database Architecture Health Endpoint
+app.get('/api/health/databases', async (req, res) => {
+  const [pgHealth, mongoHealth, qdrantHealth] = await Promise.all([
+    getPostgresHealth(),
+    getMongoHealth(),
+    getQdrantHealth()
+  ]);
+
+  const coreHealthy = pgHealth.status === 'UP' && mongoHealth.status === 'UP';
+
+  res.status(coreHealthy ? 200 : 503).json({
+    status: coreHealthy ? (qdrantHealth.status === 'UP' ? 'HEALTHY' : 'DEGRADED') : 'UNHEALTHY',
+    timestamp: new Date().toISOString(),
+    databases: {
+      postgres: pgHealth,
+      mongodb: mongoHealth,
+      qdrant: qdrantHealth
+    }
   });
 });
 
@@ -93,22 +118,44 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-// Start Server after connecting to MySQL and MongoDB
+// Start Server after validating all three database layers
 const startServer = async () => {
   try {
-    // 1. Connect to Relational Database (MySQL with SQLite fallback)
-    const sequelize = await connectMySQL();
-    await sequelize.sync(); // ensure tables are synced
+    console.log('\n======================================================');
+    console.log('  CAMPUSFLOW ERP - DATABASE ARCHITECTURE VALIDATION  ');
+    console.log('======================================================');
 
-    // 2. Connect to MongoDB for AI Memory
-    await connectDB();
-
-    // 3. Check if initial seeding is needed
-    const userCount = await User.count();
-    if (userCount === 0) {
-      logger.info('[Server] Database is empty. Running initial CSE department seed data...');
-      await seedCseDatabase();
+    // 1. PostgreSQL (Prisma ORM) - Relational Source of Truth
+    try {
+      await connectPostgres();
+      console.log('  [PostgreSQL + Prisma] : ✓ CONNECTED (Relational ERP Source of Truth)');
+    } catch (pgErr) {
+      console.warn(`  [PostgreSQL + Prisma] : ⚠️ INITIAL ATTEMPT FAILED - Retrying in background (${pgErr.message})`);
+      setTimeout(() => connectPostgres().catch(() => {}), 5000);
     }
+
+    // 2. MongoDB (Mongoose) - User/App Data & LLM STM
+    try {
+      await connectMongo();
+      console.log('  [MongoDB + Mongoose]  : ✓ CONNECTED (User Data & LLM STM)');
+    } catch (mErr) {
+      console.error(`  [MongoDB + Mongoose]  : ✗ FAILED - ${mErr.message}`);
+      throw mErr;
+    }
+
+    // 3. Qdrant Vector Database - LLM LTM & RAG
+    try {
+      const qOk = await connectQdrant();
+      if (qOk) {
+        console.log('  [Qdrant Vector DB]    : ✓ CONNECTED (LLM LTM & RAG Embeddings)');
+      } else {
+        console.warn('  [Qdrant Vector DB]    : ⚠️  UNAVAILABLE (Vector features in fallback mode)');
+      }
+    } catch (qErr) {
+      console.warn(`  [Qdrant Vector DB]    : ⚠️  WARNING (${qErr.message}) - running fallback`);
+    }
+
+    console.log('======================================================\n');
 
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
@@ -124,7 +171,7 @@ const startServer = async () => {
       logger.info(`  CSE AGENTIC ERP BACKEND RUNNING ON PORT ${PORT} `);
       logger.info(`======================================================`);
       logger.info(`• Base API:       http://localhost:${PORT}/api`);
-      logger.info(`• API v1:         http://localhost:${PORT}/api/v1`);
+      logger.info(`• Database Health:http://localhost:${PORT}/api/health/databases`);
       logger.info(`• Swagger Docs:   http://localhost:${PORT}/api-docs`);
       logger.info(`• Static Uploads: http://localhost:${PORT}/uploads`);
       logger.info(`• Socket.IO:      ws://localhost:${PORT}`);
@@ -141,3 +188,4 @@ if (require.main === module || process.env.NODE_ENV !== 'test') {
 }
 
 module.exports = { app, server, startServer };
+

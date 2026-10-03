@@ -1,17 +1,18 @@
 # CampusFlow – CSE Department ERP (Backend)
 
-Production-ready Express.js, MongoDB, and Socket.IO backend for the Computer Science & Engineering Department ERP.
+Production-ready Express.js, PostgreSQL (with Sequelize ORM), MongoDB, and Socket.IO backend for the Computer Science & Engineering Department ERP.
 
 ## 🚀 Key Features
 
 * **Strict Academic Hierarchy**: Dedicated to CSE Department: 4 Years → 8 Semesters → Sections (A, B, C...).
 * **Multi-Role Authentication**: Student, Teacher, Mentor (TG), HOD, Administrator with JWT tokens and bcrypt password hashing.
+* **Relational Storage (PostgreSQL)**: Normalized tables for Students, Teachers, HODs, Departments, Subjects, Classes, Classrooms, Timetables, Attendance, Leaves, and Attendance Queries. Production ready for Render PostgreSQL.
 * **Email OTP Password Reset**: Automated reset flow via Nodemailer.
 * **Attendance Ledger**: Automated percentage calculation, status badges (Safe / Borderline / Critical), and dynamic QR attendance scanning.
 * **AI Multi-Agent Core**:
   * **Attendance Agent**: Recalculates aggregates, propagates institutional duty credits, and dispatches notices.
   * **Leave Agent**: Evaluates mentor (TG) availability telemetry and autonomously triggers direct HOD routing if unavailable.
-  * **Timetable Agent**: Heuristic conflict detector for rooms, teachers, and workload intervals with autonomous healing.
+  * **Timetable Agent**: Heuristic conflict detector for rooms, teachers, and workload intervals with autonomous healing and dynamic absence rescheduling.
   * **Notification Agent**: Cross-role Socket.IO notifications + database persistence.
 * **Interactive Swagger UI**: Full OpenAPI 3.0 documentation at `/api-docs`.
 * **File Uploads**: Secure document uploads with Multer for medical certificates, OD letters, and assignment files.
@@ -32,14 +33,16 @@ npm install
 Check `.env` (or copy from `.env.example`):
 ```env
 PORT=5000
+DATABASE_URL=postgresql://cse_user:cse_password123@localhost:5432/cse_erp
+PGSSL=false
 MONGODB_URI=mongodb://127.0.0.1:27017/campusflow
 JWT_SECRET=campusflow_super_secret_jwt_key_cse_dept_2025_secure
 ```
-*Note: If local MongoDB is not running, the backend automatically initializes an embedded MongoDB memory server during development.*
+*Note: If local PostgreSQL is not currently running, the backend seamlessly falls back to a local SQLite database for development without crashing.*
 
-### 3. Seed Database
+### 3. Run PostgreSQL Migrations
 ```bash
-npm run seed
+npm run migrate
 ```
 
 ### 4. Start Server
@@ -51,13 +54,7 @@ npm start
 
 ---
 
-## 🔑 Demo Credentials (Password: `password123`)
-
-* **Admin**: `admin@campusflow.com` / `admin.support@oist.ac.in`
-* **HOD**: `hod.cse@campusflow.com` / `s.roy@oist.ac.in`
-* **Mentor / TG**: `tg@campusflow.com` / `k.sen@oist.ac.in`
-* **Faculty**: `teacher1@campusflow.com` / `r.verma@oist.ac.in`
-* **Student**: `student1@campusflow.com` / `21cse084@oist.ac.in`
+No demo accounts or sample records are inserted automatically. Create accounts through the configured registration or administration workflow.
 
 ---
 
@@ -84,3 +81,4 @@ npm start
 | `GET` | `/api/cse/years` | CSE 4-year / 8-semester structure |
 | `GET` | `/api/dashboard/:role` | Personalized role dashboard feeds |
 | `GET` | `/api-docs` | Interactive Swagger API documentation |
+| `GET` | `/health` | System health check (PostgreSQL, MongoDB, AI microservice) |

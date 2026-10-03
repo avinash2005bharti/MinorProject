@@ -12,6 +12,12 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 UPLOADS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../backend/uploads"))
 
+# Import ImageKit client for cloud upload of generated files
+try:
+    from file_processing.imagekit_client import imagekit_client
+except ImportError:
+    imagekit_client = None
+
 class TimetableFileGenerator:
     """
     Generates professional, production-ready PDF and Excel (.xlsx) timetables
@@ -102,7 +108,7 @@ class TimetableFileGenerator:
         for col, width in column_widths.items():
             ws.column_dimensions[col].width = width
 
-        # Save File
+        # Save File temporarily
         file_id = f"timetable_{section.lower()}_v{version}_{uuid.uuid4().hex[:6]}"
         file_name = f"{file_id}.xlsx"
         file_path = os.path.join(UPLOADS_DIR, file_name)
@@ -111,7 +117,7 @@ class TimetableFileGenerator:
 
         logger.info(f"[File Generator] Created Excel timetable: {file_path} ({file_size} bytes)")
 
-        return {
+        result = {
             "file_id": file_id,
             "file_name": file_name,
             "file_type": "xlsx",
@@ -119,6 +125,10 @@ class TimetableFileGenerator:
             "file_size": file_size,
             "download_url": f"/uploads/{file_name}"
         }
+
+        # Upload to ImageKit Cloud and clean up local file
+        result = self._upload_to_imagekit_and_cleanup(result, file_path, file_name)
+        return result
 
     def generate_pdf(
         self,
@@ -243,7 +253,7 @@ class TimetableFileGenerator:
 
         logger.info(f"[File Generator] Created PDF timetable: {file_path} ({file_size} bytes)")
 
-        return {
+        result = {
             "file_id": file_id,
             "file_name": file_name,
             "file_type": "pdf",
@@ -251,5 +261,40 @@ class TimetableFileGenerator:
             "file_size": file_size,
             "download_url": f"/uploads/{file_name}"
         }
+
+        # Upload to ImageKit Cloud and clean up local file
+        result = self._upload_to_imagekit_and_cleanup(result, file_path, file_name)
+        return result
+
+    def _upload_to_imagekit_and_cleanup(self, result: dict, file_path: str, file_name: str) -> dict:
+        """
+        Upload generated file to ImageKit Cloud, update result dict, and delete local temp file.
+        """
+        if imagekit_client and imagekit_client.is_configured():
+            try:
+                ik_result = imagekit_client.upload_file(
+                    file_path=file_path,
+                    file_name=file_name,
+                    folder="/campusflow-erp/generated",
+                    tags=["agent_generated", result.get("file_type", "file")]
+                )
+                if ik_result and ik_result.get("url"):
+                    result["download_url"] = ik_result["url"]
+                    result["storage_url"] = ik_result["url"]
+                    result["imagekit_file_id"] = ik_result.get("fileId", "")
+                    result["storage_provider"] = "imagekit"
+                    logger.info(f"[File Generator] Uploaded to ImageKit: {ik_result['url']}")
+
+                    # Clean up local temp file
+                    try:
+                        if os.path.exists(file_path):
+                            os.unlink(file_path)
+                            logger.info(f"[File Generator] Cleaned temp file: {file_path}")
+                    except Exception as ce:
+                        logger.warning(f"[File Generator] Temp cleanup warning: {ce}")
+            except Exception as e:
+                logger.warning(f"[File Generator] ImageKit upload warning (keeping local): {e}")
+
+        return result
 
 timetable_file_generator = TimetableFileGenerator()

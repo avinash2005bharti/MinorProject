@@ -16,7 +16,11 @@ import {
 } from 'lucide-react';
 
 export default function StudentProfile() {
-  const { currentUser, subjects } = useERP();
+  const { currentUser, subjects, dashboardData } = useERP();
+  const student = currentUser || {};
+
+  const rollNumber = student.enrollment_no || student.rollNo || 'OIST-CSE-2023';
+  const attendanceRate = student.attendance !== undefined ? student.attendance : (dashboardData?.attendanceRate || 0);
 
   return (
     <div className="page-wrapper">
@@ -28,7 +32,7 @@ export default function StudentProfile() {
               <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
                 Student Identity & Academic Profile
               </h1>
-              <span className="badge badge-emerald">Active Student</span>
+              <span className="badge badge-emerald">{student.status || 'Active Student'}</span>
             </div>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
               Oriental Institute of Science & Technology (OIST) • Computer Science & Engineering Registry
@@ -37,7 +41,7 @@ export default function StudentProfile() {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <span className="badge badge-indigo" style={{ padding: '0.35rem 0.75rem', fontSize: '12px' }}>
-              Autonomous Batch 2023-2027
+              Batch {student.batch || '2023-2027'}
             </span>
           </div>
         </div>
@@ -77,7 +81,7 @@ export default function StudentProfile() {
                     border: '3px solid var(--surface-high)',
                     flexShrink: 0
                   }}
-                  title={currentUser.name}
+                  title={student.name}
                 >
                   <User size={44} />
                 </div>
@@ -85,7 +89,7 @@ export default function StudentProfile() {
                 <div style={{ flex: 1, minWidth: '240px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                     <h2 style={{ fontSize: '22px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                      {currentUser.name}
+                      {student.name || 'Student Profile'}
                     </h2>
                     <span className="badge badge-emerald" style={{ fontSize: '11px' }}>
                       <CheckCircle2 size={12} /> Verified
@@ -93,14 +97,14 @@ export default function StudentProfile() {
                   </div>
 
                   <p style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: 600, marginTop: '2px' }}>
-                    {currentUser.department}
+                    {student.department || 'Computer Science & Engineering'}
                   </p>
 
                   <div style={{ display: 'flex', gap: '1.25rem', marginTop: '0.65rem', fontSize: '13px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-                    <span><strong>Roll No:</strong> <span className="tabular-nums" style={{ color: 'var(--text-primary)' }}>{currentUser.rollNo}</span></span>
-                    <span><strong>Section:</strong> <span style={{ color: 'var(--text-primary)' }}>{currentUser.section}</span></span>
-                    <span><strong>Semester:</strong> <span style={{ color: 'var(--text-primary)' }}>{currentUser.semester}th Sem</span></span>
-                    <span><strong>CGPA:</strong> <span style={{ color: 'var(--primary)', fontWeight: 700 }}>{currentUser.cgpa} / 10</span></span>
+                    <span><strong>Enrollment No:</strong> <span className="tabular-nums" style={{ color: 'var(--text-primary)' }}>{rollNumber}</span></span>
+                    <span><strong>Section:</strong> <span style={{ color: 'var(--text-primary)' }}>{student.section || 'A'}</span></span>
+                    <span><strong>Semester:</strong> <span style={{ color: 'var(--text-primary)' }}>{student.semester || 5}th Sem</span></span>
+                    <span><strong>Academic Year:</strong> <span style={{ color: 'var(--primary)', fontWeight: 700 }}>{student.year || '3rd Year'}</span></span>
                   </div>
                 </div>
               </div>
@@ -113,40 +117,42 @@ export default function StudentProfile() {
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
                     Aggregate Attendance
                   </span>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: currentUser.attendance >= 75 ? 'var(--secondary)' : 'var(--error)', marginTop: '2px' }}>
-                    {currentUser.attendance}%
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: attendanceRate >= 75 ? 'var(--secondary)' : 'var(--error)', marginTop: '2px' }}>
+                    {attendanceRate}%
                   </div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Exam Eligible (&gt;75%)</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>
+                    {attendanceRate >= 75 ? 'Exam Eligible (≥75%)' : 'Attendance Shortage Alert'}
+                  </span>
                 </div>
 
                 <div style={{ padding: '0.75rem', backgroundColor: 'var(--surface-low)', borderRadius: 'var(--radius-xl)' }}>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Credits Earned
+                    Official Email
                   </span>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
-                    64 / 160
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginTop: '2px', wordBreak: 'break-all' }}>
+                    {student.email || 'N/A'}
                   </div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>On track for graduation</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>OIST Institutional ID</span>
                 </div>
 
                 <div style={{ padding: '0.75rem', backgroundColor: 'var(--surface-low)', borderRadius: 'var(--radius-xl)' }}>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Academic Standing
+                    Contact Phone
                   </span>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--primary)', marginTop: '2px' }}>
-                    First Class
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: 'var(--primary)', marginTop: '2px' }}>
+                    {student.phone || 'Not Registered'}
                   </div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>With Distinction</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Emergency Verified</span>
                 </div>
 
                 <div style={{ padding: '0.75rem', backgroundColor: 'var(--surface-low)', borderRadius: 'var(--radius-xl)' }}>
                   <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                    Active Backlogs
+                    Enrollment Status
                   </span>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--secondary)', marginTop: '2px' }}>
-                    0
+                  <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--secondary)', marginTop: '2px' }}>
+                    {student.status || 'Active'}
                   </div>
-                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Clear record</span>
+                  <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>Autonomous ERP Registry</span>
                 </div>
               </div>
             </div>
@@ -161,53 +167,53 @@ export default function StudentProfile() {
                   </h3>
                 </div>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  {subjects.length} Subjects Active
+                  {subjects.length} Subjects in Department Scheme
                 </span>
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                {subjects.map((sub) => (
-                  <div
-                    key={sub.code}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0.75rem 1rem',
-                      backgroundColor: 'var(--surface-low)',
-                      borderRadius: 'var(--radius-xl)',
-                      gap: '1rem',
-                      flexWrap: 'wrap'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '200px' }}>
-                      <span className="badge badge-indigo" style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>
-                        {sub.code}
-                      </span>
-                      <div>
-                        <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {sub.name}
-                        </h4>
-                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
-                          {sub.teacher}
+              {subjects.length === 0 ? (
+                <div className="text-center" style={{ padding: '1.5rem', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                  No courses registered for this semester yet.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  {subjects.map((sub) => (
+                    <div
+                      key={sub.code || sub.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.75rem 1rem',
+                        backgroundColor: 'var(--surface-low)',
+                        borderRadius: 'var(--radius-xl)',
+                        gap: '1rem',
+                        flexWrap: 'wrap'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: '200px' }}>
+                        <span className="badge badge-indigo" style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '11px' }}>
+                          {sub.code}
                         </span>
+                        <div>
+                          <h4 style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            {sub.name}
+                          </h4>
+                          <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                            Credits: {sub.credits || 4} • Semester {sub.semester}
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
-                      <div style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'block' }}>Attendance</span>
-                        <span style={{ fontSize: '13px', fontWeight: 700, color: sub.percentage >= 75 ? 'var(--secondary)' : 'var(--error)' }}>
-                          {sub.percentage}%
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+                        <span className="badge badge-slate" style={{ fontSize: '11px' }}>
+                          Core Curriculum
                         </span>
                       </div>
-                      <span className="badge badge-slate" style={{ fontSize: '10px' }}>
-                        {sub.attended}/{sub.total} Classes
-                      </span>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -225,15 +231,19 @@ export default function StudentProfile() {
               {/* TG */}
               <div style={{ padding: '0.75rem', backgroundColor: 'var(--surface-low)', borderRadius: 'var(--radius-xl)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                 <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 700 }}>
-                  Assigned Teacher Guardian (TG)
+                  Teacher Guardian (TG) / Mentor
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <User size={16} color="var(--primary)" />
-                  <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '13px' }}>{currentUser.tgName}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '13px' }}>
+                    {student.tgName || 'Department Mentor Assigned'}
+                  </span>
                 </div>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{currentUser.tgEmail}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  {student.tgEmail || 'tg.cse@college.edu'}
+                </span>
                 <span style={{ fontSize: '11px', color: 'var(--secondary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-                  <CheckCircle2 size={12} /> Available in Cabin CS-204
+                  <CheckCircle2 size={12} /> Assigned Mentor
                 </span>
               </div>
 
@@ -244,11 +254,13 @@ export default function StudentProfile() {
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <GraduationCap size={16} color="var(--primary)" />
-                  <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '13px' }}>{currentUser.hodName}</span>
+                  <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '13px' }}>
+                    Dr. Alok Verma
+                  </span>
                 </div>
-                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>hod.cse@oist.ac.in</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>hod.cse@college.edu</span>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                  Department Office: Ground Floor, Block-B
+                  CSE Department Office, Block-B
                 </span>
               </div>
             </div>
@@ -258,28 +270,28 @@ export default function StudentProfile() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <QrCode size={18} color="var(--primary)" />
                 <h3 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Digital RFID Badge
+                  Digital Identity Credentials
                 </h3>
               </div>
 
               <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Biometric UID:</span>
-                  <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-primary)' }}>OIST-CSE-2023-8941</span>
+                  <span>Enrollment ID:</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 600, color: 'var(--text-primary)' }}>{rollNumber}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Card Status:</span>
+                  <span>Database State:</span>
                   <span style={{ color: 'var(--secondary)', fontWeight: 600 }}>Active / Synced</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Gate Security:</span>
-                  <span style={{ color: 'var(--text-primary)' }}>Turnstile NFC Clearance</span>
+                  <span>Access Tier:</span>
+                  <span style={{ color: 'var(--text-primary)' }}>Student Portal Role</span>
                 </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-subtle)', color: 'var(--text-muted)', fontSize: '11px' }}>
                 <ShieldCheck size={14} color="var(--secondary)" />
-                <span>OIST ERP 3.2 Secure Academic Cloud</span>
+                <span>OIST ERP Relational Academic Cloud</span>
               </div>
             </div>
           </div>

@@ -1,30 +1,11 @@
 // ==========================================================================
 // CampusFlow – Leave Service
-// Handles leave submission, TG availability telemetry, and direct HOD routing
+// Directly connected to real backend leave and request endpoints
 // ==========================================================================
 
-import { apiClient } from './api';
+import { requestApi } from '../api/requestApi';
 
 export const leaveService = {
-  // Routes leave request based on mentor availability
-  evaluateLeaveRouting(isTgAvailable) {
-    if (isTgAvailable) {
-      return {
-        nextStatus: 'pending_tg',
-        nextActor: 'Prof. K. Sen (TG)',
-        routingNote: 'Standard 3-stage clearance pipeline active: Student → TG Review → HOD Clearance.',
-        isFallback: false
-      };
-    } else {
-      return {
-        nextStatus: 'pending_hod_direct',
-        nextActor: 'Dr. S. Roy (HOD Direct Clearance)',
-        routingNote: 'Autonomous fallback routing: Mentor is currently marked unavailable/on leave. Routed directly to HOD to prevent clearance delays.',
-        isFallback: true
-      };
-    }
-  },
-
   getLeaveTypeBadge(type) {
     switch (type?.toLowerCase()) {
       case 'medical':
@@ -38,20 +19,19 @@ export const leaveService = {
     }
   },
 
-  // Backend API calls
   async applyLeaveApi(formData) {
-    return apiClient.post('/requests/leave', formData);
+    return requestApi.applyLeave(formData);
   },
 
   async tgReviewLeaveApi(leaveId, approved = true) {
-    return apiClient.put(`/requests/leave/${leaveId}/tg-review`, { approved });
+    return requestApi.tgReviewLeave(leaveId, approved);
   },
 
   async hodApproveLeaveApi(leaveId) {
-    return apiClient.put(`/requests/leave/${leaveId}/hod-approve`, {});
+    return requestApi.hodApproveLeave(leaveId);
   },
 
   async hodRejectLeaveApi(leaveId, reason = 'Rejected by HOD') {
-    return apiClient.put(`/requests/leave/${leaveId}/hod-reject`, { reason });
+    return requestApi.hodRejectLeave(leaveId, reason);
   }
 };

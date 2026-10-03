@@ -4,15 +4,15 @@ import { X, Sparkles, ShieldCheck, ArrowRight, AlertTriangle, Calendar, Award } 
 import DocumentUploader from '../common/DocumentUploader';
 
 export default function RequestConsiderationModal({ onClose }) {
-  const { submitAttendanceConsideration, currentUser, tgAvailable } = useERP();
+  const { submitAttendanceConsideration } = useERP();
 
-  const [category, setCategory] = useState('Hackathon / Project Competition');
-  const [startDate, setStartDate] = useState('2025-09-10');
-  const [endDate, setEndDate] = useState('2025-09-15');
-  const [reason, setReason] = useState('Official representation of OIST CSE Department at the National Smart India Hackathon Grand Finale.');
+  const [category, setCategory] = useState('Hackathon / Technical Competition');
+  const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [reason, setReason] = useState('');
   const [uploadedDoc, setUploadedDoc] = useState({
-    name: 'SIH_Official_Participation_Invitation.pdf',
-    size: '1.4 MB'
+    name: '',
+    size: ''
   });
 
   const handleSubmit = (e) => {
@@ -27,7 +27,7 @@ export default function RequestConsiderationModal({ onClose }) {
       endDate,
       dateRangeLabel: `${startDate} to ${endDate}`,
       reason: `[${category}] ${reason}`,
-      supportingDoc: uploadedDoc.name || 'official_od_certificate.pdf',
+      supportingDoc: uploadedDoc.name || null,
       category
     });
 
@@ -55,25 +55,6 @@ export default function RequestConsiderationModal({ onClose }) {
           <button onClick={onClose} className="modal-close-btn" aria-label="Close modal">
             <X size={18} />
           </button>
-        </div>
-
-        {/* Mentor Pipeline Status Badge */}
-        <div className={`p-3 rounded-xl border text-xs flex items-start gap-2.5 ${tgAvailable ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
-          {tgAvailable ? (
-            <>
-              <ShieldCheck size={17} className="shrink-0 text-emerald-600 mt-0.5" />
-              <div>
-                <strong>Autonomous Workflow Active:</strong> Verified by Mentor <strong>{currentUser.tgName}</strong> $\rightarrow$ Forwarded to HOD <strong>Dr. S. Roy</strong> for official attendance amendment.
-              </div>
-            </>
-          ) : (
-            <>
-              <AlertTriangle size={17} className="shrink-0 text-amber-600 mt-0.5" />
-              <div>
-                <strong>Direct HOD Expedited Routing:</strong> Mentor is currently marked off-duty. Request routes directly to HOD to prevent semester audit disruption.
-              </div>
-            </>
-          )}
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3.5 mt-2">
@@ -153,19 +134,6 @@ export default function RequestConsiderationModal({ onClose }) {
               }}
               required={false}
             />
-          </div>
-
-          {/* Projected Impact Preview Card */}
-          <div style={{ backgroundColor: 'var(--primary-container)', padding: '0.85rem', borderRadius: 'var(--radius-xl)', fontSize: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-              <span style={{ fontWeight: 600, color: 'var(--primary)' }}>Projected Attendance Standing</span>
-              <span className="badge badge-emerald">Safe Eligibility</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Current: {currentUser.attendance || 72}%</span>
-              <ArrowRight size={12} color="var(--primary)" />
-              <span style={{ fontWeight: 700, color: 'var(--secondary)' }}>Projected: 84% after HOD clearance</span>
-            </div>
           </div>
 
           {/* Buttons */}
