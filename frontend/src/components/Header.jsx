@@ -44,7 +44,7 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
       >
         {/* Left: Branding & Universal Slidable Sidebar Trigger */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {/* Universal Slide Toggle Button (Mobile + Desktop) */}
+          {/* Menu Sliding Button */}
           <button
             onClick={onToggleSidebar}
             style={{
@@ -54,18 +54,19 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
               width: '38px',
               height: '38px',
               borderRadius: 'var(--radius-lg)',
-              backgroundColor: isSidebarOpen ? 'var(--primary-container)' : 'var(--surface-low)',
-              color: isSidebarOpen ? 'var(--primary)' : 'var(--text-secondary)',
+              backgroundColor: 'var(--surface-low)',
+              color: 'var(--text-primary)',
               border: '1px solid var(--border-subtle)',
               cursor: 'pointer',
-              transition: 'all 0.2s ease',
+              transition: 'all 0.15s ease',
               flexShrink: 0
             }}
-            className="hover:bg-surface-high"
+            className="hover:bg-surface-high hover:scale-105 active:scale-95"
             title={isSidebarOpen ? "Slide Menu Closed" : "Slide Menu Open"}
-            aria-label="Toggle Slidable Sidebar"
+            aria-label="Toggle Navigation Menu"
+            id="btn-sidebar-toggle"
           >
-            {isSidebarOpen ? <PanelLeftClose size={19} /> : <PanelLeftOpen size={19} />}
+            <Menu size={20} />
           </button>
 
           <Link

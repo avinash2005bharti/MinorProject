@@ -79,7 +79,7 @@ exports.getSubjects = async (req, res) => {
       orderBy: [{ semester: 'asc' }, { code: 'asc' }]
     });
 
-    return res.status(200).json({ success: true, count: subjects.length, subjects });
+    return res.status(200).json({ success: true, count: subjects.length, subjects, data: subjects });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -222,17 +222,20 @@ exports.getSections = async (req, res) => {
       orderBy: { name: 'asc' }
     });
 
+    const formattedSections = sections.map((s) => ({
+      id: s.id,
+      name: s.name,
+      section_name: s.name,
+      semester: s.semester?.semesterNumber || 5,
+      academicYear: s.academicYear,
+      capacity: s.capacity
+    }));
+
     return res.status(200).json({
       success: true,
       count: sections.length,
-      sections: sections.map((s) => ({
-        id: s.id,
-        name: s.name,
-        section_name: s.name,
-        semester: s.semester?.semesterNumber || 5,
-        academicYear: s.academicYear,
-        capacity: s.capacity
-      }))
+      sections: formattedSections,
+      data: formattedSections
     });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });

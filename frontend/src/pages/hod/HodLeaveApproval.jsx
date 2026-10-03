@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import RequestCard from '../../components/RequestCard';
-import { FileText, AlertTriangle, CheckCircle2, Calendar, User, Clock } from 'lucide-react';
+import { FileText, AlertTriangle, CheckCircle2, Calendar, User, Clock, Download, FileSpreadsheet, Printer } from 'lucide-react';
 
 export default function HodLeaveApproval() {
   const { leaveRequests, hodApproveLeave, hodRejectLeave } = useERP();
@@ -16,16 +16,229 @@ export default function HodLeaveApproval() {
   const approvedLeaves = leaveRequests.filter(l => isAccepted(l.status));
   const directFallbackLeaves = pendingLeaves.filter((l) => l.tgUnavailable || l.status === 'pending_hod_direct');
 
+  const handleExportLeavesCsv = () => {
+    if (approvedLeaves.length === 0) return;
+    const headers = ['Student Name', 'Roll No', 'Section', 'Semester', 'Leave Type', 'Duration & Dates', 'Days', 'Reason', 'Status', 'Date Approved'];
+    const rows = approvedLeaves.map((l) => [
+      `"${l.studentName || 'Student'}"`,
+      `"${l.rollNo || l.enrollmentNo || ''}"`,
+      `"${l.section || 'A'}"`,
+      `"${l.semester || 5}"`,
+      `"${l.leaveType || 'Casual'}"`,
+      `"${l.dateRangeLabel || l.dates || ''}"`,
+      `"${l.totalDays || 1}"`,
+      `"${(l.reason || '').replace(/"/g, '""')}"`,
+      `"APPROVED BY HOD"`,
+      `"${new Date(l.updatedAt || l.createdAt || Date.now()).toLocaleDateString()}"`
+    ]);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `HOD_Approved_Leaves_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportLeavesExcel = () => {
+    if (approvedLeaves.length === 0) return;
+    const tableRows = approvedLeaves.map((l, i) => `
+      <tr>
+        <td style="text-align: center;">${i + 1}</td>
+        <td><strong>${l.studentName || ''}</strong></td>
+        <td>${l.rollNo || l.enrollmentNo || '—'}</td>
+        <td>Section ${l.section || 'A'}</td>
+        <td style="text-align: center;">Sem ${l.semester || 5}</td>
+        <td>${l.leaveType || 'Casual'}</td>
+        <td>${l.dateRangeLabel || l.dates || '—'}</td>
+        <td style="text-align: center;">${l.totalDays || 1} day(s)</td>
+        <td>${l.reason || ''}</td>
+        <td style="color: #047857; font-weight: bold; text-align: center;">APPROVED BY HOD</td>
+      </tr>
+    `).join('');
+
+    const excelTemplate = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8">
+        <style>
+          table { border-collapse: collapse; width: 100%; font-family: Calibri, sans-serif; font-size: 11pt; }
+          th { background-color: #047857; color: #FFFFFF; font-weight: bold; border: 1px solid #CBD5E1; padding: 8px 12px; }
+          td { border: 1px solid #CBD5E1; padding: 6px 10px; }
+          tr:nth-child(even) { background-color: #F8FAFC; }
+        </style>
+      </head>
+      <body>
+        <h2>Oriental Institute of Science & Technology (OIST) - Dept. of CSE</h2>
+        <h3>Official Authoritative Student Leaves Register</h3>
+        <p>Sanctioned and Signed by: Head of Department (HOD CSE) on ${new Date().toLocaleString()}</p>
+        <table border="1">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Student Name</th>
+              <th>Roll / Enrollment</th>
+              <th>Section</th>
+              <th>Semester</th>
+              <th>Leave Type</th>
+              <th>Duration & Dates</th>
+              <th>Days</th>
+              <th>Reason</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+      </body>
+      </html>
+    `;
+    const blob = new Blob([excelTemplate], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `HOD_Sanctioned_Leaves_${new Date().toISOString().split('T')[0]}.xls`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintLeavesReport = () => {
+    if (approvedLeaves.length === 0) return;
+    const printWindow = window.open('', '_blank', 'width=950,height=750');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Official Sanctioned Student Leaves Report - OIST CSE</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 2rem; color: #1e293b; }
+            .header { text-align: center; border-bottom: 2px solid #047857; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+            .logo-title { font-size: 18px; font-weight: 800; color: #047857; text-transform: uppercase; margin: 0; }
+            .sub { font-size: 12px; color: #64748b; margin-top: 4px; }
+            .meta { display: flex; justify-content: space-between; margin-bottom: 1rem; font-size: 12px; font-weight: 600; color: #475569; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th { background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px; text-align: left; font-weight: 700; }
+            td { border: 1px solid #cbd5e1; padding: 8px; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .status { color: #047857; font-weight: 700; }
+            .footer { margin-top: 3.5rem; display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; }
+            .seal { border-top: 1px dashed #94a3b8; width: 220px; text-align: center; padding-top: 8px; }
+            @media print { button { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1 class="logo-title">Oriental Institute of Science & Technology (OIST)</h1>
+            <div class="sub">Department of Computer Science & Engineering • CampusFlow ERP</div>
+            <h2 style="font-size: 16px; margin: 12px 0 0 0; color: #0f172a;">Official Sanctioned Student Leaves Register</h2>
+          </div>
+          <div class="meta">
+            <span>Date Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</span>
+            <span>Authorized by: Head of Department (HOD CSE)</span>
+            <span>Total Sanctioned: ${approvedLeaves.length} record(s)</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Student Name</th>
+                <th>Roll / Enrollment</th>
+                <th>Class</th>
+                <th>Leave Type</th>
+                <th>Dates & Duration</th>
+                <th>Reason</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${approvedLeaves.map((l, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td><strong>${l.studentName || ''}</strong></td>
+                  <td><code>${l.rollNo || l.enrollmentNo || '—'}</code></td>
+                  <td>Sec ${l.section || 'A'} (Sem ${l.semester || 5})</td>
+                  <td>${l.leaveType || 'Casual'}</td>
+                  <td>${l.dateRangeLabel || l.dates || '—'} (${l.totalDays || 1} day)</td>
+                  <td>${l.reason || 'Approved by authority'}</td>
+                  <td class="status">✓ SANCTIONED</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="footer">
+            <div class="seal">Dean / Academic Cell Verified</div>
+            <div class="seal">HOD Signature & Official Seal</div>
+          </div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   return (
     <div className="page-wrapper">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-            Leave Management & Clearance
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Digital sign-off on 3-tier and direct-routed student leaves with authoritative approval ledger
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+          <div>
+            <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
+              Leave Management & Clearance
+            </h1>
+            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+              Digital sign-off on 3-tier and direct-routed student leaves with authoritative approval ledger
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <button
+              onClick={handleExportLeavesExcel}
+              disabled={approvedLeaves.length === 0}
+              className="btn btn-sm btn-outline-success"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                borderRadius: 'var(--radius-full)',
+                padding: '0.4rem 0.85rem',
+                fontSize: '12px',
+                fontWeight: 600,
+                backgroundColor: '#FFFFFF'
+              }}
+              title="Download Sanctioned Leaves (Excel)"
+            >
+              <FileSpreadsheet size={14} className="text-emerald-600" />
+              <span>Download Leaves (Excel)</span>
+            </button>
+
+            <button
+              onClick={handlePrintLeavesReport}
+              disabled={approvedLeaves.length === 0}
+              className="btn btn-sm btn-outline-primary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                borderRadius: 'var(--radius-full)',
+                padding: '0.4rem 0.85rem',
+                fontSize: '12px',
+                fontWeight: 600,
+                backgroundColor: '#FFFFFF'
+              }}
+              title="Print official PDF report of approved leaves"
+            >
+              <Printer size={14} className="text-blue-600" />
+              <span>PDF Report</span>
+            </button>
+          </div>
         </div>
 
         {/* Tab switchers */}

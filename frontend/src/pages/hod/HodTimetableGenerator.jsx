@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useERP } from '../../context/ERPContext';
 import { timetableApi, academicApi, teacherApi, classroomApi } from '../../api';
 import {
@@ -28,6 +29,16 @@ import {
 
 export default function HodTimetableGenerator() {
   const { addToast } = useERP();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = searchParams.get('view') === 'generator' ? 'generator' : 'current';
+  const [viewMode, setViewMode] = useState(initialView);
+
+  useEffect(() => {
+    const v = searchParams.get('view');
+    if (v === 'generator' || v === 'current') {
+      setViewMode(v);
+    }
+  }, [searchParams]);
 
   // Generator form parameters
   const [department, setDepartment] = useState('CSE');
@@ -526,6 +537,58 @@ export default function HodTimetableGenerator() {
     return items.sort((a, b) => toMinutes(a.startTime) - toMinutes(b.startTime));
   };
 
+  const renderTargetSelectors = (extraStyles = {}) => (
+    <div className="row g-3 p-3 rounded" style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0', ...extraStyles }}>
+      <div className="col-md-2 col-sm-6">
+        <label className="form-label small fw-bold text-muted">Department</label>
+        <select className="form-select form-select-sm" value={department} onChange={(e) => setDepartment(e.target.value)}>
+          <option value="CSE">Computer Science & Engineering</option>
+          <option value="IT">Information Technology</option>
+          <option value="ECE">Electronics & Communication</option>
+        </select>
+      </div>
+
+      <div className="col-md-2 col-sm-6">
+        <label className="form-label small fw-bold text-muted">Year of Study</label>
+        <select className="form-select form-select-sm" value={year} onChange={(e) => setYear(e.target.value)}>
+          <option value="1st Year">1st Year</option>
+          <option value="2nd Year">2nd Year</option>
+          <option value="3rd Year">3rd Year</option>
+          <option value="4th Year">4th Year</option>
+        </select>
+      </div>
+
+      <div className="col-md-2 col-sm-6">
+        <label className="form-label small fw-bold text-muted">Semester</label>
+        <select className="form-select form-select-sm" value={semester} onChange={(e) => setSemester(Number(e.target.value))}>
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+            <option key={s} value={s}>Semester {s}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="col-md-2 col-sm-6">
+        <label className="form-label small fw-bold text-muted">Section</label>
+        <select className="form-select form-select-sm" value={section} onChange={(e) => setSection(e.target.value)}>
+          <option value="A">Section A</option>
+          <option value="B">Section B</option>
+          <option value="C">Section C</option>
+        </select>
+      </div>
+
+      <div className="col-md-4 col-sm-12">
+        <label className="form-label small fw-bold text-muted">Academic Session</label>
+        <input
+          type="text"
+          className="form-control form-control-sm"
+          value={academicYear}
+          onChange={(e) => setAcademicYear(e.target.value)}
+          placeholder="e.g. 2026-27"
+        />
+      </div>
+    </div>
+  );
+
   const gridSchedule = unifiedGridSchedule();
   const hasSlots = Array.isArray(timetableSlots) && timetableSlots.length > 0;
 
@@ -536,15 +599,26 @@ export default function HodTimetableGenerator() {
         <div>
           <div className="d-flex align-items-center gap-2">
             <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-              Smart AI Timetable Generator & Scheduler
+              {viewMode === 'current' ? 'Official Department Timetable Matrix' : 'Smart AI Timetable Generator & Scheduler'}
             </h2>
-            <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
-              <Sparkles size={14} className="me-1" />
-              Dynamic Grid & Workload Aware
+            <span className={`badge ${viewMode === 'current' ? 'bg-primary-subtle text-primary border border-primary-subtle' : 'bg-purple-subtle text-purple border border-purple-subtle'}`}>
+              {viewMode === 'current' ? (
+                <>
+                  <Calendar size={14} className="me-1" />
+                  Live Active Timetable
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} className="me-1" />
+                  Dynamic Grid & Workload Aware
+                </>
+              )}
             </span>
           </div>
           <p style={{ fontSize: '14px', color: '#64748B', margin: '4px 0 0 0' }}>
-            Full college timing, custom break intervals, variable period durations, teacher workload & classroom constraints
+            {viewMode === 'current'
+              ? `Currently displaying active scheduled timetable for Dept. of ${department} • Semester ${semester} (Section ${section})`
+              : 'Full college timing, custom break intervals, variable period durations, teacher workload & classroom constraints'}
           </p>
         </div>
 
@@ -583,6 +657,50 @@ export default function HodTimetableGenerator() {
         </div>
       </div>
 
+      {/* Top View Mode Switcher */}
+      <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <div className="d-flex gap-2 p-1 rounded-3" style={{ backgroundColor: '#F1F5F9' }}>
+          <button
+            type="button"
+            onClick={() => { setViewMode('current'); setSearchParams({ view: 'current' }); }}
+            className={`btn btn-sm ${viewMode === 'current' ? 'btn-primary shadow-sm' : 'btn-light border-0 text-secondary'}`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 18px', fontWeight: 700, borderRadius: '8px' }}
+            id="tab-view-current-timetable"
+          >
+            <Calendar size={16} />
+            <span>Current Active Timetable</span>
+            <span className={`badge ms-1 ${viewMode === 'current' ? 'bg-white text-primary' : 'bg-primary-subtle text-primary'}`} style={{ fontSize: '11px' }}>
+              Live Grid
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => { setViewMode('generator'); setSearchParams({ view: 'generator' }); }}
+            className={`btn btn-sm ${viewMode === 'generator' ? 'btn-primary shadow-sm' : 'btn-light border-0 text-secondary'}`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '8px 18px', fontWeight: 700, borderRadius: '8px' }}
+            id="tab-view-ai-generator"
+          >
+            <Sparkles size={16} />
+            <span>AI Timetable Generator & Settings</span>
+            <span className={`badge ms-1 ${viewMode === 'generator' ? 'bg-white text-primary' : 'bg-purple-subtle text-purple'}`} style={{ fontSize: '11px' }}>
+              AI Engine
+            </span>
+          </button>
+        </div>
+
+        <span className="small text-muted fw-semibold">
+          Department of {department} • Semester {semester} (Section {section}) • Session {academicYear}
+        </span>
+      </div>
+
+      {/* Target Selector Bar when in Current Timetable Mode */}
+      {viewMode === 'current' && (
+        <div className="mb-4">
+          {renderTargetSelectors()}
+        </div>
+      )}
+
       {error && (
         <div className="alert alert-danger d-flex align-items-center gap-2 mb-4" style={{ borderRadius: '10px' }}>
           <AlertCircle size={18} />
@@ -590,87 +708,43 @@ export default function HodTimetableGenerator() {
         </div>
       )}
 
-      {/* --- TIMETABLE GENERATION CONFIGURATION CARD --- */}
-      <div className="card mb-4" style={{ borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-        <div className="card-header bg-white border-bottom p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
-          <div className="d-flex align-items-center gap-2">
-            <Settings size={18} className="text-primary" />
-            <h5 className="fw-bold mb-0 text-dark">Timetable Architecture & Constraints Configuration</h5>
-          </div>
-
-          {/* Sub-Tabs for Configuration */}
-          <div className="nav nav-pills gap-1">
-            {[
-              { id: 'timing', label: '1. College Timing & Days', icon: <Clock size={15} /> },
-              { id: 'breaks', label: `2. Breaks (${breaks.length})`, icon: <Coffee size={15} /> },
-              { id: 'periods', label: `3. Periods (${periods.length})`, icon: <Layers size={15} /> },
-              { id: 'subjects', label: `4. Subject Matrix (${subjectRows.length})`, icon: <BookOpen size={15} /> }
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setConfigTab(tab.id)}
-                className={`btn btn-sm ${configTab === tab.id ? 'btn-primary' : 'btn-light border'}`}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, borderRadius: '8px' }}
-              >
-                {tab.icon}
-                <span>{tab.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="card-body p-4">
-          <form onSubmit={handleGenerate}>
-            {/* Global Target Selectors */}
-            <div className="row g-3 mb-4 p-3 rounded" style={{ backgroundColor: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-              <div className="col-md-2 col-sm-6">
-                <label className="form-label small fw-bold text-muted">Department</label>
-                <select className="form-select form-select-sm" value={department} onChange={(e) => setDepartment(e.target.value)}>
-                  <option value="CSE">Computer Science & Engineering</option>
-                  <option value="IT">Information Technology</option>
-                  <option value="ECE">Electronics & Communication</option>
-                </select>
-              </div>
-
-              <div className="col-md-2 col-sm-6">
-                <label className="form-label small fw-bold text-muted">Year of Study</label>
-                <select className="form-select form-select-sm" value={year} onChange={(e) => setYear(e.target.value)}>
-                  <option value="1st Year">1st Year</option>
-                  <option value="2nd Year">2nd Year</option>
-                  <option value="3rd Year">3rd Year</option>
-                  <option value="4th Year">4th Year</option>
-                </select>
-              </div>
-
-              <div className="col-md-2 col-sm-6">
-                <label className="form-label small fw-bold text-muted">Semester</label>
-                <select className="form-select form-select-sm" value={semester} onChange={(e) => setSemester(Number(e.target.value))}>
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                    <option key={s} value={s}>Semester {s}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="col-md-2 col-sm-6">
-                <label className="form-label small fw-bold text-muted">Section</label>
-                <select className="form-select form-select-sm" value={section} onChange={(e) => setSection(e.target.value)}>
-                  <option value="A">Section A</option>
-                  <option value="B">Section B</option>
-                  <option value="C">Section C</option>
-                </select>
-              </div>
-
-              <div className="col-md-4 col-sm-12">
-                <label className="form-label small fw-bold text-muted">Academic Session</label>
-                <input
-                  type="text"
-                  className="form-control form-control-sm"
-                  value={academicYear}
-                  onChange={(e) => setAcademicYear(e.target.value)}
-                />
-              </div>
+      {/* --- TIMETABLE GENERATION CONFIGURATION CARD (Shown in Generator Mode) --- */}
+      {viewMode === 'generator' && (
+        <div className="card mb-4" style={{ borderRadius: '14px', border: '1px solid #E2E8F0', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+          <div className="card-header bg-white border-bottom p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div className="d-flex align-items-center gap-2">
+              <Settings size={18} className="text-primary" />
+              <h5 className="fw-bold mb-0 text-dark">Timetable Architecture & Constraints Configuration</h5>
             </div>
+
+            {/* Sub-Tabs for Configuration */}
+            <div className="nav nav-pills gap-1">
+              {[
+                { id: 'timing', label: '1. College Timing & Days', icon: <Clock size={15} /> },
+                { id: 'breaks', label: `2. Breaks (${breaks.length})`, icon: <Coffee size={15} /> },
+                { id: 'periods', label: `3. Periods (${periods.length})`, icon: <Layers size={15} /> },
+                { id: 'subjects', label: `4. Subject Matrix (${subjectRows.length})`, icon: <BookOpen size={15} /> }
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setConfigTab(tab.id)}
+                  className={`btn btn-sm ${configTab === tab.id ? 'btn-primary' : 'btn-light border'}`}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, borderRadius: '8px' }}
+                >
+                  {tab.icon}
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="card-body p-4">
+            <form onSubmit={handleGenerate}>
+              {/* Global Target Selectors inside generator */}
+              <div className="mb-4">
+                {renderTargetSelectors()}
+              </div>
 
             {/* TAB 1: College Timing & Working Days */}
             {configTab === 'timing' && (
@@ -1118,6 +1192,7 @@ export default function HodTimetableGenerator() {
           </form>
         </div>
       </div>
+      )}
 
       {/* --- CONFLICTS ALERT BANNER --- */}
       {conflicts.length > 0 && (

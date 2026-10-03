@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useERP } from '../../context/ERPContext';
 import RequestCard from '../../components/RequestCard';
 import {
@@ -12,6 +13,8 @@ import {
   User,
   ArrowRight,
   FileText,
+  FileSpreadsheet,
+  Printer,
   Clock,
   ShieldCheck,
   Zap,
@@ -33,7 +36,14 @@ export default function HodAttendanceApproval() {
     hodApproveAttendanceQuery
   } = useERP();
 
-  const [activeTab, setActiveTab] = useState('considerations');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'considerations');
+
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t) setActiveTab(t);
+  }, [searchParams]);
+
   const [acceptedFilter, setAcceptedFilter] = useState('all');
   const [acceptedSearch, setAcceptedSearch] = useState('');
 
@@ -103,14 +113,162 @@ export default function HodAttendanceApproval() {
       `"APPROVED"`,
       `"${new Date(r.createdAt || Date.now()).toLocaleDateString()}"`
     ]);
-    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
+    link.setAttribute('href', url);
     link.setAttribute('download', `HOD_Accepted_Student_Requests_${new Date().toISOString().split('T')[0]}.csv`);
     document.body.appendChild(link);
     link.click();
-    link.remove();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportAcceptedExcel = () => {
+    if (allAcceptedRequests.length === 0) return;
+    const tableRows = allAcceptedRequests.map((r, i) => `
+      <tr>
+        <td style="text-align: center;">${i + 1}</td>
+        <td><strong>${r.studentName || ''}</strong></td>
+        <td>${r.rollNo || r.enrollmentNo || '—'}</td>
+        <td>Section ${r.section || 'A'}</td>
+        <td style="text-align: center;">Sem ${r.semester || 5}</td>
+        <td>${r.requestCategory || ''}</td>
+        <td>${r.dateRangeLabel || r.dates || '—'}</td>
+        <td>${r.reason || ''}</td>
+        <td style="color: #047857; font-weight: bold; text-align: center;">APPROVED</td>
+        <td>${new Date(r.createdAt || Date.now()).toLocaleDateString()}</td>
+      </tr>
+    `).join('');
+
+    const tableHtml = `
+      <table border="1">
+        <thead>
+          <tr style="background-color: #1E40AF; color: #FFFFFF;">
+            <th>#</th>
+            <th>Student Name</th>
+            <th>Roll / Enrollment</th>
+            <th>Section</th>
+            <th>Semester</th>
+            <th>Request Type</th>
+            <th>Period / Dates</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Date Submitted</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tableRows}
+        </tbody>
+      </table>
+    `;
+
+    const excelTemplate = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8">
+        <style>
+          table { border-collapse: collapse; width: 100%; font-family: Calibri, sans-serif; font-size: 11pt; }
+          th { background-color: #1E40AF; color: #FFFFFF; font-weight: bold; border: 1px solid #CBD5E1; padding: 8px 12px; }
+          td { border: 1px solid #CBD5E1; padding: 6px 10px; }
+          tr:nth-child(even) { background-color: #F8FAFC; }
+        </style>
+      </head>
+      <body>
+        <h2>Oriental Institute of Science & Technology (OIST) - Dept. of CSE</h2>
+        <h3>Official Approved Student Requests & Attendance Clearances Ledger</h3>
+        <p>Generated on: ${new Date().toLocaleString()} by Head of Department (HOD)</p>
+        ${tableHtml}
+      </body>
+      </html>
+    `;
+    const blob = new Blob([excelTemplate], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `HOD_Approved_Student_Clearances_${new Date().toISOString().split('T')[0]}.xls`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintAcceptedReport = () => {
+    if (allAcceptedRequests.length === 0) return;
+    const printWindow = window.open('', '_blank', 'width=950,height=750');
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Official Approved Clearances Ledger - OIST CSE</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 2rem; color: #1e293b; }
+            .header { text-align: center; border-bottom: 2px solid #1e40af; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+            .logo-title { font-size: 18px; font-weight: 800; color: #1e40af; text-transform: uppercase; margin: 0; }
+            .sub { font-size: 12px; color: #64748b; margin-top: 4px; }
+            .meta { display: flex; justify-content: space-between; margin-bottom: 1rem; font-size: 12px; font-weight: 600; color: #475569; }
+            table { width: 100%; border-collapse: collapse; font-size: 12px; }
+            th { background-color: #f1f5f9; border: 1px solid #cbd5e1; padding: 8px; text-align: left; font-weight: 700; }
+            td { border: 1px solid #cbd5e1; padding: 8px; }
+            tr:nth-child(even) { background-color: #f8fafc; }
+            .status { color: #047857; font-weight: 700; }
+            .footer { margin-top: 3.5rem; display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; }
+            .seal { border-top: 1px dashed #94a3b8; width: 220px; text-align: center; padding-top: 8px; }
+            @media print { button { display: none; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1 class="logo-title">Oriental Institute of Science & Technology (OIST)</h1>
+            <div class="sub">Department of Computer Science & Engineering • CampusFlow ERP</div>
+            <h2 style="font-size: 16px; margin: 12px 0 0 0; color: #0f172a;">Official Approved Requests & Clearances Ledger</h2>
+          </div>
+          <div class="meta">
+            <span>Date Generated: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</span>
+            <span>Authorized by: Head of Department (HOD CSE)</span>
+            <span>Total Authorizations: ${allAcceptedRequests.length} records</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Student Name</th>
+                <th>Roll / Enrollment</th>
+                <th>Class</th>
+                <th>Request Type</th>
+                <th>Period / Dates</th>
+                <th>Reason / Subject</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${allAcceptedRequests.map((r, i) => `
+                <tr>
+                  <td>${i + 1}</td>
+                  <td><strong>${r.studentName || ''}</strong></td>
+                  <td><code>${r.rollNo || r.enrollmentNo || '—'}</code></td>
+                  <td>Sec ${r.section || 'A'} (Sem ${r.semester || 5})</td>
+                  <td>${r.requestCategory || 'Clearance'}</td>
+                  <td>${r.dateRangeLabel || r.dates || '—'}</td>
+                  <td>${r.reason || 'Approved by authority'}</td>
+                  <td class="status">✓ APPROVED</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="footer">
+            <div class="seal">Department Digital Clearance Stamp</div>
+            <div class="seal">HOD Signature & Official Seal</div>
+          </div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   return (
@@ -130,21 +288,68 @@ export default function HodAttendanceApproval() {
             </p>
           </div>
 
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '0.4rem 0.85rem',
-              backgroundColor: 'var(--primary-container)',
-              borderRadius: 'var(--radius-full)',
-              color: 'var(--primary)',
-              fontSize: '12px',
-              fontWeight: 600
-            }}
-          >
-            <Bot size={16} />
-            <span>Autonomous Attendance & Leave Agent: Online</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+            {/* Quick Download Approved List Button (Accessible from any tab) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <button
+                onClick={handleExportAcceptedExcel}
+                disabled={allAcceptedRequests.length === 0}
+                className="btn btn-sm btn-outline-success"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  borderRadius: 'var(--radius-full)',
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  backgroundColor: '#FFFFFF'
+                }}
+                id="btn-header-export-excel"
+                title="Download Approved Requests (Excel format)"
+              >
+                <FileSpreadsheet size={14} className="text-emerald-600" />
+                <span>Download Approved (Excel)</span>
+              </button>
+
+              <button
+                onClick={handlePrintAcceptedReport}
+                disabled={allAcceptedRequests.length === 0}
+                className="btn btn-sm btn-outline-primary"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  borderRadius: 'var(--radius-full)',
+                  padding: '0.4rem 0.85rem',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  backgroundColor: '#FFFFFF'
+                }}
+                id="btn-header-print-pdf"
+                title="Print or Save PDF report of approved requests"
+              >
+                <Printer size={14} className="text-blue-600" />
+                <span>PDF Report</span>
+              </button>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.4rem 0.85rem',
+                backgroundColor: 'var(--primary-container)',
+                borderRadius: 'var(--radius-full)',
+                color: 'var(--primary)',
+                fontSize: '12px',
+                fontWeight: 600
+              }}
+            >
+              <Bot size={16} />
+              <span>Autonomous Attendance & Leave Agent: Online</span>
+            </div>
           </div>
         </div>
 
@@ -777,14 +982,39 @@ export default function HodAttendanceApproval() {
                   </div>
 
                   <button
+                    onClick={handleExportAcceptedExcel}
+                    disabled={allAcceptedRequests.length === 0}
+                    className="btn btn-sm btn-success"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', borderRadius: 'var(--radius-full)', fontSize: '12px', padding: '0.35rem 0.85rem' }}
+                    id="btn-export-accepted-excel"
+                    title="Download approved requests in Excel spreadsheet format"
+                  >
+                    <FileSpreadsheet size={14} />
+                    <span>Download Excel</span>
+                  </button>
+
+                  <button
                     onClick={handleExportAcceptedCsv}
                     disabled={allAcceptedRequests.length === 0}
                     className="btn btn-sm btn-secondary"
                     style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', borderRadius: 'var(--radius-full)', fontSize: '12px', padding: '0.35rem 0.85rem' }}
                     id="btn-export-accepted-requests"
+                    title="Download approved requests in CSV format"
                   >
                     <Download size={14} />
                     <span>Export CSV</span>
+                  </button>
+
+                  <button
+                    onClick={handlePrintAcceptedReport}
+                    disabled={allAcceptedRequests.length === 0}
+                    className="btn btn-sm btn-outline-primary"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', borderRadius: 'var(--radius-full)', fontSize: '12px', padding: '0.35rem 0.85rem', backgroundColor: '#FFFFFF' }}
+                    id="btn-export-accepted-pdf"
+                    title="Print or Save official PDF report"
+                  >
+                    <Printer size={14} />
+                    <span>Print / PDF</span>
                   </button>
                 </div>
               </div>

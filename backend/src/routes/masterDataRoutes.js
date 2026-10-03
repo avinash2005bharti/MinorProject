@@ -62,7 +62,7 @@ router.get('/timetables', optionalAuth, async (req, res) => {
       },
       orderBy: { createdAt: 'desc' }
     });
-    return res.status(200).json({ success: true, data: list });
+    return res.status(200).json({ success: true, data: list, timetables: list });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

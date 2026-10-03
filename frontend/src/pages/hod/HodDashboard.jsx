@@ -25,7 +25,9 @@ import {
   Check,
   BookOpen,
   Layers,
-  ChevronRight
+  ChevronRight,
+  Download,
+  FileSpreadsheet
 } from 'lucide-react';
 
 export default function HodDashboard() {
@@ -320,9 +322,22 @@ export default function HodDashboard() {
             </button>
 
             <Link
-              to="/hod/timetable"
+              to="/hod/timetable?view=current"
+              className="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1"
+              style={{ borderRadius: '8px', fontWeight: 600 }}
+              id="btn-hod-current-timetable-header"
+              title="View current active departmental timetable"
+            >
+              <Calendar size={14} />
+              <span>Current Timetable</span>
+            </Link>
+
+            <Link
+              to="/hod/timetable?view=generator"
               className="btn btn-primary btn-sm d-inline-flex align-items-center gap-1"
               style={{ borderRadius: '8px', fontWeight: 600 }}
+              id="btn-hod-ai-generator-header"
+              title="Open AI Timetable Generator & Scheduler"
             >
               <Sparkles size={14} />
               <span>AI Timetable Generator</span>
@@ -735,7 +750,7 @@ export default function HodDashboard() {
 
             {/* Pending Requests & Clearances Requiring HOD Action */}
             <div className="card flex flex-col gap-3 shadow-sm p-4" style={{ borderRadius: '14px', border: '1px solid #E2E8F0' }}>
-              <div className="d-flex align-items-center justify-content-between mb-2">
+              <div className="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
                 <div className="d-flex align-items-center gap-2">
                   <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 d-flex align-items-center justify-content-center p-2 rounded">
                     <Clock size={18} />
@@ -744,9 +759,21 @@ export default function HodDashboard() {
                     Awaiting HOD Digital Clearances ({totalPending})
                   </h5>
                 </div>
-                <Link to="/hod/requests" className="small text-primary fw-bold text-decoration-none">
-                  Clearance Archive →
-                </Link>
+                <div className="d-flex align-items-center gap-2">
+                  <Link
+                    to="/hod/approvals?tab=approved"
+                    className="btn btn-outline-success btn-sm d-inline-flex align-items-center gap-1"
+                    style={{ borderRadius: '8px', fontSize: '12px', fontWeight: 600, background: '#FFFFFF' }}
+                    id="btn-hod-download-approved"
+                    title="View and download all accepted student requests and sanctioned leaves"
+                  >
+                    <Download size={13} />
+                    <span>Download Approved Lists</span>
+                  </Link>
+                  <Link to="/hod/requests" className="small text-primary fw-bold text-decoration-none">
+                    Clearance Archive →
+                  </Link>
+                </div>
               </div>
 
               {totalPending === 0 ? (

@@ -62,7 +62,8 @@ exports.getStudents = async (req, res) => {
       total,
       page,
       totalPages: Math.ceil(total / limit),
-      students: formattedStudents
+      students: formattedStudents,
+      data: formattedStudents
     });
   } catch (error) {
     logger.error(`[Student Controller] Error fetching students: ${error.message}`);

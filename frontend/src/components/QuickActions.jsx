@@ -249,11 +249,33 @@ export default function QuickActions({ role }) {
       </button>
 
       <button
+        onClick={() => navigate('/hod/timetable?view=current')}
+        className="quick-action-btn qa-btn-accent"
+        id="qa-hod-current-timetable"
+      >
+        <span className="qa-icon-wrapper qa-icon-blue">
+          <Calendar size={16} />
+        </span>
+        <span className="qa-label">Current Timetable</span>
+      </button>
+
+      <button
+        onClick={() => navigate('/hod/timetable?view=generator')}
+        className="quick-action-btn"
+        id="qa-hod-generate-timetable"
+      >
+        <span className="qa-icon-wrapper qa-icon-purple">
+          <Sparkles size={16} />
+        </span>
+        <span className="qa-label">Generate Timetable</span>
+      </button>
+
+      <button
         onClick={() => navigate('/hod/teachers')}
         className="quick-action-btn"
         id="qa-hod-manage-teachers"
       >
-        <span className="qa-icon-wrapper qa-icon-blue">
+        <span className="qa-icon-wrapper qa-icon-emerald">
           <UserCheck size={16} />
         </span>
         <span className="qa-label">Manage Teachers</span>
@@ -268,17 +290,6 @@ export default function QuickActions({ role }) {
           <Layers size={16} />
         </span>
         <span className="qa-label">Manage Classes</span>
-      </button>
-
-      <button
-        onClick={() => navigate('/hod/timetable')}
-        className="quick-action-btn"
-        id="qa-hod-generate-timetable"
-      >
-        <span className="qa-icon-wrapper qa-icon-purple">
-          <Sparkles size={16} />
-        </span>
-        <span className="qa-label">Generate Timetable</span>
       </button>
 
       <button

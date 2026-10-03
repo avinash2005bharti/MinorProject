@@ -6,7 +6,6 @@ import NotificationToast from '../components/NotificationToast';
 import AgentSimulationModal from '../components/AgentSimulationModal';
 import GlobalModals from '../components/modals/GlobalModals';
 import AIChatWidget from '../components/AIChatWidget';
-import { ChevronRight } from 'lucide-react';
 
 export default function DashboardLayout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
@@ -74,19 +73,6 @@ export default function DashboardLayout() {
         onClose={handleCloseSidebar}
         onToggle={handleToggleSidebar}
       />
-
-      {/* Floating Edge Slide-Open Tab (when sidebar is slid closed) */}
-      {!isSidebarOpen && (
-        <button
-          onClick={handleToggleSidebar}
-          className="floating-slide-tab"
-          title="Slide sidebar open"
-          aria-label="Slide sidebar open"
-        >
-          <ChevronRight size={16} />
-          <span>MENU</span>
-        </button>
-      )}
 
       {/* Main Content Area with fluid width and dynamic shift */}
       <div className={`main-content ${isSidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
