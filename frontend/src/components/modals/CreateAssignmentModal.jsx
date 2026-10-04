@@ -48,13 +48,13 @@ export default function CreateAssignmentModal({ onClose }) {
         style={{ maxWidth: '540px', width: '92%' }}
       >
         <div className="modal-header">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-              <FileText size={18} />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-700 flex items-center justify-center flex-shrink-0">
+              <FileText size={20} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 leading-snug">Create Course Assignment</h3>
-              <p className="text-xs text-slate-500">Autonomous delivery to student submissions portal</p>
+              <h3 className="modal-title">Create Course Assignment</h3>
+              <p className="modal-subtitle">Autonomous delivery to student submissions portal</p>
             </div>
           </div>
           <button onClick={onClose} className="modal-close-btn" aria-label="Close modal">
@@ -147,8 +147,8 @@ export default function CreateAssignmentModal({ onClose }) {
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
-            <button type="button" onClick={onClose} className="btn btn-outline text-xs py-2 px-4">
+          <div className="modal-footer">
+            <button type="button" onClick={onClose} className="btn btn-outline text-xs py-2 px-4 font-semibold">
               Cancel
             </button>
             <button type="submit" disabled={saving || subjects.length === 0} className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm disabled:opacity-50" id="btn-create-assignment-confirm">

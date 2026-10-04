@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useERP } from '../context/ERPContext';
 import { aiApi } from '../api/aiApi';
 import {
@@ -32,6 +32,11 @@ import 'katex/dist/katex.min.css';
 export default function AIChatWidget() {
   const { currentRole, currentUser } = useERP();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  if (location.pathname.includes('ai-workspace')) {
+    return null;
+  }
 
   const [isOpen, setIsOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -281,13 +286,13 @@ export default function AIChatWidget() {
           width: '52px',
           height: '52px',
           borderRadius: '50%',
-          backgroundColor: '#1D4ED8',
+          backgroundColor: 'var(--primary-700)',
           color: '#FFFFFF',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 10px 25px -4px rgba(29, 78, 216, 0.5), 0 4px 10px -2px rgba(0, 0, 0, 0.1)',
-          border: '2px solid rgba(255, 255, 255, 0.9)',
+          boxShadow: 'var(--shadow-float)',
+          border: '2px solid rgba(255, 255, 255, 0.95)',
           cursor: 'pointer',
           transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
         }}
@@ -305,7 +310,7 @@ export default function AIChatWidget() {
               width: '14px',
               height: '14px',
               borderRadius: '50%',
-              backgroundColor: '#10B981',
+              backgroundColor: 'var(--secondary)',
               border: '2px solid #FFFFFF'
             }}
           />
@@ -320,29 +325,30 @@ export default function AIChatWidget() {
             bottom: '5.5rem',
             right: '1.75rem',
             zIndex: 95,
-            width: '390px',
+            width: '400px',
             maxWidth: 'calc(100vw - 2.5rem)',
-            height: '540px',
+            height: '560px',
             maxHeight: 'calc(100vh - 7.5rem)',
-            backgroundColor: '#FFFFFF',
-            borderRadius: '20px',
-            boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(226, 232, 240, 0.8)',
+            backgroundColor: 'var(--surface)',
+            borderRadius: 'var(--radius-2xl)',
+            boxShadow: 'var(--shadow-2xl)',
+            border: '1px solid var(--border-subtle)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            animation: 'scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
+            animation: 'modalScaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1)'
           }}
         >
           {/* Header */}
           <div
             style={{
-              padding: '0.85rem 1rem',
-              backgroundColor: '#1E40AF',
+              padding: '0.85rem 1.15rem',
+              backgroundColor: 'var(--primary-800)',
               color: '#FFFFFF',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.08)'
+              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)'
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
@@ -350,7 +356,7 @@ export default function AIChatWidget() {
                 style={{
                   width: '34px',
                   height: '34px',
-                  borderRadius: '10px',
+                  borderRadius: 'var(--radius-lg)',
                   backgroundColor: 'rgba(255, 255, 255, 0.15)',
                   display: 'flex',
                   alignItems: 'center',
@@ -360,11 +366,11 @@ export default function AIChatWidget() {
                 <Bot size={20} />
               </div>
               <div>
-                <h4 style={{ fontSize: '14px', fontWeight: 800, margin: 0, lineHeight: 1.2, color: '#FFFFFF' }}>
+                <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: 'var(--text-sm)', fontWeight: 800, margin: 0, lineHeight: 1.2, color: '#FFFFFF' }}>
                   CampusFlow AI Copilot
                 </h4>
-                <span style={{ fontSize: '11px', color: '#BFDBFE', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#34D399', display: 'inline-block' }} />
+                <span style={{ fontSize: '11px', color: 'var(--primary-200)', display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '2px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--secondary)', display: 'inline-block' }} />
                   Live Academic Assistant
                 </span>
               </div>
@@ -375,14 +381,15 @@ export default function AIChatWidget() {
                 onClick={handleClearChat}
                 style={{
                   color: '#FFFFFF',
-                  padding: '5px',
-                  borderRadius: '8px',
+                  padding: '6px',
+                  borderRadius: 'var(--radius-md)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: 'rgba(255, 255, 255, 0.15)',
                   cursor: 'pointer',
-                  border: 'none'
+                  border: 'none',
+                  transition: 'background 0.15s ease'
                 }}
                 title="New Chat Session"
               >
@@ -395,14 +402,15 @@ export default function AIChatWidget() {
                 }}
                 style={{
                   color: '#FFFFFF',
-                  padding: '5px',
-                  borderRadius: '8px',
+                  padding: '6px',
+                  borderRadius: 'var(--radius-md)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: 'rgba(255, 255, 255, 0.15)',
                   cursor: 'pointer',
-                  border: 'none'
+                  border: 'none',
+                  transition: 'background 0.15s ease'
                 }}
                 title="Open Fullscreen AI Workspace"
               >
@@ -412,14 +420,15 @@ export default function AIChatWidget() {
                 onClick={() => setIsOpen(false)}
                 style={{
                   color: '#FFFFFF',
-                  padding: '5px',
-                  borderRadius: '8px',
+                  padding: '6px',
+                  borderRadius: 'var(--radius-md)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   backgroundColor: 'rgba(255, 255, 255, 0.15)',
                   cursor: 'pointer',
-                  border: 'none'
+                  border: 'none',
+                  transition: 'background 0.15s ease'
                 }}
                 title="Close Chat"
               >
@@ -432,8 +441,8 @@ export default function AIChatWidget() {
           <div
             style={{
               padding: '0.5rem 0.75rem',
-              backgroundColor: '#F8FAFC',
-              borderBottom: '1px solid #E2E8F0',
+              backgroundColor: 'var(--surface-low)',
+              borderBottom: '1px solid var(--border-subtle)',
               display: 'flex',
               gap: '0.4rem',
               overflowX: 'auto',
@@ -447,16 +456,16 @@ export default function AIChatWidget() {
                 style={{
                   fontSize: '11px',
                   fontWeight: 600,
-                  padding: '0.3rem 0.65rem',
-                  borderRadius: '12px',
-                  backgroundColor: '#FFFFFF',
-                  color: '#1D4ED8',
-                  border: '1px solid #DBEAFE',
+                  padding: '0.35rem 0.7rem',
+                  borderRadius: 'var(--radius-full)',
+                  backgroundColor: 'var(--surface)',
+                  color: 'var(--primary-700)',
+                  border: '1px solid var(--border-subtle)',
                   cursor: 'pointer',
                   flexShrink: 0,
                   transition: 'all 0.15s ease'
                 }}
-                className="hover:bg-blue-50"
+                className="hover:border-blue-400 hover:text-blue-800"
               >
                 {sugg}
               </button>
@@ -472,7 +481,7 @@ export default function AIChatWidget() {
               display: 'flex',
               flexDirection: 'column',
               gap: '0.85rem',
-              backgroundColor: '#F8FAFC'
+              backgroundColor: 'var(--bg-canvas)'
             }}
           >
             {messages.map((msg) => {
@@ -490,14 +499,14 @@ export default function AIChatWidget() {
                 >
                   <div
                     style={{
-                      padding: '0.75rem 0.95rem',
+                      padding: '0.75rem 1rem',
                       borderRadius: isUser ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
-                      backgroundColor: isUser ? '#1D4ED8' : '#FFFFFF',
-                      color: isUser ? '#FFFFFF' : '#1E293B',
-                      fontSize: '12.5px',
-                      lineHeight: 1.5,
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                      border: isUser ? 'none' : '1px solid #E2E8F0',
+                      backgroundColor: isUser ? 'var(--primary-700)' : 'var(--surface)',
+                      color: isUser ? '#FFFFFF' : 'var(--text-primary)',
+                      fontSize: 'var(--text-xs)',
+                      lineHeight: 1.55,
+                      boxShadow: 'var(--shadow-xs)',
+                      border: isUser ? 'none' : '1px solid var(--border-subtle)',
                       whiteSpace: isUser ? 'pre-wrap' : 'normal'
                     }}
                   >
@@ -508,10 +517,10 @@ export default function AIChatWidget() {
                           alignItems: 'center',
                           gap: '0.3rem',
                           marginBottom: '0.45rem',
-                          padding: '0.15rem 0.45rem',
-                          borderRadius: '4px',
-                          backgroundColor: '#EFF6FF',
-                          color: '#1D4ED8',
+                          padding: '0.15rem 0.5rem',
+                          borderRadius: 'var(--radius-sm)',
+                          backgroundColor: 'var(--primary-50)',
+                          color: 'var(--primary-700)',
                           fontSize: '10px',
                           fontWeight: 700
                         }}
@@ -523,7 +532,7 @@ export default function AIChatWidget() {
                     {isUser ? (
                       <div>{msg.text}</div>
                     ) : (
-                      <div className="ai-markdown-content">
+                      <div className="ai-prose" style={{ fontSize: 'var(--text-xs)' }}>
                         <ReactMarkdown
                           remarkPlugins={[remarkMath, remarkGfm]}
                           rehypePlugins={[rehypeKatex]}
@@ -533,9 +542,9 @@ export default function AIChatWidget() {
 
                         {/* Agent Tool Execution Steps */}
                         {msg.steps && msg.steps.length > 0 && (
-                          <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', display: 'flex', flexDirection: 'column', gap: '3px', background: '#F8FAFC', padding: '6px 8px', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
+                          <div style={{ marginTop: '0.5rem', marginBottom: '0.5rem', display: 'flex', flexDirection: 'column', gap: '3px', background: 'var(--surface-low)', padding: '6px 8px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
                             {msg.steps.map((st, i) => (
-                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10.5px', color: '#059669', fontWeight: 600 }}>
+                              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10.5px', color: 'var(--secondary)', fontWeight: 600 }}>
                                 <span>✓</span> <span>{st}</span>
                               </div>
                             ))}
@@ -544,23 +553,23 @@ export default function AIChatWidget() {
 
                         {/* Destructive Action Confirmation */}
                         {msg.requires_confirmation && (
-                          <div style={{ marginTop: '0.6rem', padding: '0.55rem', backgroundColor: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '8px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#B45309', fontWeight: 700, fontSize: '11px', marginBottom: '4px' }}>
+                          <div style={{ marginTop: '0.6rem', padding: '0.65rem', backgroundColor: 'var(--danger-50)', border: '1px solid var(--danger-200)', borderRadius: 'var(--radius-lg)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--danger-700)', fontWeight: 700, fontSize: '11px', marginBottom: '4px' }}>
                               <AlertTriangle size={12} /> High-Impact Action Confirmation
                             </div>
-                            <div style={{ fontSize: '11px', color: '#92400E', marginBottom: '8px' }}>
+                            <div style={{ fontSize: '11px', color: 'var(--danger-800)', marginBottom: '8px' }}>
                               {msg.confirmation_prompt}
                             </div>
                             <div style={{ display: 'flex', gap: '6px' }}>
                               <button
                                 onClick={() => handleConfirmAction(msg.id, msg.action_to_confirm)}
-                                style={{ padding: '4px 9px', backgroundColor: '#DC2626', color: '#FFF', border: 'none', borderRadius: '5px', fontSize: '10.5px', fontWeight: 700, cursor: 'pointer' }}
+                                className="btn btn-danger text-[10px] py-1 px-2.5 font-bold"
                               >
                                 Confirm & Execute
                               </button>
                               <button
                                 onClick={() => handleCancelAction(msg.id)}
-                                style={{ padding: '4px 9px', backgroundColor: '#E2E8F0', color: '#475569', border: 'none', borderRadius: '5px', fontSize: '10.5px', fontWeight: 600, cursor: 'pointer' }}
+                                className="btn btn-outline text-[10px] py-1 px-2.5"
                               >
                                 Cancel
                               </button>
@@ -570,14 +579,14 @@ export default function AIChatWidget() {
 
                         {/* Downloadable Deliverable */}
                         {msg.deliverable && (
-                          <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.65rem', backgroundColor: '#F0FDF4', border: '1px solid #BBF7D0', borderRadius: '8px' }}>
+                          <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.65rem', backgroundColor: 'var(--success-50)', border: '1px solid var(--success-200)', borderRadius: 'var(--radius-md)' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                              <span style={{ fontSize: '11px', fontWeight: 600, color: '#166534' }}>{msg.deliverable.filename}</span>
+                              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--success-900)' }}>{msg.deliverable.filename}</span>
                               <a
                                 href={msg.deliverable.url}
                                 target="_blank"
                                 rel="noreferrer"
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: '#16a34a', textDecoration: 'none', fontWeight: 700 }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--success-700)', textDecoration: 'none', fontWeight: 700 }}
                               >
                                 <Download size={12} /> Download
                               </a>
@@ -589,7 +598,7 @@ export default function AIChatWidget() {
                         {msg.citations && msg.citations.length > 0 && (
                           <div style={{ marginTop: '0.45rem', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
                             {msg.citations.map((c, i) => (
-                              <span key={i} style={{ fontSize: '9.5px', backgroundColor: '#EEF2FF', color: '#4338CA', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                              <span key={i} style={{ fontSize: '10px', backgroundColor: 'var(--surface-low)', color: 'var(--text-secondary)', padding: '2px 6px', borderRadius: 'var(--radius-sm)', fontWeight: 600, border: '1px solid var(--border-subtle)' }}>
                                 {c}
                               </span>
                             ))}
@@ -603,12 +612,13 @@ export default function AIChatWidget() {
                         style={{
                           marginTop: '0.5rem',
                           padding: '0.35rem 0.6rem',
-                          borderRadius: '8px',
-                          backgroundColor: isUser ? 'rgba(255,255,255,0.18)' : '#F1F5F9',
+                          borderRadius: 'var(--radius-md)',
+                          backgroundColor: isUser ? 'rgba(255,255,255,0.18)' : 'var(--surface-low)',
                           fontSize: '11px',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '0.4rem'
+                          gap: '0.4rem',
+                          border: isUser ? 'none' : '1px solid var(--border-subtle)'
                         }}
                       >
                         <FileText size={13} />
@@ -616,7 +626,7 @@ export default function AIChatWidget() {
                       </div>
                     )}
                   </div>
-                  <span style={{ fontSize: '10px', color: '#94A3B8', marginTop: '3px', padding: '0 4px' }}>
+                  <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '3px', padding: '0 4px' }}>
                     {msg.time}
                   </span>
                 </div>
@@ -624,7 +634,7 @@ export default function AIChatWidget() {
             })}
 
             {isGenerating && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748B', fontSize: '12px', padding: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', padding: '0.5rem' }}>
                 <span className="spinner-border spinner-border-sm text-primary" role="status" style={{ width: '14px', height: '14px' }} />
                 <span>Thinking...</span>
               </div>
@@ -638,22 +648,22 @@ export default function AIChatWidget() {
             <div
               style={{
                 padding: '0.4rem 0.75rem',
-                backgroundColor: '#EFF6FF',
-                borderTop: '1px solid #DBEAFE',
+                backgroundColor: 'var(--primary-50)',
+                borderTop: '1px solid var(--border-subtle)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 fontSize: '11px',
-                color: '#1D4ED8'
+                color: 'var(--primary-700)'
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <FileText size={14} />
-                <span>{attachedFile.name} ({attachedFile.size})</span>
+                <span style={{ fontWeight: 600 }}>{attachedFile.name} ({attachedFile.size})</span>
               </div>
               <button
                 onClick={() => setAttachedFile(null)}
-                style={{ color: '#E11D48', background: 'none', border: 'none', cursor: 'pointer' }}
+                style={{ color: 'var(--danger-600)', background: 'none', border: 'none', cursor: 'pointer' }}
               >
                 <X size={14} />
               </button>
@@ -664,8 +674,8 @@ export default function AIChatWidget() {
           <div
             style={{
               padding: '0.65rem 0.75rem',
-              backgroundColor: '#FFFFFF',
-              borderTop: '1px solid #E2E8F0',
+              backgroundColor: 'var(--surface)',
+              borderTop: '1px solid var(--border-subtle)',
               display: 'flex',
               alignItems: 'center',
               gap: '0.45rem'
@@ -685,13 +695,13 @@ export default function AIChatWidget() {
               style={{
                 width: '34px',
                 height: '34px',
-                borderRadius: '8px',
-                backgroundColor: '#F1F5F9',
-                color: '#64748B',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: 'var(--surface-low)',
+                color: 'var(--text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: 'none',
+                border: '1px solid var(--border-subtle)',
                 cursor: 'pointer',
                 flexShrink: 0
               }}
@@ -706,13 +716,13 @@ export default function AIChatWidget() {
               style={{
                 width: '34px',
                 height: '34px',
-                borderRadius: '8px',
-                backgroundColor: isListening ? '#FEE2E2' : '#F1F5F9',
-                color: isListening ? '#EF4444' : '#64748B',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: isListening ? 'var(--danger-50)' : 'var(--surface-low)',
+                color: isListening ? 'var(--danger-600)' : 'var(--text-secondary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: 'none',
+                border: '1px solid var(--border-subtle)',
                 cursor: 'pointer',
                 flexShrink: 0
               }}
@@ -731,14 +741,16 @@ export default function AIChatWidget() {
               style={{
                 flex: 1,
                 padding: '0.45rem 0.65rem',
-                fontSize: '12px',
-                border: '1px solid #E2E8F0',
-                borderRadius: '8px',
+                fontSize: 'var(--text-xs)',
+                border: '1px solid var(--border-default)',
+                borderRadius: 'var(--radius-lg)',
                 outline: 'none',
                 resize: 'none',
                 lineHeight: 1.4,
                 maxHeight: '75px',
-                fontFamily: 'inherit'
+                color: 'var(--text-primary)',
+                fontFamily: 'inherit',
+                backgroundColor: 'var(--surface)'
               }}
             />
 
@@ -749,15 +761,16 @@ export default function AIChatWidget() {
               style={{
                 width: '34px',
                 height: '34px',
-                borderRadius: '8px',
-                backgroundColor: (prompt.trim() || attachedFile) ? '#1D4ED8' : '#E2E8F0',
-                color: (prompt.trim() || attachedFile) ? '#FFFFFF' : '#94A3B8',
+                borderRadius: 'var(--radius-lg)',
+                backgroundColor: (prompt.trim() || attachedFile) ? 'var(--primary-700)' : 'var(--slate-200)',
+                color: (prompt.trim() || attachedFile) ? '#FFFFFF' : 'var(--text-muted)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 border: 'none',
                 cursor: (prompt.trim() || attachedFile) ? 'pointer' : 'default',
-                flexShrink: 0
+                flexShrink: 0,
+                transition: 'background 0.2s ease'
               }}
               title="Send Message"
             >

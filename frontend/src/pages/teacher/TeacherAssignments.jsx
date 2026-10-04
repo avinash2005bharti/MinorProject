@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
+import { PageHeader, Card, Badge, Button, EmptyState } from '../../components/common';
 import {
   FileText,
   PlusCircle,
@@ -9,7 +10,8 @@ import {
   CheckCircle2,
   Calendar,
   Download,
-  Check
+  Check,
+  X
 } from 'lucide-react';
 
 export default function TeacherAssignments() {
@@ -39,25 +41,22 @@ export default function TeacherAssignments() {
     <div className="page-wrapper">
       <div className="flex flex-col gap-5">
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              Assignments & Grading Central
-            </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Create problem sets, assign deadlines, review student submissions & publish grades
-            </p>
-          </div>
-
-          <button
-            onClick={() => openModal('createAssignment')}
-            className="btn btn-primary text-xs py-2 px-4 shadow-sm"
-            id="btn-teacher-new-assignment"
-          >
-            <PlusCircle size={15} />
-            <span>Create New Assignment</span>
-          </button>
-        </div>
+        <PageHeader
+          title="Assignments & Grading Central"
+          description="Create problem sets, assign deadlines, review student submissions & publish grades."
+          badge={<Badge variant="primary" size="sm">Course Evaluation</Badge>}
+          actions={
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => openModal('createAssignment')}
+              leftIcon={<PlusCircle size={15} />}
+              id="btn-teacher-new-assignment"
+            >
+              Create New Assignment
+            </Button>
+          }
+        />
 
         {/* Assignments Selector Carousel */}
         {assignments.length === 0 ? (
@@ -191,13 +190,21 @@ export default function TeacherAssignments() {
               style={{ maxWidth: '440px', width: '92%' }}
             >
               <div className="modal-header">
-                <h3 className="text-sm font-bold text-slate-900">Grade Student Submission</h3>
-                <button onClick={() => setGradingSubmId(null)} className="modal-close-btn">
-                  ×
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-700 flex items-center justify-center flex-shrink-0">
+                    <Award size={20} />
+                  </div>
+                  <div>
+                    <h3 className="modal-title">Grade Submission</h3>
+                    <p className="modal-subtitle">Max Score: {selectedAsg.totalMarks} marks</p>
+                  </div>
+                </div>
+                <button onClick={() => setGradingSubmId(null)} className="modal-close-btn" aria-label="Close modal">
+                  <X size={18} />
                 </button>
               </div>
 
-              <form onSubmit={handleSaveGrade} className="flex flex-col gap-3 mt-2">
+              <form onSubmit={handleSaveGrade} className="flex flex-col gap-3 mt-1">
                 <div className="form-group mb-0">
                   <label className="form-label">Awarded Score (Max {selectedAsg.totalMarks})</label>
                   <input
@@ -223,11 +230,11 @@ export default function TeacherAssignments() {
                   />
                 </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
-                  <button type="button" onClick={() => setGradingSubmId(null)} className="btn btn-outline text-xs">
+                <div className="modal-footer">
+                  <button type="button" onClick={() => setGradingSubmId(null)} className="btn btn-outline text-xs py-2 px-4 font-semibold">
                     Cancel
                   </button>
-                  <button type="submit" className="btn btn-primary text-xs font-bold" id="btn-save-grade-confirm">
+                  <button type="submit" className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm" id="btn-save-grade-confirm">
                     Save Grade
                   </button>
                 </div>

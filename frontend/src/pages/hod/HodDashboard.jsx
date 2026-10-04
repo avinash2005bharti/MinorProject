@@ -6,6 +6,20 @@ import QuickDisplay from '../../components/QuickDisplay';
 import { dashboardApi } from '../../api/dashboardApi';
 import { leaveApi } from '../../api/leaveApi';
 import {
+  PageHeader,
+  StatCard,
+  Card,
+  Badge,
+  Button,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  EmptyState
+} from '../../components/common';
+import {
   ShieldCheck,
   Users,
   CheckSquare,
@@ -267,99 +281,56 @@ export default function HodDashboard() {
   };
 
   return (
-    <div className="container-fluid py-4" style={{ maxWidth: '1440px', margin: '0 auto' }}>
-      <div className="d-flex flex-column gap-4">
+    <div className="page-wrapper">
+      <div className="flex flex-col gap-5">
         {/* Header */}
-        <div className="d-flex justify-content-between align-items-center flex-wrap gap-3">
-          <div>
-            <div className="d-flex align-items-center gap-2">
-              <h2 style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
-                Dept. of Computer Science & Engineering
-              </h2>
-              <span className="badge bg-primary-subtle text-primary border border-primary-subtle">HOD Office</span>
+        <PageHeader
+          title="Dept. of Computer Science & Engineering"
+          description={`Head of Department: ${currentUser?.name && currentUser?.name.toLowerCase() !== 'hod' ? currentUser.name : 'Dr. Alok Verma'} • Academic Governance & AI Timetable Engine`}
+          badge={<Badge variant="primary" size="sm">HOD Office</Badge>}
+          actions={
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* HOD Self-Leave Toggle Switch */}
+              <Button
+                variant={isHodOnLeave ? 'danger' : 'success'}
+                size="sm"
+                onClick={handleToggleHodLeave}
+                disabled={togglingHodLeave}
+                loading={togglingHodLeave}
+                id="btn-hod-self-leave-toggle"
+              >
+                {isHodOnLeave ? 'Duty Status: On Leave' : 'Duty Status: Available'}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchHodData}
+                disabled={loading}
+                loading={loading}
+                leftIcon={<RefreshCw size={13} />}
+              >
+                Refresh
+              </Button>
             </div>
-            <p style={{ fontSize: '13px', color: '#64748B', margin: '4px 0 0 0' }}>
-              Head of Department: {currentUser?.name || 'Dr. Alok Verma'} • Academic Governance & AI Timetable Engine
-            </p>
-          </div>
-
-          <div className="d-flex align-items-center gap-2">
-            {/* HOD Self-Leave Toggle Switch */}
-            <button
-              id="btn-hod-self-leave-toggle"
-              onClick={handleToggleHodLeave}
-              disabled={togglingHodLeave}
-              className="btn btn-sm d-inline-flex align-items-center gap-2"
-              style={{
-                borderRadius: '30px',
-                fontWeight: 700,
-                fontSize: '12px',
-                border: isHodOnLeave ? '2px solid #EF4444' : '2px solid #10B981',
-                backgroundColor: isHodOnLeave ? '#FEE2E2' : '#ECFDF5',
-                color: isHodOnLeave ? '#991B1B' : '#065F46',
-                padding: '6px 16px',
-                boxShadow: isHodOnLeave ? '0 0 12px rgba(239, 68, 68, 0.25)' : '0 0 12px rgba(16, 185, 129, 0.25)',
-                cursor: togglingHodLeave ? 'not-allowed' : 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-              title="Click to toggle your departmental availability status for today"
-            >
-              <span style={{ fontSize: '14px', lineHeight: 1 }}>{isHodOnLeave ? '🔴' : '🟢'}</span>
-              <span>{isHodOnLeave ? 'Duty Status: On Leave' : 'Duty Status: Available'}</span>
-              <span style={{ fontSize: '10px', opacity: 0.75, paddingLeft: '2px' }}>
-                ({togglingHodLeave ? 'Updating...' : 'Toggle'})
-              </span>
-            </button>
-
-            <button
-              onClick={fetchHodData}
-              disabled={loading}
-              className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
-              style={{ borderRadius: '8px' }}
-            >
-              <RefreshCw size={14} className={loading ? 'fa-spin' : ''} />
-              <span>Refresh</span>
-            </button>
-
-            <Link
-              to="/hod/timetable?view=current"
-              className="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1"
-              style={{ borderRadius: '8px', fontWeight: 600 }}
-              id="btn-hod-current-timetable-header"
-              title="View current active departmental timetable"
-            >
-              <Calendar size={14} />
-              <span>Current Timetable</span>
-            </Link>
-
-            <Link
-              to="/hod/timetable?view=generator"
-              className="btn btn-primary btn-sm d-inline-flex align-items-center gap-1"
-              style={{ borderRadius: '8px', fontWeight: 600 }}
-              id="btn-hod-ai-generator-header"
-              title="Open AI Timetable Generator & Scheduler"
-            >
-              <Sparkles size={14} />
-              <span>AI Timetable Generator</span>
-            </Link>
-          </div>
-        </div>
+          }
+        />
 
         {/* Loading and Error states */}
         {loading && (
-          <div className="card p-5 text-center text-muted d-flex flex-column align-items-center justify-content-center gap-2">
+          <div className="card p-8 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
             <div className="spinner-border text-primary" role="status" style={{ width: '2rem', height: '2rem' }} />
-            <span style={{ fontSize: '13px', fontWeight: 600 }}>Loading Departmental Overview from Database...</span>
+            <span className="text-xs font-semibold">Loading Departmental Overview from Database...</span>
           </div>
         )}
 
         {error && (
-          <div className="alert alert-danger d-flex align-items-center justify-content-between" style={{ borderRadius: '10px' }}>
-            <div className="d-flex align-items-center gap-2">
-              <AlertCircle size={18} />
+          <div className="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-danger-800 text-xs flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={18} className="text-danger-600 shrink-0" />
               <span>{error}</span>
             </div>
-            <button onClick={fetchHodData} className="btn btn-sm btn-primary">Try Again</button>
+            <Button variant="primary" size="sm" onClick={fetchHodData}>Try Again</Button>
           </div>
         )}
 
@@ -371,129 +342,71 @@ export default function HodDashboard() {
             {/* Quick Display Widget */}
             <QuickDisplay />
 
-            {/* --- COMPACT STATUS CARDS (SECTION 15 SPECIFICATION) --- */}
-            <div className="row g-3">
-              <div className="col-lg-3 col-md-4 col-sm-6">
-                <div className="card p-3 h-100 shadow-sm" style={{ borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                  <div className="d-flex align-items-center gap-3">
-                    <div className="rounded-3 p-2 bg-primary-subtle text-primary">
-                      <UserCheck size={22} />
-                    </div>
-                    <div>
-                      <div className="text-muted small">Total Teachers</div>
-                      <div className="h4 fw-bold mb-0 text-dark">{totalFaculty}</div>
-                      <div className="small text-muted" style={{ fontSize: '11px' }}>Department Faculty</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            {/* --- COMPACT STATUS CARDS --- */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              <StatCard
+                title="Total Teachers"
+                value={totalFaculty}
+                icon={<UserCheck size={20} />}
+                variant="primary"
+                subtitle="Department Faculty"
+              />
 
-              <div className="col-lg-3 col-md-4 col-sm-6">
-                <div className="card p-3 h-100 shadow-sm" style={{ borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                  <div className="d-flex align-items-center gap-3">
-                    <div className={`rounded-3 p-2 ${teachersOnLeave.length > 0 ? 'bg-danger-subtle text-danger' : 'bg-success-subtle text-success'}`}>
-                      <UserMinus size={22} />
-                    </div>
-                    <div>
-                      <div className="text-muted small">Teachers On Leave Today</div>
-                      <div className="h4 fw-bold mb-0 text-dark">{teachersOnLeave.length}</div>
-                      <div className="small" style={{ fontSize: '11px', color: teachersOnLeave.length > 0 ? '#DC2626' : '#16A34A' }}>
-                        {teachersOnLeave.length > 0 ? 'Replacements Required' : 'All Teachers Present'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <StatCard
+                title="Teachers On Leave"
+                value={teachersOnLeave.length}
+                icon={<UserMinus size={20} />}
+                variant={teachersOnLeave.length > 0 ? 'danger' : 'success'}
+                subtitle={teachersOnLeave.length > 0 ? 'Replacements Required' : 'All Teachers Present'}
+              />
 
-              <div className="col-lg-3 col-md-4 col-sm-6">
-                <div className="card p-3 h-100 shadow-sm" style={{ borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                  <div className="d-flex align-items-center gap-3">
-                    <div className="rounded-3 p-2 bg-info-subtle text-info">
-                      <Users size={22} />
-                    </div>
-                    <div>
-                      <div className="text-muted small">Total Students</div>
-                      <div className="h4 fw-bold mb-0 text-dark">{totalStudents}</div>
-                      <div className="small text-muted" style={{ fontSize: '11px' }}>Enrolled CSE Batches</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <StatCard
+                title="Total Students"
+                value={totalStudents > 0 ? totalStudents : '—'}
+                icon={<Users size={20} />}
+                variant="neutral"
+                subtitle="Enrolled CSE Batches"
+              />
 
-              <div className="col-lg-3 col-md-4 col-sm-6">
-                <div className="card p-3 h-100 shadow-sm" style={{ borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                  <div className="d-flex align-items-center gap-3">
-                    <div className="rounded-3 p-2 bg-indigo-subtle text-indigo">
-                      <BookOpen size={22} />
-                    </div>
-                    <div>
-                      <div className="text-muted small">Active Subjects</div>
-                      <div className="h4 fw-bold mb-0 text-dark">5</div>
-                      <div className="small text-muted" style={{ fontSize: '11px' }}>Semester 5 Curriculum</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <StatCard
+                title="Active Subjects"
+                value={dashboard?.stats?.activeSubjects || dashboard?.stats?.totalSubjects || 5}
+                icon={<BookOpen size={20} />}
+                variant="neutral"
+                subtitle="Semester 5 Curriculum"
+              />
 
-              <div className="col-lg-3 col-md-4 col-sm-6">
-                <div className="card p-3 h-100 shadow-sm" style={{ borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                  <div className="d-flex align-items-center gap-3">
-                    <div className="rounded-3 p-2 bg-warning-subtle text-warning">
-                      <Clock size={22} />
-                    </div>
-                    <div>
-                      <div className="text-muted small">Today's Classes</div>
-                      <div className="h4 fw-bold mb-0 text-dark">7 Slots</div>
-                      <div className="small text-muted" style={{ fontSize: '11px' }}>Active Daily Periods</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <StatCard
+                title="Today's Classes"
+                value={dashboard?.stats?.todayClassesCount !== undefined ? `${dashboard.stats.todayClassesCount} Slots` : '0 Slots'}
+                icon={<Clock size={20} />}
+                variant="warning"
+                subtitle="Active Daily Periods"
+              />
 
-              <div className="col-lg-3 col-md-4 col-sm-6">
-                <div className="card p-3 h-100 shadow-sm" style={{ borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                  <div className="d-flex align-items-center gap-3">
-                    <div className="rounded-3 p-2 bg-success-subtle text-success">
-                      <Calendar size={22} />
-                    </div>
-                    <div>
-                      <div className="text-muted small">Timetable Status</div>
-                      <div className="h5 fw-bold mb-0 text-success">Published</div>
-                      <div className="small text-muted" style={{ fontSize: '11px' }}>Mon–Sat Dynamic Grid</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <StatCard
+                title="Timetable Status"
+                value={dashboard?.stats?.timetableStatus === 'ACTIVE' ? 'Published' : 'Draft'}
+                icon={<Calendar size={20} />}
+                variant="success"
+                subtitle="Mon–Sat Dynamic Grid"
+              />
 
-              <div className="col-lg-3 col-md-4 col-sm-6">
-                <div className="card p-3 h-100 shadow-sm" style={{ borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                  <div className="d-flex align-items-center gap-3">
-                    <div className={`rounded-3 p-2 ${totalPending > 0 ? 'bg-amber-subtle text-amber' : 'bg-light text-muted'}`}>
-                      <CheckSquare size={22} />
-                    </div>
-                    <div>
-                      <div className="text-muted small">Pending Clearances</div>
-                      <div className="h4 fw-bold mb-0 text-dark">{totalPending}</div>
-                      <div className="small text-warning" style={{ fontSize: '11px' }}>Requires HOD Action</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <StatCard
+                title="Pending Clearances"
+                value={totalPending}
+                icon={<CheckSquare size={20} />}
+                variant={totalPending > 0 ? 'warning' : 'neutral'}
+                subtitle="Requires HOD Action"
+              />
 
-              <div className="col-lg-3 col-md-4 col-sm-6">
-                <div className="card p-3 h-100 shadow-sm" style={{ borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                  <div className="d-flex align-items-center gap-3">
-                    <div className="rounded-3 p-2 bg-primary-subtle text-primary">
-                      <Activity size={22} />
-                    </div>
-                    <div>
-                      <div className="text-muted small">Average Attendance</div>
-                      <div className="h4 fw-bold mb-0 text-primary">{avgAttendance}%</div>
-                      <div className="small text-muted" style={{ fontSize: '11px' }}>Department Aggregate</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <StatCard
+                title="Average Attendance"
+                value={totalStudents > 0 && avgAttendance > 0 ? `${avgAttendance}%` : '—'}
+                icon={<Activity size={20} />}
+                variant="primary"
+                subtitle="Department Aggregate"
+              />
             </div>
 
             {/* --- AI TEACHER REPLACEMENT & AFFECTED CLASSES ALERT PANEL --- */}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { studentApi } from '../../api/studentApi';
+import { PageHeader, Card, Badge, Button, EmptyState } from '../../components/common';
 import {
   Users,
   Search,
@@ -130,43 +131,37 @@ export default function HodStudents() {
 
   return (
     <div className="page-wrapper">
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
+        <PageHeader
+          title="Department Student Directory"
+          description="Official student roster and section allocations under HOD supervision."
+          badge={<Badge variant="primary" size="sm">{studentsList.length} Enrolled</Badge>}
+          actions={
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                Department Student Directory
-              </h1>
-              <span className="badge badge-indigo">
-                {studentsList.length} Enrolled
-              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchStudents}
+                disabled={loading}
+                loading={loading}
+                leftIcon={<RefreshCw size={13} />}
+              >
+                Refresh
+              </Button>
+
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setIsEnrollModalOpen(true)}
+                leftIcon={<PlusCircle size={15} />}
+                id="btn-hod-enroll-student"
+              >
+                Enroll New Student
+              </Button>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Official student roster and section allocations under HOD supervision
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={fetchStudents}
-              disabled={loading}
-              className="btn btn-outline text-xs py-2 px-3 flex items-center gap-1.5"
-            >
-              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-              <span>Refresh</span>
-            </button>
-
-            <button
-              onClick={() => setIsEnrollModalOpen(true)}
-              className="btn btn-primary text-xs py-2 px-3.5 flex items-center gap-1.5 shadow-sm"
-              id="btn-hod-enroll-student"
-            >
-              <PlusCircle size={15} />
-              <span>Enroll New Student</span>
-            </button>
-          </div>
-        </div>
+          }
+        />
 
         {/* Loading / Error states */}
         {loading && (
@@ -177,21 +172,21 @@ export default function HodStudents() {
         )}
 
         {error && (
-          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-danger-800 text-xs flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <AlertCircle size={18} className="text-rose-600 shrink-0" />
+              <AlertCircle size={18} className="text-danger-600 shrink-0" />
               <span>{error}</span>
             </div>
-            <button onClick={fetchStudents} className="btn btn-sm btn-primary text-xs">
+            <Button variant="primary" size="sm" onClick={fetchStudents}>
               Try Again
-            </button>
+            </Button>
           </div>
         )}
 
         {!loading && !error && (
           <>
             {/* Search & Section Filter Bar */}
-            <div className="card flex items-center justify-between gap-3 py-2.5 flex-wrap">
+            <Card className="flex items-center justify-between gap-3 py-2.5 flex-wrap">
               <div className="flex items-center gap-2.5 flex-1 min-w-[240px]">
                 <Search size={18} className="text-slate-400 shrink-0" />
                 <input
@@ -217,13 +212,17 @@ export default function HodStudents() {
                   <option value="C">Section C</option>
                 </select>
               </div>
-            </div>
+            </Card>
 
             {/* Student Cards Grid */}
             {filteredStudents.length === 0 ? (
-              <div className="p-8 text-center text-slate-500 text-xs card">
-                No students found matching current filters.
-              </div>
+              <Card className="text-center py-10">
+                <EmptyState
+                  icon={<Users size={36} className="text-slate-400" />}
+                  title="No Students Found"
+                  description="No students match the current filter criteria."
+                />
+              </Card>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {filteredStudents.map((st) => {
@@ -497,23 +496,24 @@ export default function HodStudents() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)' }}>
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   onClick={() => setIsEnrollModalOpen(false)}
-                  className="btn btn-sm btn-secondary"
                   disabled={submitting}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="btn btn-sm btn-primary"
+                  variant="primary"
+                  size="sm"
+                  loading={submitting}
                   disabled={submitting}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  {submitting && <RefreshCw size={12} className="animate-spin" />}
-                  <span>{submitting ? 'Enrolling...' : 'Enroll Student'}</span>
-                </button>
+                  Enroll Student
+                </Button>
               </div>
             </form>
           </div>

@@ -145,11 +145,25 @@ exports.toggleTeacherLeave = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Teacher record not found.' });
     }
 
-    // Check if there is an existing leave for today
+    // Verify caller authorization (SEC-04)
+    const callerRole = (req.user?.role || '').toUpperCase();
+    const isPrivileged = callerRole === 'HOD' || callerRole === 'ADMIN';
+    const isSelf = (req.user?.teacherId && req.user.teacherId === teacher.id) ||
+                   (req.user?.id && req.user.id === teacher.userId);
+
+    if (!isPrivileged && !isSelf) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Faculty can only toggle their own leave status. HOD or Admin privilege required to toggle other faculty.'
+      });
+    }
+
+    // Check if there is an existing leave for today (excluding CANCELLED)
     const existingLeave = await prisma.leaveApplication.findFirst({
       where: {
         applicantType: 'TEACHER',
         teacherId: teacher.id,
+        status: { not: 'CANCELLED' },
         startDate: { lte: end },
         endDate: { gte: start }
       }
@@ -160,8 +174,27 @@ exports.toggleTeacherLeave = async (req, res) => {
     let affectedClasses = [];
 
     if (existingLeave) {
-      // Toggle OFF -> Delete / Cancel today's leave record
-      await prisma.leaveApplication.delete({ where: { id: existingLeave.id } });
+      // Toggle OFF -> Mark CANCELLED (LOGIC-06)
+      await prisma.leaveApplication.update({
+        where: { id: existingLeave.id },
+        data: {
+          status: 'CANCELLED',
+          rejectionReason: 'Cancelled via Teacher Leave Toggle',
+          cancelledAt: new Date(),
+          cancelledById: req.user?.id || null
+        }
+      });
+
+      // Cancel related daily substitutions for this teacher on this date (LOGIC-01)
+      await prisma.dailySubstitution.updateMany({
+        where: {
+          originalTeacherId: teacher.id,
+          date: { gte: start, lte: end },
+          status: 'ACTIVE'
+        },
+        data: { status: 'CANCELLED' }
+      });
+
       isOnLeave = false;
       logger.info(`[Leave Toggle] Teacher ${teacher.firstName} ${teacher.lastName} marked AVAILABLE for ${dateStr}.`);
     } else {
@@ -377,10 +410,46 @@ exports.applySubstitute = async (req, res) => {
     const originalTeacherName = `${slot.teacher?.firstName} ${slot.teacher?.lastName || ''}`.trim();
     const substituteName = `${substitute.firstName} ${substitute.lastName || ''}`.trim();
 
-    // Update the slot teacher
-    const updatedSlot = await prisma.timetableSlot.update({
-      where: { id: slotId },
-      data: { teacherId: substitute.id }
+    // LOGIC-01: Non-destructive daily substitution. Never overwrite master timetableSlot.teacherId!
+    const targetDate = req.body.date ? new Date(req.body.date) : new Date();
+    targetDate.setHours(0, 0, 0, 0);
+
+    // Look for active leave application for this teacher on this date
+    const leaveApp = await prisma.leaveApplication.findFirst({
+      where: {
+        applicantType: 'TEACHER',
+        teacherId: slot.teacherId,
+        status: { in: ['APPROVED', 'PENDING'] },
+        startDate: { lte: new Date(targetDate.getTime() + 86399999) },
+        endDate: { gte: targetDate }
+      }
+    });
+
+    const dailySub = await prisma.dailySubstitution.upsert({
+      where: {
+        slotId_date: {
+          slotId: slot.id,
+          date: targetDate
+        }
+      },
+      create: {
+        slotId: slot.id,
+        date: targetDate,
+        originalTeacherId: slot.teacherId,
+        substituteTeacherId: substitute.id,
+        leaveApplicationId: leaveApp ? leaveApp.id : null,
+        status: 'ACTIVE',
+        notes: notes || 'Assigned by HOD',
+        createdById: req.user?.id || null
+      },
+      update: {
+        originalTeacherId: slot.teacherId,
+        substituteTeacherId: substitute.id,
+        leaveApplicationId: leaveApp ? leaveApp.id : null,
+        status: 'ACTIVE',
+        notes: notes || 'Assigned by HOD',
+        createdById: req.user?.id || null
+      }
     });
 
     // Record AI Generated Record for audit
@@ -389,13 +458,15 @@ exports.applySubstitute = async (req, res) => {
         recordType: 'SUBSTITUTION_PROPOSAL',
         referenceId: slotId,
         generatedByAgent: 'TeacherAbsenceAgent',
-        inputParameters: { slotId, originalTeacherId: slot.teacherId, substituteTeacherId },
+        inputParameters: { slotId, originalTeacherId: slot.teacherId, substituteTeacherId, date: targetDate.toISOString() },
         structuredResult: {
           slotId,
           period: slot.periodNumber,
           subject: slot.subject?.name,
           originalTeacher: originalTeacherName,
           substituteTeacher: substituteName,
+          date: targetDate.toISOString().split('T')[0],
+          substitutionId: dailySub.id,
           notes: notes || 'Assigned by HOD'
         },
         status: 'COMMITTED',
@@ -410,7 +481,7 @@ exports.applySubstitute = async (req, res) => {
         data: {
           userId: substitute.userId,
           title: `Substitute Class Assigned: ${slot.subject?.name}`,
-          message: `You have been appointed as substitute faculty for Period ${slot.periodNumber} (${slot.subject?.name}) with Section ${slot.section?.name}.`,
+          message: `You have been appointed as substitute faculty for Period ${slot.periodNumber} (${slot.subject?.name}) with Section ${slot.section?.name} on ${targetDate.toISOString().split('T')[0]}.`,
           type: 'INFO'
         }
       });
@@ -418,8 +489,14 @@ exports.applySubstitute = async (req, res) => {
 
     return res.status(200).json({
       success: true,
-      message: `Substitute ${substituteName} assigned to Period ${slot.periodNumber} (${slot.subject?.name}) successfully.`,
-      slot: updatedSlot
+      message: `Substitute ${substituteName} assigned to Period ${slot.periodNumber} (${slot.subject?.name}) for ${targetDate.toISOString().split('T')[0]} successfully.`,
+      substitution: dailySub,
+      slot: {
+        ...slot,
+        originalTeacher: slot.teacher,
+        substituteTeacher: substitute,
+        isSubstituted: true
+      }
     });
   } catch (error) {
     logger.error(`[Leave Controller] applySubstitute error: ${error.message}`);

@@ -2,6 +2,7 @@ import React from 'react';
 import { useERP } from '../../context/ERPContext';
 import { Link } from 'react-router-dom';
 import { BookOpen, Users, CheckSquare, Calendar, ArrowRight, Clock } from 'lucide-react';
+import { PageHeader, Card, Badge, Button, EmptyState } from '../../components/common';
 
 export default function TeacherClasses() {
   const { currentUser, students, timetable, dashboardData, subjects } = useERP();
@@ -36,60 +37,58 @@ export default function TeacherClasses() {
 
   return (
     <div className="page-wrapper">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        <div>
-          <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-            My Assigned Classes & Cohorts
-          </h1>
-          <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-            Teaching courses, laboratory sessions, and active classroom assignments
-          </p>
-        </div>
+      <div className="flex flex-col gap-5">
+        <PageHeader
+          title="My Assigned Classes & Cohorts"
+          description="Teaching courses, laboratory sessions, and active classroom assignments."
+          badge={<Badge variant="primary" size="sm">Active Roster</Badge>}
+        />
 
         {courseList.length === 0 ? (
-          <div className="card text-center" style={{ padding: '3rem', color: 'var(--text-secondary)' }}>
-            <BookOpen size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
-            <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>No records found.</h3>
-            <p style={{ fontSize: '13px', margin: '0.25rem 0 0' }}>
-              No teaching classes or laboratory cohorts assigned in current timetable.
-            </p>
-          </div>
+          <Card className="text-center py-10">
+            <EmptyState
+              icon={<BookOpen size={36} className="text-slate-400" />}
+              title="No Courses Assigned"
+              description="No teaching classes or laboratory cohorts assigned in current timetable."
+            />
+          </Card>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {courseList.map((course, idx) => (
-              <div key={idx} className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
-                  <div>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)' }}>
-                      {course.code}
-                    </span>
-                    <h3 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                      {course.name}
-                    </h3>
+              <Card key={idx} className="flex flex-col justify-between gap-3">
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="text-xs font-bold text-primary">
+                        {course.code}
+                      </span>
+                      <h3 className="text-sm font-bold text-slate-900 m-0">
+                        {course.name}
+                      </h3>
+                    </div>
+                    <Badge variant="purple" size="xs">{course.type}</Badge>
                   </div>
-                  <span className="badge badge-indigo">{course.type}</span>
-                </div>
 
-                <div style={{ backgroundColor: 'var(--surface-low)', padding: '0.65rem 0.85rem', borderRadius: 'var(--radius-lg)', fontSize: '12px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Assigned Venue</span>
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{course.room}</span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Weekly Sessions</span>
-                    <span style={{ fontWeight: 700, color: 'var(--primary)' }}>{course.timeSlots.length} periods/week</span>
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs flex flex-col gap-1.5">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Assigned Venue</span>
+                      <span className="font-semibold text-slate-800">{course.room}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Weekly Sessions</span>
+                      <span className="font-bold text-primary">{course.timeSlots.length} periods/week</span>
+                    </div>
                   </div>
                 </div>
 
                 <Link
                   to="/teacher/attendance"
-                  className="btn btn-sm btn-outline"
-                  style={{ width: '100%', justifyContent: 'space-between', textDecoration: 'none' }}
+                  className="btn btn-outline text-xs py-2 px-3 flex items-center justify-between no-underline"
                 >
                   <span>Take Live Attendance</span>
                   <ArrowRight size={14} />
                 </Link>
-              </div>
+              </Card>
             ))}
           </div>
         )}

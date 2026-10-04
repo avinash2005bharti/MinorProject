@@ -24,7 +24,8 @@ import {
   Send,
   UserCheck,
   AlertTriangle,
-  GraduationCap
+  GraduationCap,
+  FileSpreadsheet
 } from 'lucide-react';
 
 export default function TeacherDashboard() {
@@ -32,7 +33,8 @@ export default function TeacherDashboard() {
     currentUser,
     tgReviewAttendanceConsideration,
     tgReviewLeave,
-    addToast
+    addToast,
+    openModal
   } = useERP();
 
   const [dashboard, setDashboard] = useState(null);
@@ -217,6 +219,18 @@ export default function TeacherDashboard() {
               <span>{isOnLeave ? '🔴' : '🟢'}</span>
               <span>{isOnLeave ? 'Status: On Leave' : 'Status: Available'}</span>
               <span style={{ fontSize: '10px', opacity: 0.8 }}>({togglingLeave ? '...' : 'Toggle'})</span>
+            </button>
+
+            <button
+              onClick={() => openModal('googleSheet')}
+              className="btn btn-outline text-xs py-2 px-3 flex items-center gap-1.5"
+              style={{ borderColor: '#10B981', color: '#047857', backgroundColor: '#ECFDF5' }}
+              id="btn-teacher-google-sheet"
+              title="Open Google Live Sheet integration and live sync viewer"
+            >
+              <FileSpreadsheet size={14} className="text-emerald-600" />
+              <span>Live Google Sheet</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
             </button>
 
             <button

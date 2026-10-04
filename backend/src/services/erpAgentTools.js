@@ -1488,11 +1488,39 @@ const erpAgentTools = {
 // Natural Language Intent Dispatcher
 // ----------------------------------------------------------------------------
 
-async function executeAgentActionByIntent(promptText, user, confirmedAction = null) {
+async function executeAgentActionByIntent(promptText, user, confirmedAction = null, options = {}) {
   const lower = (promptText || '').toLowerCase().trim();
+  const fileId = options.fileId || options.file_id || options.attachment?.id || null;
+
+  // If a file is attached, verify if document processing is still pending/queued in FileDocument
+  if (fileId) {
+    try {
+      const FileDocument = require('../models/mongo/FileDocument');
+      const fileDoc = await FileDocument.findById(fileId);
+      if (fileDoc && ['pending', 'processing', 'queued'].includes(fileDoc.processingStatus)) {
+        return {
+          executed: true,
+          tool: 'fileProcessingStatus',
+          steps: ['Checking file extraction & Qdrant vector indexing status'],
+          answer: `⏳ **Document is still being processed:** \`${fileDoc.originalName || fileDoc.filename}\` is currently undergoing text extraction and semantic chunking. Please allow a few moments for indexing to complete, then retry generating your timetable with this data.`,
+          data: { status: fileDoc.processingStatus, fileId: fileDoc._id }
+        };
+      }
+    } catch (docErr) {
+      aiLogger.warn(`[Agent Action] FileDocument lookup warning: ${docErr.message}`);
+    }
+  }
 
   // If executing a confirmed action directly
   if (confirmedAction && confirmedAction.tool && erpAgentTools[confirmedAction.tool]) {
+    // Defense-in-depth: bind confirmation to the authenticated user (SEC-02)
+    if (confirmedAction.userId && String(confirmedAction.userId) !== String(user?.id) && (user?.role || '').toUpperCase() !== 'ADMIN') {
+      return {
+        executed: false,
+        tool: confirmedAction.tool,
+        error: 'Access Denied: You cannot confirm actions on behalf of another user.'
+      };
+    }
     const res = await erpAgentTools[confirmedAction.tool](confirmedAction.args, { user });
     return {
       executed: res.success,
@@ -1568,20 +1596,32 @@ async function executeAgentActionByIntent(promptText, user, confirmedAction = nu
     };
   }
 
-  // 3. Generate Timetable ("Generate timetable for 5A" / "Generate timetable for semester 5 section A")
-  if (
-    (lower.includes('generate timetable') || lower.includes('create timetable')) ||
-    (lower.includes('timetable') && (lower.includes('sem') || lower.includes('section')) && lower.includes('generate'))
-  ) {
+  // 3. Generate Timetable ("Generate timetable for 5A" / "create a timetable with only subjects of 5th sem with this data" / prompt with attachment + timetable words)
+  const isTimetableIntent =
+    /create\s+(?:a\s+)?timetable|generate\s+(?:a\s+)?timetable/i.test(lower) ||
+    (lower.includes('timetable') && (
+      lower.includes('create') ||
+      lower.includes('generate') ||
+      lower.includes('make') ||
+      lower.includes('build') ||
+      lower.includes('schedule') ||
+      lower.includes('subjects') ||
+      lower.includes('sem') ||
+      lower.includes('section') ||
+      lower.includes('with this data') ||
+      Boolean(fileId)
+    ));
+
+  if (isTimetableIntent) {
     let sem = 5;
     let sec = 'A';
 
-    const semMatch = lower.match(/(?:sem|semester)\s*(\d)/);
-    if (semMatch) sem = Number(semMatch[1]);
-    const secMatch = lower.match(/(?:sec|section)\s*([a-c])/);
-    if (secMatch) sec = secMatch[1].toUpperCase();
+    const semMatch = lower.match(/(?:sem|semester|\b)(\d)(?:th|st|nd|rd)?(?:\s*(?:sem|semester))?/i);
+    if (semMatch && semMatch[1]) sem = Number(semMatch[1]);
+    const secMatch = lower.match(/(?:sec|section)\s*([a-c])/i);
+    if (secMatch && secMatch[1]) sec = secMatch[1].toUpperCase();
 
-    const res = await erpAgentTools.generateTimetable({ semester: sem, section: sec }, { user });
+    const res = await erpAgentTools.generateTimetable({ semester: sem, section: sec, fileId }, { user });
     if (!res.success) return { executed: false, error: res.error, tool: 'generateTimetable' };
 
     const { data } = res;
@@ -1589,12 +1629,15 @@ async function executeAgentActionByIntent(promptText, user, confirmedAction = nu
     answer += `**Class:** Semester ${data.semester} Section ${data.section}\n`;
     answer += `**Slots Generated:** ${data.slotsCount} | **Collisions:** ${data.conflictsCount}\n`;
     answer += `**Optimization Score:** \`${data.optimizationScore}%\`\n\n`;
+    if (fileId) {
+      answer += `*Curriculum constraints and subject mappings aligned with attached document.* \n\n`;
+    }
     answer += `The schedule has been saved transactionally to PostgreSQL. It is immediately visible in the Timetable Management view.`;
 
     return {
       executed: true,
       tool: 'generateTimetable',
-      steps: res.steps,
+      steps: fileId ? ['Parsing curriculum constraints from attached document', ...(res.steps || [])] : res.steps,
       answer,
       data: res.data
     };

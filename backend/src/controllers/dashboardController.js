@@ -265,7 +265,7 @@ exports.getHodDashboard = async (req, res) => {
     const today = new Date();
     const todayStart = new Date(today); todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(today); todayEnd.setHours(23, 59, 59, 999);
-    const todayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][today.getDay()];
+    const todayName = today.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', weekday: 'long' });
 
     const [
       totalStudents,
@@ -287,7 +287,12 @@ exports.getHodDashboard = async (req, res) => {
       prisma.teacher.count({ where: { status: 'ACTIVE' } }),
       prisma.subject.count(),
       prisma.section.count(),
-      prisma.timetableSlot.count({ where: { dayOfWeek: todayName } }),
+      prisma.timetableSlot.count({
+        where: {
+          dayOfWeek: todayName,
+          timetable: { status: 'ACTIVE' }
+        }
+      }),
       prisma.timetable.count({ where: { status: 'ACTIVE' } }),
       prisma.leaveApplication.findMany({
         where: {
@@ -307,7 +312,10 @@ exports.getHodDashboard = async (req, res) => {
         orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }]
       }),
       prisma.timetableSlot.findMany({
-        where: { dayOfWeek: todayName },
+        where: {
+          dayOfWeek: todayName,
+          timetable: { status: 'ACTIVE' }
+        },
         include: { subject: true, section: true, classroom: true }
       }),
       prisma.attendanceRecord.count(),

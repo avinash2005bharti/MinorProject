@@ -13,13 +13,13 @@ router.get('/today', optionalAuth, cacheService.middleware(15), leaveController.
 router.get('/availability', optionalAuth, cacheService.middleware(15), leaveController.getFacultyAvailability);
 router.get('/availability/today', optionalAuth, cacheService.middleware(15), leaveController.getFacultyAvailability);
 
-// Teacher Leave Toggle (Available <-> On Leave)
-router.post('/teachers/:id/toggle', optionalAuth, leaveController.toggleTeacherLeave);
-router.post('/teachers/:id/leave-toggle', optionalAuth, leaveController.toggleTeacherLeave);
+// Teacher Leave Toggle (Available <-> On Leave) - requires verified user
+router.post('/teachers/:id/toggle', verifyToken, leaveController.toggleTeacherLeave);
+router.post('/teachers/:id/leave-toggle', verifyToken, leaveController.toggleTeacherLeave);
 
 // Affected Classes & Substitutions
-router.get('/teachers/:id/affected-classes', optionalAuth, leaveController.getAffectedClasses);
-router.post('/teachers/:id/propose-substitutes', optionalAuth, leaveController.proposeSubstitutes);
-router.post('/apply-substitute', optionalAuth, leaveController.applySubstitute);
+router.get('/teachers/:id/affected-classes', verifyToken, leaveController.getAffectedClasses);
+router.post('/teachers/:id/propose-substitutes', verifyToken, checkRole('HOD', 'ADMIN', 'TEACHER', 'TG'), leaveController.proposeSubstitutes);
+router.post('/apply-substitute', verifyToken, checkRole('HOD', 'ADMIN'), leaveController.applySubstitute);
 
 module.exports = router;

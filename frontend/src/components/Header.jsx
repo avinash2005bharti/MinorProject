@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useERP } from '../context/ERPContext';
-import { Bell, ShieldCheck, User, Menu, X, Bot, Check, Clock, LogOut, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Bell, ShieldCheck, User, Menu, Bot, LogOut } from 'lucide-react';
 import { useNavigate, Link } from 'react-router-dom';
 
 export default function Header({ isSidebarOpen, onToggleSidebar }) {
@@ -10,273 +10,156 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
-  const rolePills = [
-    { id: 'student', label: 'Student' },
-    { id: 'teacher', label: 'Faculty' },
-    { id: 'tg', label: 'TG / Mentor' },
-    { id: 'hod', label: 'HOD' },
-    { id: 'admin', label: 'Admin' }
-  ];
+  const roleEmojiMap = {
+    student: '🎓',
+    teacher: '👨‍🏫',
+    tg: '🛡️',
+    hod: '🏛️',
+    admin: '⚙️'
+  };
+
+  const roleTitleMap = {
+    student: 'Student Portal',
+    teacher: 'Faculty Portal',
+    tg: 'Mentor / TG Desk',
+    hod: 'HOD Administration',
+    admin: 'System Administrator'
+  };
+
+  const roleSubMap = {
+    student: `${currentUser?.section || 'Section unassigned'} • B.Tech CSE`,
+    teacher: 'Dept. of CSE • Academic Faculty',
+    tg: 'Teacher Guardian',
+    hod: 'Dept. of CSE • Head of Dept',
+    admin: 'CampusFlow ERP Infrastructure'
+  };
 
   return (
-    <header
-      style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 50,
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(12px)',
-        borderBottom: '1px solid var(--border-subtle)',
-        boxShadow: '0 1px 8px rgba(0, 0, 0, 0.04)',
-        width: '100%'
-      }}
-    >
-      <div
-        style={{
-          height: 'var(--header-height)',
-          padding: '0 1.5rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '1rem',
-          width: '100%'
-        }}
-      >
-        {/* Left: Branding & Universal Slidable Sidebar Trigger */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          {/* Menu Sliding Button */}
+    <header className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-xs">
+      <div className="flex items-center justify-between gap-3 px-4 md:px-6 h-16 w-full">
+        {/* Left: Menu Trigger & Branding */}
+        <div className="flex items-center gap-3 shrink-0">
           <button
             onClick={onToggleSidebar}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '38px',
-              height: '38px',
-              borderRadius: 'var(--radius-lg)',
-              backgroundColor: 'var(--surface-low)',
-              color: 'var(--text-primary)',
-              border: '1px solid var(--border-subtle)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-              flexShrink: 0
-            }}
-            className="hover:bg-surface-high hover:scale-105 active:scale-95"
-            title={isSidebarOpen ? "Slide Menu Closed" : "Slide Menu Open"}
+            className="w-9 h-9 rounded-lg flex items-center justify-center bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900 border border-slate-200 transition-all cursor-pointer active:scale-95"
+            title={isSidebarOpen ? 'Slide Menu Closed' : 'Slide Menu Open'}
             aria-label="Toggle Navigation Menu"
             id="btn-sidebar-toggle"
           >
-            <Menu size={20} />
+            <Menu size={18} />
           </button>
 
           <Link
             to={`/${currentRole}`}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', textDecoration: 'none', cursor: 'pointer' }}
+            className="flex items-center gap-2.5 no-underline cursor-pointer group"
             title="Go to Home Dashboard"
           >
-            <div
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: 'var(--radius-lg)',
-                backgroundColor: '#FFFFFF',
-                padding: '2px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: 'var(--shadow-sm)',
-                border: '1px solid var(--border-subtle)',
-                transition: 'transform 0.15s ease'
-              }}
-              className="hover:scale-105"
-            >
+            <div className="w-9 h-9 rounded-lg bg-white p-0.5 flex items-center justify-center border border-slate-200 shadow-xs group-hover:scale-105 transition-transform">
               <img
                 src="/oist.png"
                 alt="OIST CSE Logo"
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                className="w-full h-full object-contain"
               />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1 }}>
+            <div className="flex flex-col">
+              <span className="font-heading text-sm font-extrabold text-slate-900 leading-tight">
                 OIST CSE
               </span>
-              <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 600 }}>
+              <span className="text-xs text-primary font-semibold leading-none">
                 CampusFlow ERP
               </span>
             </div>
           </Link>
         </div>
 
-        {/* Center: Fixed Role Window Session Indicator (Restricted to Logged-in Role) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-          <div className="fixed-role-window-badge">
-            <span style={{ fontSize: '15px' }}>
-              {currentRole === 'student' && '🎓'}
-              {currentRole === 'teacher' && '👨‍🏫'}
-              {currentRole === 'tg' && '🛡️'}
-              {currentRole === 'hod' && '🏛️'}
-              {currentRole === 'admin' && '⚙️'}
+        {/* Center: Role Session Window Badge (Visible on md+ screens) */}
+        <div className="hidden lg:flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-white border border-slate-200 rounded-full shadow-xs">
+            <span className="text-sm shrink-0">
+              {roleEmojiMap[currentRole] || '🎓'}
             </span>
-            <div className="fixed-role-text">
-              <span className="fixed-role-title">
-                {currentRole === 'student' && 'Student Portal'}
-                {currentRole === 'teacher' && 'Faculty Portal'}
-                {currentRole === 'tg' && 'Mentor / TG Desk'}
-                {currentRole === 'hod' && 'HOD Administration'}
-                {currentRole === 'admin' && 'System Administrator'}
+            <div className="flex flex-col text-left">
+              <span className="text-xs font-bold text-slate-900 leading-tight">
+                {roleTitleMap[currentRole] || 'Academic Portal'}
               </span>
-              <span className="fixed-role-sub">
-                {currentRole === 'student' && `${currentUser?.section || 'Section unassigned'} • B.Tech CSE`}
-                {currentRole === 'teacher' && 'Dept. of CSE • Academic Faculty'}
-                {currentRole === 'tg' && 'Teacher Guardian'}
-                {currentRole === 'hod' && 'Dept. of CSE • Head of Dept'}
-                {currentRole === 'admin' && 'CampusFlow ERP Infrastructure'}
+              <span className="text-xs text-slate-400 leading-none">
+                {roleSubMap[currentRole] || 'Session Active'}
               </span>
             </div>
-            <span
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '3px',
-                padding: '0.15rem 0.45rem',
-                borderRadius: 'var(--radius-full)',
-                backgroundColor: 'var(--primary-container)',
-                color: 'var(--primary)',
-                fontSize: '10px',
-                fontWeight: 700,
-                marginLeft: '0.25rem'
-              }}
-              title="This window is strictly restricted to your logged in role"
-            >
-              <ShieldCheck size={11} />
-              <span>Role Session</span>
+            <span className="badge badge-indigo text-xs ml-1 py-0.5 px-2">
+              <ShieldCheck size={10} className="mr-0.5" />
+              Verified
             </span>
           </div>
 
-          {/* Switch Role Action -> Redirects to Login with role selection */}
           <button
             onClick={() => {
               logout();
               navigate('/login');
             }}
-            className="switch-role-btn"
+            className="px-2.5 py-1 rounded-full bg-white border border-slate-300 text-slate-600 hover:text-primary hover:border-blue-300 hover:bg-blue-50 text-xs font-semibold shadow-xs transition-all cursor-pointer"
             title="Sign out and switch to another role"
           >
-            <span>Switch Role</span>
+            Switch Role
           </button>
         </div>
 
-        {/* Right: Quick Telemetry, Notification Bell & Profile */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
-          {/* Autonomous Agents Health Indicator & AI Workspace Trigger */}
-          <div
+        {/* Right: AI Workspace, Notification Bell, User & Logout */}
+        <div className="flex items-center gap-2 shrink-0 relative">
+          {/* AI Workspace Shortcut */}
+          <button
             onClick={() => navigate('/ai-workspace')}
-            style={{
-              cursor: 'pointer',
-              display: 'none',
-              alignItems: 'center',
-              gap: '0.35rem',
-              padding: '0.3rem 0.65rem',
-              borderRadius: 'var(--radius-full)',
-              backgroundColor: 'var(--secondary-container)',
-              color: 'var(--on-secondary-container)',
-              fontSize: '11px',
-              fontWeight: 600,
-              transition: 'opacity 0.2s ease'
-            }}
-            className="md:flex hover:opacity-85"
-            title="Open Fullscreen CampusFlow AI Workspace"
+            className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 text-xs font-semibold transition-all cursor-pointer"
+            title="Open CampusFlow AI Workspace"
           >
-            <Bot size={14} />
+            <Bot size={14} className="text-emerald-600" />
             <span>AI Workspace</span>
-            <span className="agent-pulse" style={{ width: '6px', height: '6px' }} />
-          </div>
+            <span className="agent-pulse w-1.5 h-1.5" />
+          </button>
 
           {/* Notification Button */}
-          <div style={{ position: 'relative' }}>
+          <div className="relative">
             <button
               onClick={() => setShowNotifications(!showNotifications)}
-              style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: 'var(--text-secondary)',
-                backgroundColor: showNotifications ? 'var(--surface-high)' : 'var(--surface-low)',
-                position: 'relative',
-                transition: 'all 0.15s ease'
-              }}
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer relative ${
+                showNotifications ? 'bg-slate-200 text-slate-900' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+              }`}
               aria-label="Notifications"
             >
-              <Bell size={19} />
+              <Bell size={17} />
               {unreadCount > 0 && (
-                <span
-                  style={{
-                    position: 'absolute',
-                    top: '8px',
-                    right: '8px',
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--error)',
-                    border: '2px solid #FFFFFF'
-                  }}
-                />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-600 ring-2 ring-white" />
               )}
             </button>
 
             {/* Notification Dropdown */}
             {showNotifications && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '48px',
-                  right: 0,
-                  width: '320px',
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: 'var(--radius-xl)',
-                  boxShadow: 'var(--shadow-xl)',
-                  border: '1px solid var(--border-subtle)',
-                  padding: '1rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.75rem',
-                  zIndex: 60,
-                  animation: 'scaleUp 0.15s ease'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Campus Notifications
+              <div className="absolute top-12 right-0 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-4 flex flex-col gap-3 z-50 animate-scale-up">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <h4 className="text-sm font-bold text-slate-900 m-0">
+                    Notifications
                   </h4>
-                  <span className="badge badge-indigo" style={{ fontSize: '10px' }}>
+                  <span className="badge badge-indigo text-xs">
                     {notifications.length} alerts
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '280px', overflowY: 'auto' }}>
+                <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
                   {notifications.length === 0 ? (
-                    <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '12px' }}>
-                      No notifications
+                    <div className="p-4 text-center text-slate-400 text-xs">
+                      No notifications yet
                     </div>
                   ) : (
                     notifications.map((n) => (
                       <div
                         key={n.id}
-                        style={{
-                          padding: '0.65rem',
-                          borderRadius: 'var(--radius-lg)',
-                          backgroundColor: 'var(--surface-low)',
-                          fontSize: '12px'
-                        }}
+                        className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs"
                       >
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{n.title}</span>
-                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{n.time}</span>
+                        <div className="flex items-center justify-between gap-1 mb-0.5">
+                          <span className="font-semibold text-slate-800">{n.title}</span>
+                          <span className="text-xs text-slate-400">{n.time}</span>
                         </div>
-                        <p style={{ color: 'var(--text-secondary)', marginTop: '2px', lineHeight: 1.3 }}>
+                        <p className="text-slate-500 m-0 leading-snug">
                           {n.message}
                         </p>
                       </div>
@@ -287,40 +170,19 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
             )}
           </div>
 
-          {/* Current User Badge */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              padding: '2px 8px 2px 2px',
-              borderRadius: 'var(--radius-full)',
-              backgroundColor: 'var(--surface-low)'
-            }}
-          >
+          {/* User Profile Pill */}
+          <div className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full bg-slate-100 border border-slate-200">
             <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--primary-container)',
-                color: 'var(--primary)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 700,
-                fontSize: '12px',
-                flexShrink: 0
-              }}
-              title={currentUser.name}
+              className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-xs shrink-0"
+              title={currentUser?.name}
             >
-              <User size={16} />
+              <User size={14} />
             </div>
-            <div style={{ display: 'none', flexDirection: 'column', minWidth: '70px' }} className="sm:flex">
-              <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
-                {currentUser.name}
+            <div className="hidden sm:flex flex-col text-left">
+              <span className="text-xs font-bold text-slate-900 leading-tight whitespace-nowrap max-w-[120px] truncate">
+                {currentUser?.name || 'User'}
               </span>
-              <span style={{ fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+              <span className="text-xs text-slate-500 capitalize leading-none">
                 {currentRole}
               </span>
             </div>
@@ -332,24 +194,11 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
               logout();
               navigate('/login');
             }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              padding: '0.45rem 0.75rem',
-              borderRadius: 'var(--radius-full)',
-              backgroundColor: 'var(--error-container)',
-              color: 'var(--error)',
-              fontSize: '11px',
-              fontWeight: 700,
-              border: '1px solid #FECDD3',
-              transition: 'all 0.15s ease'
-            }}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 text-xs font-bold transition-all cursor-pointer"
             title="Sign out of OIST CSE ERP"
           >
-            <LogOut size={14} />
-            <span style={{ display: 'none' }} className="sm:inline">Logout</span>
+            <LogOut size={13} />
+            <span className="hidden sm:inline">Logout</span>
           </button>
         </div>
       </div>

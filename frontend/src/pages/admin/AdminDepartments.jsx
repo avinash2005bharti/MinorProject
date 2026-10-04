@@ -425,16 +425,21 @@ export default function AdminDepartments() {
 
       {/* Add Section Modal */}
       {isAddSectionOpen && (
-        <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: '440px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Building2 size={20} className="text-blue-600" />
-                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0 }}>
-                  Add Section to Semester {selectedSemester}
-                </h3>
+        <div className="modal-backdrop" onClick={() => setIsAddSectionOpen(false)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '440px' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--primary-50)', color: 'var(--primary-700)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Building2 size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title">
+                    Add Section
+                  </h3>
+                  <p className="modal-subtitle">Semester {selectedSemester} Department Section</p>
+                </div>
               </div>
-              <button onClick={() => setIsAddSectionOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
+              <button onClick={() => setIsAddSectionOpen(false)} className="modal-close-btn" aria-label="Close modal">
                 <X size={18} />
               </button>
             </div>
@@ -463,18 +468,18 @@ export default function AdminDepartments() {
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <div className="modal-footer">
                 <button
                   type="button"
                   onClick={() => setIsAddSectionOpen(false)}
-                  className="btn btn-outline"
+                  className="btn btn-outline text-xs py-2 px-4 font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionProcessing}
-                  className="btn btn-primary"
+                  className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm"
                 >
                   {actionProcessing ? 'Creating...' : 'Create Section'}
                 </button>
@@ -486,16 +491,21 @@ export default function AdminDepartments() {
 
       {/* Add Subject Modal */}
       {isAddSubjectOpen && (
-        <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: '480px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <BookOpen size={20} className="text-indigo-600" />
-                <h3 style={{ fontSize: '16px', fontWeight: 800, margin: 0 }}>
-                  Add Course to Semester {selectedSemester}
-                </h3>
+        <div className="modal-backdrop" onClick={() => setIsAddSubjectOpen(false)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--primary-50)', color: 'var(--primary-700)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <BookOpen size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title">
+                    Add Course
+                  </h3>
+                  <p className="modal-subtitle">Semester {selectedSemester} Curriculum Subject</p>
+                </div>
               </div>
-              <button onClick={() => setIsAddSubjectOpen(false)} style={{ border: 'none', background: 'none', cursor: 'pointer' }}>
+              <button onClick={() => setIsAddSubjectOpen(false)} className="modal-close-btn" aria-label="Close modal">
                 <X size={18} />
               </button>
             </div>
@@ -564,18 +574,18 @@ export default function AdminDepartments() {
                 </div>
               </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <div className="modal-footer">
                 <button
                   type="button"
                   onClick={() => setIsAddSubjectOpen(false)}
-                  className="btn btn-outline"
+                  className="btn btn-outline text-xs py-2 px-4 font-semibold"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={actionProcessing}
-                  className="btn btn-primary"
+                  className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm"
                 >
                   {actionProcessing ? 'Creating...' : 'Save Subject'}
                 </button>

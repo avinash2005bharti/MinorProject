@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { useERP } from '../../context/ERPContext';
 import { timetableApi, academicApi, teacherApi, classroomApi } from '../../api';
@@ -24,7 +25,10 @@ import {
   Coffee,
   Check,
   ChevronDown,
-  Info
+  ChevronUp,
+  Info,
+  X,
+  ShieldAlert
 } from 'lucide-react';
 
 export default function HodTimetableGenerator() {
@@ -32,6 +36,8 @@ export default function HodTimetableGenerator() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialView = searchParams.get('view') === 'generator' ? 'generator' : 'current';
   const [viewMode, setViewMode] = useState(initialView);
+  const [showConflictsModal, setShowConflictsModal] = useState(false);
+  const [configCollapsed, setConfigCollapsed] = useState(false);
 
   useEffect(() => {
     const v = searchParams.get('view');
@@ -500,6 +506,88 @@ export default function HodTimetableGenerator() {
     );
   };
 
+  // Helper to resolve full subject name, code, teacher, and room for a slot
+  const getResolvedSubject = (slot) => {
+    if (!slot) return null;
+
+    let name = slot.subject?.name || slot.subjectName;
+    let code = slot.subject?.code || slot.subjectCode || slot.code;
+    let type = slot.subject?.type || slot.type;
+    let teacherName = slot.teacher?.name || slot.teacherName || slot.faculty;
+    let room = slot.classroom?.roomNumber || slot.room;
+
+    if (typeof slot.subject === 'string') {
+      if (slot.subject.startsWith('CS') || slot.subject.length <= 6) {
+        code = code || slot.subject;
+      } else {
+        name = name || slot.subject;
+      }
+    }
+
+    // Match with current subjectRows
+    const match = (subjectRows || []).find(
+      (s) =>
+        (code && (s.code === code || s.id === code)) ||
+        (name && s.name?.toLowerCase() === name.toLowerCase()) ||
+        (slot.subjectId && s.id === slot.subjectId)
+    );
+
+    if (match) {
+      name = name || match.name;
+      code = code || match.code;
+      type = type || match.type;
+      if (!teacherName && match.teacherName) teacherName = match.teacherName;
+      if (!room && match.preferredRoom) room = match.preferredRoom;
+    }
+
+    // Extensive curriculum dictionary mapping for subjects
+    const curriculumMap = {
+      'CS501': 'Database Management Systems',
+      'CS502': 'Operating Systems',
+      'CS503': 'Computer Networks',
+      'CS504': 'Theory of Computation',
+      'CS505': 'Database & OS Lab',
+      'CS506': 'Computer Networks Lab',
+      'CS301': 'Data Structures & Algorithms',
+      'CS302': 'Digital Circuits & Logic Design',
+      'CS303': 'Discrete Mathematics',
+      'CS304': 'Object Oriented Programming (Java)',
+      'CS305': 'Data Structures Lab',
+      'CS401': 'Analysis & Design of Algorithms',
+      'CS402': 'Software Engineering',
+      'CS403': 'Computer Organization & Architecture',
+      'CS404': 'Analog & Digital Communication',
+      'CS405': 'Algorithms Lab',
+      'CS601': 'Compiler Design',
+      'CS602': 'Web Development & Frameworks',
+      'CS603': 'Cloud Computing',
+      'CS604': 'Cyber Security',
+      'CS701': 'Artificial Intelligence & Machine Learning',
+      'CS702': 'Big Data Analytics',
+      'CS703': 'Internet of Things (IoT)',
+      'CS704': 'Major Project Phase-I',
+      'CS801': 'Deep Learning & Neural Networks',
+      'CS802': 'Distributed Systems',
+      'CS803': 'Major Project Phase-II'
+    };
+
+    if ((!name || name === 'Class' || name === code) && code && curriculumMap[code.toUpperCase()]) {
+      name = curriculumMap[code.toUpperCase()];
+    }
+
+    if (!name && code) {
+      name = code;
+    }
+
+    return {
+      name: name || 'Scheduled Lecture',
+      code: code || 'CS',
+      type: type || (name?.toLowerCase().includes('lab') ? 'LAB' : 'THEORY'),
+      teacherName: teacherName || 'Faculty Assigned',
+      room: room || (type === 'LAB' || name?.toLowerCase().includes('lab') ? 'Lab-1' : 'CR-101')
+    };
+  };
+
   // Build the chronological unified grid items (periods and breaks sorted by timing)
   const unifiedGridSchedule = () => {
     const items = [];
@@ -717,34 +805,61 @@ export default function HodTimetableGenerator() {
               <h5 className="fw-bold mb-0 text-dark">Timetable Architecture & Constraints Configuration</h5>
             </div>
 
-            {/* Sub-Tabs for Configuration */}
-            <div className="nav nav-pills gap-1">
-              {[
-                { id: 'timing', label: '1. College Timing & Days', icon: <Clock size={15} /> },
-                { id: 'breaks', label: `2. Breaks (${breaks.length})`, icon: <Coffee size={15} /> },
-                { id: 'periods', label: `3. Periods (${periods.length})`, icon: <Layers size={15} /> },
-                { id: 'subjects', label: `4. Subject Matrix (${subjectRows.length})`, icon: <BookOpen size={15} /> }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setConfigTab(tab.id)}
-                  className={`btn btn-sm ${configTab === tab.id ? 'btn-primary' : 'btn-light border'}`}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, borderRadius: '8px' }}
-                >
-                  {tab.icon}
-                  <span>{tab.label}</span>
-                </button>
-              ))}
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              {/* Sub-Tabs for Configuration */}
+              <div className="nav nav-pills gap-1">
+                {[
+                  { id: 'timing', label: '1. Timing & Days', icon: <Clock size={15} /> },
+                  { id: 'breaks', label: `2. Breaks (${breaks.length})`, icon: <Coffee size={15} /> },
+                  { id: 'periods', label: `3. Periods (${periods.length})`, icon: <Layers size={15} /> },
+                  { id: 'subjects', label: `4. Subject Matrix (${subjectRows.length})`, icon: <BookOpen size={15} /> }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => { setConfigTab(tab.id); setConfigCollapsed(false); }}
+                    className={`btn btn-sm ${configTab === tab.id && !configCollapsed ? 'btn-primary' : 'btn-light border'}`}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600, borderRadius: '8px' }}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setConfigCollapsed(!configCollapsed)}
+                className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1"
+                style={{ borderRadius: '8px', fontWeight: 600, padding: '5px 12px' }}
+                title={configCollapsed ? 'Expand Configuration Form' : 'Collapse Configuration Form to focus on grid'}
+              >
+                {configCollapsed ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                <span>{configCollapsed ? 'Show Parameters' : 'Collapse'}</span>
+              </button>
             </div>
           </div>
 
-          <div className="card-body p-4">
-            <form onSubmit={handleGenerate}>
-              {/* Global Target Selectors inside generator */}
-              <div className="mb-4">
-                {renderTargetSelectors()}
-              </div>
+          {configCollapsed ? (
+            <div className="p-3 bg-light d-flex flex-wrap justify-content-between align-items-center text-muted small px-4 gap-2">
+              <span>
+                <strong>Parameters Configured:</strong> Dept of {department} • Semester {semester} ({section}) • {periods.length} Periods ({collegeStartTime}–{collegeEndTime}) • {breaks.length} Breaks • {subjectRows.length} Subjects Matrix
+              </span>
+              <button
+                type="button"
+                onClick={() => setConfigCollapsed(false)}
+                className="btn btn-sm btn-link text-primary fw-bold text-decoration-none p-0"
+              >
+                Modify Parameters
+              </button>
+            </div>
+          ) : (
+            <div className="card-body p-4">
+              <form onSubmit={handleGenerate}>
+                {/* Global Target Selectors inside generator */}
+                <div className="mb-4">
+                  {renderTargetSelectors()}
+                </div>
 
             {/* TAB 1: College Timing & Working Days */}
             {configTab === 'timing' && (
@@ -1190,24 +1305,8 @@ export default function HodTimetableGenerator() {
               </button>
             </div>
           </form>
-        </div>
-      </div>
-      )}
-
-      {/* --- CONFLICTS ALERT BANNER --- */}
-      {conflicts.length > 0 && (
-        <div className="alert alert-warning mb-4" style={{ borderRadius: '12px', border: '1px solid #FCD34D' }}>
-          <div className="d-flex align-items-center gap-2 mb-2 fw-bold text-dark">
-            <AlertTriangle size={18} className="text-warning" />
-            <span>Timetable Constraints & Conflict Inspection ({conflicts.length} Notice{conflicts.length > 1 ? 's' : ''})</span>
-          </div>
-          <ul className="mb-0 ps-3 small text-dark">
-            {conflicts.map((c, idx) => (
-              <li key={idx}>
-                <strong>{c.type || 'Notice'}:</strong> {c.detail || c.description || JSON.stringify(c)}
-              </li>
-            ))}
-          </ul>
+            </div>
+          )}
         </div>
       )}
 
@@ -1226,12 +1325,37 @@ export default function HodTimetableGenerator() {
             </div>
           </div>
 
-          <div className="d-flex align-items-center gap-2">
-            <span className="badge bg-success-subtle text-success border border-success-subtle fw-semibold px-2 py-1">
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            {conflicts.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowConflictsModal(true)}
+                className="btn btn-warning btn-sm d-inline-flex align-items-center gap-2 shadow-sm"
+                style={{
+                  fontWeight: 700,
+                  borderRadius: '8px',
+                  padding: '6px 14px',
+                  backgroundColor: '#FEF3C7',
+                  borderColor: '#F59E0B',
+                  color: '#92400E'
+                }}
+                id="btn-inspect-timetable-conflicts"
+              >
+                <AlertTriangle size={15} className="text-warning" />
+                <span>Inspect Conflicts ({conflicts.length})</span>
+              </button>
+            ) : (
+              <span className="badge bg-success-subtle text-success border border-success-subtle fw-semibold px-2 py-1.5 d-inline-flex align-items-center gap-1">
+                <CheckCircle2 size={13} />
+                <span>Zero Conflicts</span>
+              </span>
+            )}
+
+            <span className="badge bg-primary-subtle text-primary border border-primary-subtle fw-semibold px-2 py-1.5">
               <CheckCircle2 size={13} className="me-1" />
               {timetableSlots.length} Active Slots
             </span>
-            <span className="badge bg-primary-subtle text-primary border border-primary-subtle fw-semibold px-2 py-1">
+            <span className="badge bg-light text-secondary border fw-semibold px-2 py-1.5">
               {workingDays.length} Working Days
             </span>
           </div>
@@ -1302,7 +1426,8 @@ export default function HodTimetableGenerator() {
                           );
                         }
 
-                        const isLab = slot.subject?.name?.toLowerCase().includes('lab') || slot.subject?.type === 'LAB' || slot.subject?.type === 'PRACTICAL';
+                        const resolved = getResolvedSubject(slot);
+                        const isLab = resolved.type === 'LAB' || resolved.name.toLowerCase().includes('lab');
 
                         return (
                           <td
@@ -1310,23 +1435,27 @@ export default function HodTimetableGenerator() {
                             style={{
                               backgroundColor: isLab ? '#F0FDF4' : '#EFF6FF',
                               borderLeft: isLab ? '3px solid #16A34A' : '3px solid #2563EB',
-                              padding: '8px',
+                              padding: '8px 6px',
                               verticalAlign: 'middle'
                             }}
                           >
-                            <div className="fw-bold text-dark" style={{ fontSize: '13px' }}>
-                              {slot.subject?.name || slot.subjectCode || 'Class'}
+                            <div
+                              className="fw-bold text-dark text-truncate"
+                              title={resolved.name}
+                              style={{ fontSize: '12.5px', lineHeight: '1.25', marginBottom: '3px' }}
+                            >
+                              {resolved.name}
                             </div>
-                            <div className="d-flex justify-content-center gap-1 my-1">
-                              <span className="badge bg-white text-dark border" style={{ fontSize: '10px' }}>
-                                {slot.subject?.code || slot.subjectCode || 'SUB'}
+                            <div className="d-flex justify-content-center align-items-center gap-1 my-1">
+                              <span className="badge bg-white text-dark border fw-medium" style={{ fontSize: '10px' }}>
+                                {resolved.code}
                               </span>
-                              <span className={`badge ${isLab ? 'bg-success text-white' : 'bg-primary text-white'}`} style={{ fontSize: '10px' }}>
-                                {slot.classroom?.roomNumber || slot.room || (isLab ? 'Lab-1' : 'CR-101')}
+                              <span className={`badge ${isLab ? 'bg-success text-white' : 'bg-primary text-white'} fw-medium`} style={{ fontSize: '10px' }}>
+                                {resolved.room}
                               </span>
                             </div>
-                            <div style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>
-                              {slot.teacher?.name || slot.teacherName || 'Faculty Assigned'}
+                            <div className="text-truncate" title={resolved.teacherName} style={{ fontSize: '11px', color: '#475569', fontWeight: 600 }}>
+                              {resolved.teacherName}
                             </div>
                           </td>
                         );
@@ -1339,6 +1468,133 @@ export default function HodTimetableGenerator() {
           </div>
         )}
       </div>
+
+      {/* --- INSPECT CONFLICTS & CONSTRAINTS MODAL --- */}
+      {showConflictsModal && createPortal(
+        <div
+          className="modal-backdrop-custom d-flex align-items-center justify-content-center p-3"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(5px)',
+            zIndex: 99999,
+            overflowY: 'auto'
+          }}
+          onClick={() => setShowConflictsModal(false)}
+        >
+          <div
+            className="card shadow-lg border-0"
+            style={{
+              maxWidth: '680px',
+              width: '100%',
+              borderRadius: '16px',
+              overflow: 'hidden',
+              animation: 'modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div
+              className="p-3 px-4 border-bottom d-flex align-items-center justify-content-between"
+              style={{ backgroundColor: '#FFFBEB' }}
+            >
+              <div className="d-flex align-items-center gap-2">
+                <div
+                  className="d-flex align-items-center justify-content-center rounded-circle"
+                  style={{ width: '36px', height: '36px', backgroundColor: '#FEF3C7', color: '#D97706' }}
+                >
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <h6 className="fw-bold mb-0 text-dark">
+                    Timetable Constraints & Conflict Inspection
+                  </h6>
+                  <span className="small text-muted">
+                    Semester {semester} (Section {section}) • {conflicts.length} Constraint Notice{conflicts.length > 1 ? 's' : ''} Identified
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn-close"
+                aria-label="Close"
+                onClick={() => setShowConflictsModal(false)}
+              />
+            </div>
+
+            {/* Modal Body */}
+            <div className="card-body p-4" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+              <div className="alert alert-light border d-flex gap-2 mb-3" style={{ fontSize: '12.5px', color: '#475569' }}>
+                <Info size={18} className="text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  The AI solver analyzes faculty availability collisions, room bookings, and workload limits.
+                  Review the notices below and adjust allocations if needed.
+                </div>
+              </div>
+
+              <div className="d-flex flex-column gap-2">
+                {conflicts.map((c, idx) => {
+                  const conflictType = c.type || c.category || 'Constraint Notice';
+                  const detailText = c.detail || c.description || c.message || (typeof c === 'string' ? c : JSON.stringify(c));
+                  const suggestion = c.suggestion || c.resolution || 'Check teacher allocation or shift slot to alternate open period.';
+
+                  return (
+                    <div
+                      key={idx}
+                      className="p-3 rounded-3"
+                      style={{
+                        backgroundColor: '#FFFDF5',
+                        border: '1px solid #FDE68A',
+                        borderLeft: '4px solid #F59E0B'
+                      }}
+                    >
+                      <div className="d-flex align-items-center justify-content-between mb-1">
+                        <span className="badge bg-warning-subtle text-warning border border-warning-subtle fw-bold" style={{ fontSize: '11px' }}>
+                          {conflictType}
+                        </span>
+                        {c.period && (
+                          <span className="badge bg-light text-muted border" style={{ fontSize: '10px' }}>
+                            Period {c.period} {c.day ? `• ${c.day}` : ''}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-dark fw-semibold mb-1" style={{ fontSize: '13px' }}>
+                        {detailText}
+                      </div>
+                      {suggestion && (
+                        <div className="small text-muted mt-1 d-flex align-items-center gap-1" style={{ fontSize: '11.5px' }}>
+                          <span className="text-success fw-bold">Suggestion:</span>
+                          <span>{suggestion}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-3 px-4 bg-light border-top d-flex justify-content-between align-items-center">
+              <span className="small text-muted">
+                Review all constraints before publishing to faculty and students.
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowConflictsModal(false)}
+                className="btn btn-secondary btn-sm px-4 fw-bold"
+                style={{ borderRadius: '8px' }}
+              >
+                Dismiss & Return to Grid
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

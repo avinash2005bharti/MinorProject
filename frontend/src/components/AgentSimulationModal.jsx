@@ -19,14 +19,14 @@ export default function AgentSimulationModal() {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-content" style={{ maxWidth: '540px' }}>
+      <div className="modal-container" style={{ maxWidth: '540px' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', marginBottom: '1.25rem' }}>
+        <div className="modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <div
               style={{
-                width: '44px',
-                height: '44px',
+                width: '40px',
+                height: '40px',
                 borderRadius: 'var(--radius-xl)',
                 backgroundColor: 'var(--primary-container)',
                 color: 'var(--primary)',
@@ -36,16 +36,16 @@ export default function AgentSimulationModal() {
                 flexShrink: 0
               }}
             >
-              <Bot size={24} />
+              <Bot size={22} />
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                <h3 className="modal-title">
                   {title}
                 </h3>
                 <span className="agent-pulse" />
               </div>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              <p className="modal-subtitle">
                 {subtitle}
               </p>
             </div>
@@ -54,14 +54,8 @@ export default function AgentSimulationModal() {
           {isComplete && (
             <button
               onClick={closeAgentModal}
-              style={{
-                color: 'var(--text-muted)',
-                padding: '4px',
-                borderRadius: 'var(--radius-md)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
+              className="modal-close-btn"
+              aria-label="Close modal"
             >
               <X size={18} />
             </button>

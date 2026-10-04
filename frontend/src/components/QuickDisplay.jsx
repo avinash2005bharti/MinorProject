@@ -98,17 +98,16 @@ export default function QuickDisplay() {
   const pendingAttReqs = safeAttendanceRequests.filter((a) => a && String(a.status || '').toLowerCase().startsWith('pending')).length;
   const pendingAssignmentsCount = safeAssignments.filter((a) => a && String(a.status || '').toLowerCase() === 'active').length;
 
-  // Dynamic day of week
-  const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const todayDayName = daysOfWeek[new Date().getDay()];
-  const effectiveDay = todayDayName === 'Sunday' ? 'Monday' : todayDayName;
+  // Dynamic day of week in user's timezone (default Asia/Kolkata)
+  const now = new Date();
+  const todayDayName = now.toLocaleDateString('en-US', { timeZone: 'Asia/Kolkata', weekday: 'long' });
 
   let todayClasses = [];
   if (timetable) {
-    if (Array.isArray(timetable[effectiveDay])) {
-      todayClasses = timetable[effectiveDay];
+    if (Array.isArray(timetable[todayDayName])) {
+      todayClasses = timetable[todayDayName];
     } else if (Array.isArray(timetable)) {
-      todayClasses = timetable.filter((s) => s?.day === effectiveDay);
+      todayClasses = timetable.filter((s) => s?.day === todayDayName || s?.dayOfWeek === todayDayName);
     }
   }
 
@@ -157,7 +156,7 @@ export default function QuickDisplay() {
                 <Calendar size={13} />
                 <span>TODAY</span>
               </span>
-              <span className="text-xs text-secondary font-medium">{effectiveDay}</span>
+              <span className="text-xs text-secondary font-medium">{todayDayName}</span>
             </div>
             <span className="agent-pulse" />
           </div>
@@ -165,7 +164,7 @@ export default function QuickDisplay() {
           <div className="quick-display-schedule-list">
             {todayClasses.length === 0 ? (
               <div style={{ padding: '1rem', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
-                No lectures scheduled for today.
+                {todayDayName === 'Sunday' ? 'No lectures today (Sunday)' : 'No lectures scheduled for today.'}
               </div>
             ) : (
               todayClasses.slice(0, 3).map((item, idx) => {

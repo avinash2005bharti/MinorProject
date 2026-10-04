@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import RequestCard from '../../components/RequestCard';
 import DocumentUploader from '../../components/common/DocumentUploader';
+import { PageHeader, Card, Badge, Button, EmptyState } from '../../components/common';
 import {
   FileText,
   PlusCircle,
@@ -27,7 +28,8 @@ export default function StudentRequests() {
   const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [reason, setReason] = useState('');
-  const [supportingDoc, setSupportingDoc] = useState('');
+  const [supportingFile, setSupportingFile] = useState(null);
+  const [supportingDocName, setSupportingDocName] = useState('');
 
   const handleLeaveSubmit = (e) => {
     e.preventDefault();
@@ -38,170 +40,124 @@ export default function StudentRequests() {
       endDate,
       dateRangeLabel: `${startDate} to ${endDate}`,
       reason,
-      supportingDoc: supportingDoc || 'Medical_Certificate.pdf'
+      file: supportingFile || null,
+      supportingDoc: supportingFile || null
     });
     setLeaveModalOpen(false);
     setReason('');
+    setSupportingFile(null);
+    setSupportingDocName('');
   };
 
-  // Combine requests
+  // Combine requests with safe title fallback (Test 11 fix)
   const allRequests = [
     ...attendanceRequests,
     ...leaveRequests,
     ...attendanceQueries.map((q) => ({
       ...q,
-      title: `Attendance Query: ${q.subject}`,
+      title: q.title || `Attendance Query: ${q.subjectName || q.subject?.name || q.subject || 'Dispute'}`,
       type: 'attendance_query'
     }))
   ];
 
+  const isPendingOrActive = (status) => {
+    const s = String(status || '').toLowerCase();
+    return s.includes('pending') || s.includes('recommended') || s === 'processing_agent';
+  };
+
+  const isCompleted = (status) => {
+    const s = String(status || '').toLowerCase();
+    return s === 'completed' || s === 'approved' || s === 'approved_by_hod';
+  };
+
   const filteredRequests = allRequests.filter((req) => {
-    const status = (req.status || '').toLowerCase();
-    if (filter === 'active') return status.includes('pending') || status === 'processing_agent';
-    if (filter === 'completed') return status === 'completed' || status === 'approved';
+    if (filter === 'active') return isPendingOrActive(req.status);
+    if (filter === 'completed') return isCompleted(req.status);
     return true;
   });
 
   return (
     <div className="page-wrapper">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {/* Top Action Area (Matching Stitch requests_approvals_workflow) */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
-          <div>
-            <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-              Requests & Approvals
-            </h1>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Real-time academic governance & autonomous clearance tracking
-            </p>
-          </div>
+      <div className="flex flex-col gap-5">
+        {/* Top Action Area */}
+        <PageHeader
+          title="Requests & Approvals"
+          description="Real-time academic governance & autonomous clearance tracking"
+          badge={<Badge variant="primary" size="sm">Autonomous Clearance</Badge>}
+          actions={
+            <Button
+              variant="primary"
+              onClick={() => setLeaveModalOpen(true)}
+              leftIcon={<PlusCircle size={17} />}
+            >
+              Apply Leave / New Request
+            </Button>
+          }
+        />
 
-          <button
-            onClick={() => setLeaveModalOpen(true)}
-            className="btn btn-primary"
-            style={{ borderRadius: 'var(--radius-full)', padding: '0.65rem 1.25rem' }}
-          >
-            <PlusCircle size={18} />
-            <span>+ Apply Leave / New Request</span>
-          </button>
-        </div>
-
-        {/* Transparent Workflow Journey Explainer Card (Matching Stitch 3-Step Visual Diagram) */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        {/* Transparent Workflow Journey Explainer Card */}
+        <Card className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-primary uppercase tracking-wider">
               Clearance Protocol
             </span>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <span className="agent-pulse" style={{ width: '6px', height: '6px' }} />
+            <span className="text-xs text-slate-500 flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               Avg. 24h Autonomous Turnaround
             </span>
           </div>
 
           {/* 3-Step Journey Grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', textAlign: 'center', position: 'relative' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--primary-fixed)',
-                  color: 'var(--on-primary-fixed)',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
+          <div className="grid grid-cols-3 gap-2 text-center relative py-1">
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center">
                 1
               </div>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              <span className="text-xs font-semibold text-slate-900">
                 Student Submits
               </span>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Digital e-Form</span>
+              <span className="text-[11px] text-slate-500">Digital e-Form</span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--primary-fixed)',
-                  color: 'var(--on-primary-fixed)',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center">
                 2
               </div>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              <span className="text-xs font-semibold text-slate-900">
                 Mentor / TG Review
               </span>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+              <span className="text-[11px] text-slate-500">
                 Approval workflow
               </span>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.35rem' }}>
-              <div
-                style={{
-                  width: '32px',
-                  height: '32px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--primary-fixed)',
-                  color: 'var(--on-primary-fixed)',
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center">
                 3
               </div>
-              <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
+              <span className="text-xs font-semibold text-slate-900">
                 HOD Clearance & Sync
               </span>
-              <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>Agent Auto-Update</span>
+              <span className="text-[11px] text-slate-500">Agent Auto-Update</span>
             </div>
           </div>
-        </div>
+        </Card>
 
-        {/* Filter Tabs (Matching Stitch) */}
-        <div
-          style={{
-            display: 'flex',
-            backgroundColor: 'var(--surface-high)',
-            borderRadius: 'var(--radius-full)',
-            padding: '4px',
-            gap: '4px'
-          }}
-        >
+        {/* Filter Tabs */}
+        <div className="flex bg-slate-100 p-1 rounded-xl gap-1">
           {[
             { id: 'all', label: `All (${allRequests.length})` },
-            { id: 'active', label: `Active (${allRequests.filter((r) => r.status.includes('pending') || r.status === 'processing_agent').length})` },
-            { id: 'completed', label: `Completed (${allRequests.filter((r) => r.status === 'completed' || r.status === 'approved').length})` }
+            { id: 'active', label: `Active (${allRequests.filter((r) => isPendingOrActive(r.status)).length})` },
+            { id: 'completed', label: `Completed (${allRequests.filter((r) => isCompleted(r.status)).length})` }
           ].map((tab) => (
             <button
               key={tab.id}
               onClick={() => setFilter(tab.id)}
-              style={{
-                flex: 1,
-                padding: '0.45rem 1rem',
-                borderRadius: 'var(--radius-full)',
-                fontSize: '12px',
-                fontWeight: filter === tab.id ? 700 : 500,
-                backgroundColor: filter === tab.id ? '#FFFFFF' : 'transparent',
-                color: filter === tab.id ? 'var(--primary)' : 'var(--text-secondary)',
-                boxShadow: filter === tab.id ? 'var(--shadow-sm)' : 'none',
-                transition: 'all 0.15s ease'
-              }}
+              className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all border-none cursor-pointer ${
+                filter === tab.id
+                  ? 'bg-white text-primary shadow-xs font-bold'
+                  : 'bg-transparent text-slate-600 hover:text-slate-900'
+              }`}
             >
               {tab.label}
             </button>
@@ -209,15 +165,20 @@ export default function StudentRequests() {
         </div>
 
         {/* Request Cards Container */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+        <div className="flex flex-col gap-3">
           {filteredRequests.length === 0 ? (
-            <div className="card text-center" style={{ padding: '2.5rem', color: 'var(--text-secondary)' }}>
-              <Clock size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
-              <h3 style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>No records found.</h3>
-              <p style={{ fontSize: '13px', margin: '0.25rem 0 0' }}>
-                No academic clearance or leave requests found for this filter.
-              </p>
-            </div>
+            <Card className="text-center py-10">
+              <EmptyState
+                icon={<Clock size={36} className="text-slate-400" />}
+                title="No Records Found"
+                description="No academic clearance or leave requests found for this filter."
+                action={
+                  <Button variant="primary" size="sm" onClick={() => setLeaveModalOpen(true)}>
+                    Apply Now
+                  </Button>
+                }
+              />
+            </Card>
           ) : (
             filteredRequests.map((req) => (
               <RequestCard
@@ -344,34 +305,35 @@ export default function StudentRequests() {
       {leaveModalOpen && (
         <div className="modal-backdrop">
           <div className="modal-content">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <div
                   style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: 'var(--radius-lg)',
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: 'var(--radius-xl)',
                     backgroundColor: 'var(--primary-container)',
                     color: 'var(--primary)',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    flexShrink: 0
                   }}
                 >
                   <Calendar size={20} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  <h3 className="modal-title">
                     Apply for Student Leave
                   </h3>
-                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                  <p className="modal-subtitle">
                     3-Tier Clearance with Autonomous Routing
                   </p>
                 </div>
               </div>
 
-              <button onClick={() => setLeaveModalOpen(false)} style={{ color: 'var(--text-muted)' }}>
-                <X size={20} />
+              <button onClick={() => setLeaveModalOpen(false)} className="modal-close-btn" aria-label="Close modal">
+                <X size={18} />
               </button>
             </div>
 
@@ -427,28 +389,32 @@ export default function StudentRequests() {
                 <DocumentUploader
                   label="Supporting Document (Certificate / Prescription)"
                   hint="Attach official hospital slip, medical certificate, or OD approval"
-                  selectedFileName={supportingDoc}
-                  onFileSelect={(fileInfo) => setSupportingDoc(fileInfo.name)}
-                  onFileRemove={() => setSupportingDoc('')}
+                  selectedFileName={supportingDocName}
+                  onFileSelect={(fileInfo) => {
+                    setSupportingFile(fileInfo.file);
+                    setSupportingDocName(fileInfo.name);
+                  }}
+                  onFileRemove={() => {
+                    setSupportingFile(null);
+                    setSupportingDocName('');
+                  }}
                 />
               </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                <button
+              <div className="modal-footer">
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={() => setLeaveModalOpen(false)}
-                  className="btn btn-secondary"
-                  style={{ flex: 1 }}
                 >
                   Cancel
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  className="btn btn-primary"
-                  style={{ flex: 1 }}
+                  variant="primary"
                 >
                   Submit Application
-                </button>
+                </Button>
               </div>
             </form>
           </div>

@@ -104,10 +104,9 @@ exports.uploadFile = async (req, res) => {
     const absoluteFileUrl = storageUrl.startsWith('http') ? storageUrl : `${backendHost}${storageUrl}`;
 
     try {
-      axios.post(`${PYTHON_AI_SERVICE_URL}/ai/files/process`, {
+      const payload = {
         file_id: String(fileDoc._id),
         file_url: absoluteFileUrl,
-        local_path: path.resolve(tempFilePath),
         filename: originalName,
         mime_type: mimeType,
         file_type: fileType,
@@ -115,9 +114,19 @@ exports.uploadFile = async (req, res) => {
         conversation_id: conversationId,
         department_id: departmentId,
         role: req.user.role || 'student'
-      }, {
+      };
+
+      // ARCH-02: Only pass local_path if explicitly enabled in local dev
+      if (process.env.ALLOW_LOCAL_FILE_PATH === 'true') {
+        payload.local_path = path.resolve(tempFilePath);
+      }
+
+      axios.post(`${PYTHON_AI_SERVICE_URL}/ai/files/process`, payload, {
         timeout: 5000,
-        headers: { 'Content-Type': 'application/json' }
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Microservice-Secret': process.env.INTERNAL_API_SECRET || 'dev_internal_microservice_secret_key_123'
+        }
       }).catch(err => {
         logger.warn(`[FileController] Async processing trigger warning: ${err.message}`);
       });

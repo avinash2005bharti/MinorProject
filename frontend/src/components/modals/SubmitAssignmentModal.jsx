@@ -34,13 +34,13 @@ export default function SubmitAssignmentModal({ data, onClose }) {
         style={{ maxWidth: '500px', width: '92%' }}
       >
         <div className="modal-header">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Upload size={18} />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-700 flex items-center justify-center flex-shrink-0">
+              <Upload size={20} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 leading-snug">Submit Coursework Solution</h3>
-              <p className="text-xs text-slate-500">{targetAssignment?.subject} • {targetAssignment?.section}</p>
+              <h3 className="modal-title">Submit Coursework Solution</h3>
+              <p className="modal-subtitle">{targetAssignment?.subject} • {targetAssignment?.section}</p>
             </div>
           </div>
           <button onClick={onClose} className="modal-close-btn" aria-label="Close modal">
@@ -85,8 +85,8 @@ export default function SubmitAssignmentModal({ data, onClose }) {
             />
           </div>
 
-          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
-            <button type="button" onClick={onClose} className="btn btn-outline text-xs py-2 px-4">
+          <div className="modal-footer">
+            <button type="button" onClick={onClose} className="btn btn-outline text-xs py-2 px-4 font-semibold">
               Cancel
             </button>
             <button type="submit" className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm" id="btn-submit-assignment-confirm">

@@ -1,7 +1,8 @@
 import React from 'react';
+import { useERP } from '../context/ERPContext';
 import ApprovalStatus from './ApprovalStatus';
 import WorkflowTimeline from './WorkflowTimeline';
-import { FileText, ArrowRight, CheckCircle2, UserCheck, Calendar, ArrowUpRight, Zap, ShieldCheck } from 'lucide-react';
+import { FileText, ArrowRight, CheckCircle2, UserCheck, Calendar, ArrowUpRight, Zap, ShieldCheck, Clock } from 'lucide-react';
 
 export default function RequestCard({
   request,
@@ -12,7 +13,11 @@ export default function RequestCard({
   showActions = false,
   role = 'student'
 }) {
+  const { openModal } = useERP();
   if (!request) return null;
+
+  const normStatus = String(request.status || '').toLowerCase();
+  const isApproved = ['approved', 'completed', 'approved_hod', 'approved_by_hod'].includes(normStatus);
 
   return (
     <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
@@ -76,6 +81,107 @@ export default function RequestCard({
         <div style={{ backgroundColor: 'var(--primary-container)', padding: '0.65rem 0.85rem', borderRadius: 'var(--radius-lg)', fontSize: '12px', borderLeft: '3px solid var(--primary)' }}>
           <span style={{ fontWeight: 700, color: 'var(--primary)' }}>TG Note: </span>
           <span style={{ color: 'var(--text-primary)' }}>{request.tgRecommendation}</span>
+        </div>
+      )}
+
+      {/* Supporting Document Proof Link (Test 5 fix: HOD can open uploaded proof) */}
+      {(request.proofDocumentUrl || request.docUrl || (typeof request.supportingDoc === 'string' && request.supportingDoc.includes('.'))) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '12px', padding: '0.45rem 0.85rem', backgroundColor: 'var(--surface-high)', borderRadius: 'var(--radius-lg)' }}>
+          <FileText size={15} style={{ color: 'var(--primary)' }} />
+          <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Attached Proof:</span>
+          <a
+            href={
+              (request.proofDocumentUrl || request.docUrl || request.supportingDoc).startsWith('http')
+                ? (request.proofDocumentUrl || request.docUrl || request.supportingDoc)
+                : `http://localhost:5000${(request.proofDocumentUrl || request.docUrl || request.supportingDoc).startsWith('/') ? '' : '/'}${request.proofDocumentUrl || request.docUrl || request.supportingDoc}`
+            }
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '3px' }}
+            id={`btn-open-doc-${request.id}`}
+          >
+            <span>View Supporting Document</span>
+            <ArrowUpRight size={13} />
+          </a>
+        </div>
+      )}
+
+      {/* Consideration Periods & Timing Breakdown */}
+      {(request.periodsCount || request.selectedPeriods || request.periodsTiming || request.periods) && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            fontSize: '11.5px',
+            color: '#1D4ED8',
+            backgroundColor: '#EFF6FF',
+            padding: '0.45rem 0.85rem',
+            borderRadius: 'var(--radius-lg)',
+            border: '1px solid #BFDBFE'
+          }}
+        >
+          <Clock size={14} className="text-blue-600 shrink-0" />
+          <span>
+            <strong>Requested Periods:</strong>{' '}
+            {request.periodsCount
+              ? `${request.periodsCount} Period${request.periodsCount > 1 ? 's' : ''}`
+              : Array.isArray(request.periods)
+                ? `${request.periods.length} Period${request.periods.length > 1 ? 's' : ''}`
+                : ''}{' '}
+            {request.periodsTiming
+              ? `• ${request.periodsTiming}`
+              : request.selectedPeriods
+                ? `• ${Array.isArray(request.selectedPeriods) ? request.selectedPeriods.join(', ') : request.selectedPeriods}`
+                : Array.isArray(request.periods)
+                  ? `• ${request.periods.map(p => typeof p === 'object' ? (p.time || p.label || p.id) : p).join(', ')}`
+                  : ''}
+          </span>
+        </div>
+      )}
+
+      {/* Formal Sanctioned Application Banner (Becomes formal document after approval) */}
+      {isApproved && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '0.65rem 0.95rem',
+            backgroundColor: '#F0FDF4',
+            border: '1px solid #BBF7D0',
+            borderRadius: 'var(--radius-xl)',
+            flexWrap: 'wrap',
+            gap: '0.5rem'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: '#065F46' }}>
+            <ShieldCheck size={17} className="text-emerald-600 shrink-0" />
+            <div>
+              <div style={{ fontWeight: 800 }}>Official Sanction Order Issued</div>
+              <div style={{ fontSize: '11px', color: '#047857' }}>
+                {request.approvedPeriodsCount ? `${request.approvedPeriodsCount} Lecture Periods Credited • ` : ''}
+                Formally sanctioned by Department of CSE
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => openModal('formalApplication', { request })}
+            className="btn btn-sm btn-success"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              fontSize: '11px',
+              fontWeight: 700,
+              padding: '0.35rem 0.85rem'
+            }}
+            id={`btn-view-formal-app-${request.id}`}
+          >
+            <FileText size={13} />
+            <span>View Formal Application</span>
+          </button>
         </div>
       )}
 

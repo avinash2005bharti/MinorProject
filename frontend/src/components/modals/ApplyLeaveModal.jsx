@@ -10,7 +10,7 @@ export default function ApplyLeaveModal({ onClose }) {
   const [startDate, setStartDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState(() => new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
   const [reason, setReason] = useState('');
-  const [uploadedFile, setUploadedFile] = useState({ name: '', size: '' });
+  const [uploadedFile, setUploadedFile] = useState({ name: '', size: '', file: null });
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -25,7 +25,8 @@ export default function ApplyLeaveModal({ onClose }) {
       endDate,
       dateRangeLabel: `${startDate} to ${endDate}`,
       reason,
-      supportingDoc: uploadedFile.name || null
+      file: uploadedFile.file || null,
+      supportingDoc: uploadedFile.file || null
     });
 
     onClose();
@@ -40,13 +41,13 @@ export default function ApplyLeaveModal({ onClose }) {
       >
         {/* Header */}
         <div className="modal-header">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Calendar size={18} />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-700 flex items-center justify-center flex-shrink-0">
+              <Calendar size={20} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 leading-snug">Apply for Student Leave</h3>
-              <p className="text-xs text-slate-500">Autonomous 3-stage academic clearance</p>
+              <h3 className="modal-title">Apply for Student Leave</h3>
+              <p className="modal-subtitle">Autonomous 3-stage academic clearance</p>
             </div>
           </div>
           <button onClick={onClose} className="modal-close-btn" aria-label="Close modal">
@@ -120,14 +121,14 @@ export default function ApplyLeaveModal({ onClose }) {
               hint="Attach doctor prescription, hospital slip, or proof (PDF/PNG/JPG)"
               selectedFileName={uploadedFile.name}
               selectedFileSize={uploadedFile.size}
-              onFileSelect={(fileInfo) => setUploadedFile({ name: fileInfo.name, size: fileInfo.size })}
-              onFileRemove={() => setUploadedFile({ name: '', size: '' })}
+              onFileSelect={(fileInfo) => setUploadedFile({ name: fileInfo.name, size: fileInfo.size, file: fileInfo.file })}
+              onFileRemove={() => setUploadedFile({ name: '', size: '', file: null })}
             />
           </div>
 
           {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
-            <button type="button" onClick={onClose} className="btn btn-outline text-xs py-2 px-4">
+          <div className="modal-footer">
+            <button type="button" onClick={onClose} className="btn btn-outline text-xs py-2 px-4 font-semibold">
               Cancel
             </button>
             <button type="submit" className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm" id="btn-submit-leave-confirm">

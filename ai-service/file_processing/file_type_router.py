@@ -344,12 +344,14 @@ class FileTypeRouter:
         except Exception:
             pass
 
-        # 2. Also notify Node backend HTTP endpoint
+        # 2. Also notify Node backend HTTP endpoint (SEC-09: include X-Microservice-Secret)
         try:
             backend_base = NODE_BACKEND_URL.replace("localhost", "127.0.0.1")
+            internal_secret = os.getenv("INTERNAL_API_SECRET", "dev_internal_microservice_secret_key_123")
             httpx.patch(
                 f"{backend_base}/api/files/{file_id}/status",
                 json=payload,
+                headers={"X-Microservice-Secret": internal_secret},
                 timeout=2.0
             )
         except Exception as e:

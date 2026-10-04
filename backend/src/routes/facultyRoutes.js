@@ -16,9 +16,9 @@ router.use(cacheService.invalidateOnMutation(['/faculty', '/teachers', '/availab
 router.get('/availability', optionalAuth, cacheService.middleware(15), leaveController.getFacultyAvailability);
 router.get('/availability/today', optionalAuth, cacheService.middleware(15), leaveController.getFacultyAvailability);
 
-// 2. Master Data Import & Export (Must be before /:id)
-router.post('/import', upload.single('file'), masterDataController.importTeachers);
-router.get('/export', masterDataController.exportTeachers);
+// 2. Master Data Import & Export (Must be before /:id) - requires admin/hod
+router.post('/import', verifyToken, checkRole('admin', 'hod'), upload.single('file'), masterDataController.importTeachers);
+router.get('/export', verifyToken, checkRole('admin', 'hod'), masterDataController.exportTeachers);
 
 // 3. Core Faculty CRUD - Cached 30s
 router.get('/', optionalAuth, cacheService.middleware(30), facultyController.getFaculty);
@@ -27,11 +27,11 @@ router.post('/', verifyToken, checkRole('admin'), facultyController.createFacult
 router.put('/:id', verifyToken, checkRole('admin', 'hod'), facultyController.updateFaculty);
 router.delete('/:id', verifyToken, checkRole('admin'), facultyController.deleteFaculty);
 
-// 4. Leave & Availability Actions
-router.post('/:id/leave-toggle', optionalAuth, leaveController.toggleTeacherLeave);
-router.post('/:id/toggle-leave', optionalAuth, leaveController.toggleTeacherLeave);
-router.get('/:id/affected-classes', optionalAuth, leaveController.getAffectedClasses);
-router.post('/:id/propose-substitutes', optionalAuth, leaveController.proposeSubstitutes);
+// 4. Leave & Availability Actions (SEC-04)
+router.post('/:id/leave-toggle', verifyToken, leaveController.toggleTeacherLeave);
+router.post('/:id/toggle-leave', verifyToken, leaveController.toggleTeacherLeave);
+router.get('/:id/affected-classes', verifyToken, leaveController.getAffectedClasses);
+router.post('/:id/propose-substitutes', verifyToken, checkRole('admin', 'hod', 'teacher', 'tg'), leaveController.proposeSubstitutes);
 
 // 5. TG Appointment
 router.post('/:id/appoint-tg', verifyToken, checkRole('admin', 'hod'), facultyController.appointTg);

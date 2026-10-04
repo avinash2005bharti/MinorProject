@@ -13,7 +13,7 @@ router.get('/my', verifyToken, cacheService.middleware(45, true), timetableContr
 router.get('/conflicts', optionalAuth, cacheService.middleware(45), timetableController.getConflicts);
 
 // 2. AI Autonomous Timetable Generation & Regeneration
-router.post('/generate', optionalAuth, timetableController.generateTimetable);
+router.post('/generate', verifyToken, checkRole('admin', 'hod'), timetableController.generateTimetable);
 
 // 3. Export Endpoints (PDF & Excel)
 router.get('/export/pdf', optionalAuth, timetableController.exportTimetablePDF);
@@ -23,9 +23,9 @@ router.post('/export/excel', optionalAuth, timetableController.exportTimetableEx
 
 // 4. Timetable Versions & Lifecycle Management
 router.get('/:id/versions', optionalAuth, timetableController.getTimetableVersions);
-router.post('/:id/regenerate', optionalAuth, timetableController.regenerateTimetable);
-router.post('/:id/approve', optionalAuth, timetableController.approveTimetable);
-router.post('/:id/publish', optionalAuth, timetableController.publishTimetable);
+router.post('/:id/regenerate', verifyToken, checkRole('admin', 'hod'), timetableController.regenerateTimetable);
+router.post('/:id/approve', verifyToken, checkRole('admin', 'hod'), timetableController.approveTimetable);
+router.post('/:id/publish', verifyToken, checkRole('admin', 'hod'), timetableController.publishTimetable);
 router.get('/:id/conflicts', optionalAuth, timetableController.getConflicts);
 router.post('/:id/export/pdf', optionalAuth, timetableController.exportTimetablePDF);
 router.post('/:id/export/excel', optionalAuth, timetableController.exportTimetableExcel);

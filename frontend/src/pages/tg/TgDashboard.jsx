@@ -5,6 +5,20 @@ import QuickActions from '../../components/QuickActions';
 import QuickDisplay from '../../components/QuickDisplay';
 import { dashboardApi } from '../../api/dashboardApi';
 import {
+  PageHeader,
+  StatCard,
+  Card,
+  Badge,
+  Button,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+  EmptyState
+} from '../../components/common';
+import {
   Users,
   AlertTriangle,
   FileText,
@@ -15,14 +29,16 @@ import {
   ShieldAlert,
   RefreshCw,
   AlertCircle,
-  BookOpen
+  BookOpen,
+  FileSpreadsheet
 } from 'lucide-react';
 
 export default function TgDashboard() {
   const {
     currentUser,
     tgReviewAttendanceConsideration,
-    tgReviewLeave
+    tgReviewLeave,
+    openModal
   } = useERP();
 
   const [dashboard, setDashboard] = useState(null);
@@ -77,42 +93,51 @@ export default function TgDashboard() {
 
   return (
     <div className="page-wrapper">
-      <div className="flex flex-col gap-4">
-        {/* Header & TG Availability Toggle */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
+      <div className="flex flex-col gap-5">
+        {/* Header */}
+        <PageHeader
+          title="Mentor & TG Dashboard"
+          description={`Teacher Guardian: ${mentor?.name || 'Mentor'} • ${mentees.length} Mentees Under Direct Supervision`}
+          badge={<Badge variant="primary" size="sm">Section {mentor?.assignedSection || 'A'}</Badge>}
+          actions={
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                Mentor & TG Dashboard
-              </h1>
-              <span className="badge badge-indigo">Section {mentor?.assignedSection || 'A'}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => openModal('googleSheet')}
+                id="btn-tg-google-sheet"
+                leftIcon={<FileSpreadsheet size={14} className="text-emerald-600" />}
+                rightIcon={
+                  <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                    LIVE
+                  </span>
+                }
+              >
+                Live Google Sheet
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchTgData}
+                disabled={loading}
+                loading={loading}
+                leftIcon={<RefreshCw size={13} />}
+              >
+                Refresh
+              </Button>
+
+              <Link
+                to="/teacher"
+                className="btn btn-outline text-xs py-2 px-3 flex items-center gap-1.5"
+              >
+                <BookOpen size={14} className="text-primary-600" />
+                <span>My Teaching Classes</span>
+              </Link>
             </div>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Teacher Guardian: {mentor?.name || 'Mentor'} • {mentees.length} Mentees Under Direct Supervision
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={fetchTgData}
-              disabled={loading}
-              className="btn btn-outline text-xs py-2 px-3 flex items-center gap-1.5"
-            >
-              <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-              <span>Refresh</span>
-            </button>
-
-            <Link
-              to="/teacher"
-              className="btn btn-outline text-xs py-2 px-3 flex items-center gap-1.5"
-              title="View my regular teaching classes and attendance"
-            >
-              <BookOpen size={14} className="text-blue-600" />
-              <span>My Teaching Classes</span>
-            </Link>
-
-          </div>
-        </div>
+          }
+        />
 
         {/* Loading and Error states */}
         {loading && (
@@ -123,14 +148,14 @@ export default function TgDashboard() {
         )}
 
         {error && (
-          <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="p-4 rounded-2xl bg-danger-50 border border-danger-200 text-danger-800 text-xs flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <AlertCircle size={18} className="text-rose-600 shrink-0" />
+              <AlertCircle size={18} className="text-danger-600 shrink-0" />
               <span>{error}</span>
             </div>
-            <button onClick={fetchTgData} className="btn btn-sm btn-primary text-xs">
+            <Button variant="primary" size="sm" onClick={fetchTgData}>
               Try Again
-            </button>
+            </Button>
           </div>
         )}
 
@@ -143,46 +168,51 @@ export default function TgDashboard() {
             <QuickDisplay />
 
             {/* Metrics */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-              <div className="card flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                  <Users size={20} />
-                </div>
-                <div>
-                  <span className="text-[11px] text-slate-500 block">Assigned Mentees</span>
-                  <div className="text-2xl font-extrabold text-slate-900">{mentees.length}</div>
-                  <span className="text-[11px] text-blue-600">Section {mentor.assignedSection || 'Unassigned'}</span>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <StatCard
+                title="Assigned Mentees"
+                value={mentees.length}
+                icon={<Users size={20} />}
+                variant="primary"
+                subtitle={`Section ${mentor.assignedSection || 'Unassigned'}`}
+              />
 
-              <div className="card flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                  <Clock size={20} />
-                </div>
-                <div>
-                  <span className="text-[11px] text-slate-500 block">Pending Verifications</span>
-                  <div className="text-2xl font-extrabold text-slate-900">{totalPending}</div>
-                  <span className="text-[11px] text-amber-600 font-semibold">Requires TG Review</span>
-                </div>
-              </div>
+              <StatCard
+                title="Pending Verifications"
+                value={totalPending}
+                icon={<Clock size={20} />}
+                variant={totalPending > 0 ? 'warning' : 'neutral'}
+                subtitle="Requires TG Review"
+              />
 
+              <StatCard
+                title="Mentorship Cohort"
+                value="Active"
+                icon={<Sparkles size={20} />}
+                variant="success"
+                subtitle="Semester 5 Direct Batch"
+              />
             </div>
 
             {/* Pending Requests for TG Review */}
-            <div className="card">
+            <Card>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <Clock size={16} className="text-amber-600" />
-                  <h3 className="text-sm font-bold text-slate-900">
+                  <h3 className="text-sm font-bold text-slate-900 m-0">
                     Pending Student Requests Awaiting TG Review ({totalPending})
                   </h3>
                 </div>
+                <Badge variant={totalPending > 0 ? 'warning' : 'neutral'} size="xs">
+                  {totalPending} Action Needed
+                </Badge>
               </div>
 
               {totalPending === 0 ? (
-                <div className="p-6 text-center text-slate-500 text-xs bg-slate-50 rounded-xl">
-                  No records found.
-                </div>
+                <EmptyState
+                  title="No Pending Verifications"
+                  description="All student requests in your mentorship group have been reviewed."
+                />
               ) : (
                 <div className="flex flex-col gap-2.5">
                   {/* Attendance Considerations */}
@@ -191,18 +221,20 @@ export default function TgDashboard() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-xs text-slate-900">{req.studentName}</span>
-                          <span className="badge badge-blue text-[10px]">{req.rollNo}</span>
-                          <span className="badge badge-amber text-[10px]">Attendance Consideration</span>
+                          <Badge variant="primary" size="xs">{req.rollNo}</Badge>
+                          <Badge variant="warning" size="xs">Attendance Consideration</Badge>
                         </div>
-                        <p className="text-xs text-slate-600 mt-1">{req.reason || req.title}</p>
+                        <p className="text-xs text-slate-600 mt-1 mb-0">{req.reason || req.title}</p>
                       </div>
-                      <button
+                      <Button
+                        variant="primary"
+                        size="xs"
                         onClick={() => handleRecommendAttendance(req.id)}
                         disabled={actionProcessing === req.id}
-                        className="btn btn-sm btn-primary text-xs py-1 px-3"
+                        loading={actionProcessing === req.id}
                       >
-                        {actionProcessing === req.id ? 'Submitting...' : 'Recommend to HOD'}
-                      </button>
+                        Recommend to HOD
+                      </Button>
                     </div>
                   ))}
 
@@ -212,67 +244,68 @@ export default function TgDashboard() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-bold text-xs text-slate-900">{leave.studentName}</span>
-                          <span className="badge badge-blue text-[10px]">{leave.rollNo}</span>
-                          <span className="badge badge-indigo text-[10px]">{leave.leaveType || 'Leave'}</span>
+                          <Badge variant="primary" size="xs">{leave.rollNo}</Badge>
+                          <Badge variant="purple" size="xs">{leave.leaveType || 'Leave'}</Badge>
                         </div>
-                        <p className="text-xs text-slate-600 mt-1">{leave.reason || leave.title}</p>
+                        <p className="text-xs text-slate-600 mt-1 mb-0">{leave.reason || leave.title}</p>
                       </div>
-                      <button
+                      <Button
+                        variant="primary"
+                        size="xs"
                         onClick={() => handleRecommendLeave(leave.id)}
                         disabled={actionProcessing === leave.id}
-                        className="btn btn-sm btn-primary text-xs py-1 px-3"
+                        loading={actionProcessing === leave.id}
                       >
-                        {actionProcessing === leave.id ? 'Submitting...' : 'Recommend to HOD'}
-                      </button>
+                        Recommend to HOD
+                      </Button>
                     </div>
                   ))}
                 </div>
               )}
-            </div>
+            </Card>
 
             {/* Mentees Directory Table */}
-            <div className="card">
+            <Card>
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Users size={16} className="text-blue-600" />
-                  <h3 className="text-sm font-bold text-slate-900">Mentees Under Supervision</h3>
+                  <Users size={16} className="text-primary-600" />
+                  <h3 className="text-sm font-bold text-slate-900 m-0">Mentees Under Supervision</h3>
                 </div>
-                <span className="badge badge-slate text-xs">{mentees.length} Enrolled</span>
+                <Badge variant="neutral" size="xs">{mentees.length} Enrolled</Badge>
               </div>
 
               {mentees.length === 0 ? (
-                <div className="p-6 text-center text-slate-500 text-xs bg-slate-50 rounded-xl">
-                  No records found.
-                </div>
+                <EmptyState
+                  title="No Mentees Assigned"
+                  description="No students have been assigned to your mentorship group yet."
+                />
               ) : (
-                <div className="table-responsive">
-                  <table className="table" style={{ width: '100%', fontSize: '12px' }}>
-                    <thead>
-                      <tr className="text-slate-500 text-left border-b border-slate-200">
-                        <th className="pb-2 font-bold">Enrollment No.</th>
-                        <th className="pb-2 font-bold">Student Name</th>
-                        <th className="pb-2 font-bold">Section</th>
-                        <th className="pb-2 font-bold">Batch</th>
-                        <th className="pb-2 font-bold">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {mentees.map((st) => (
-                        <tr key={st.id} className="hover:bg-slate-50/50">
-                          <td className="py-2.5 font-bold text-blue-600">{st.enrollment_no}</td>
-                          <td className="py-2.5 text-slate-900 font-semibold">{st.name}</td>
-                          <td className="py-2.5 text-slate-600">{st.section}</td>
-                          <td className="py-2.5 text-slate-500">{st.batch}</td>
-                          <td className="py-2.5">
-                            <span className="badge badge-emerald text-[10px]">{st.status || 'Active'}</span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Enrollment No.</TableHead>
+                      <TableHead>Student Name</TableHead>
+                      <TableHead>Section</TableHead>
+                      <TableHead>Batch</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {mentees.map((st) => (
+                      <TableRow key={st.id}>
+                        <TableCell className="font-bold text-primary-600 font-mono">{st.enrollment_no}</TableCell>
+                        <TableCell className="text-slate-900 font-semibold">{st.name}</TableCell>
+                        <TableCell className="text-slate-600">{st.section}</TableCell>
+                        <TableCell className="text-slate-500">{st.batch}</TableCell>
+                        <TableCell>
+                          <Badge variant="success" size="xs" dot>{st.status || 'Active'}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
-            </div>
+            </Card>
           </>
         )}
       </div>

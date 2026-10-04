@@ -43,19 +43,19 @@ export default function StudentDetailModal({ data, onClose }) {
         style={{ maxWidth: '640px', width: '92%', maxHeight: '90vh' }}
       >
         {/* Header Profile Summary */}
-        <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+        <div className="modal-header">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white font-bold text-lg flex items-center justify-center shadow-sm">
+            <div className="w-12 h-12 rounded-2xl bg-primary-700 text-white font-bold text-lg flex items-center justify-center shadow-sm">
               {student.name.split(' ').map((n) => n[0]).join('')}
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900 leading-snug">{student.name}</h3>
+                <h3 className="modal-title">{student.name}</h3>
                 <span className={`badge ${!hasAttendance ? 'badge-slate' : attendance >= 75 ? 'badge-emerald' : 'badge-rose'} text-[11px]`}>
                   {hasAttendance ? `${attendance}% Attendance` : 'Attendance unavailable'}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="modal-subtitle mt-0.5">
                 Roll: <strong className="text-slate-700">{rollNumber}</strong> • Section {sectionName || 'Unassigned'} • CGPA: <strong className="text-blue-600">{student.cgpa ?? 'Not available'}</strong>
               </p>
             </div>
@@ -216,8 +216,8 @@ export default function StudentDetailModal({ data, onClose }) {
           )}
         </div>
 
-        <div className="pt-2 border-t border-slate-100 flex justify-end">
-          <button onClick={onClose} className="btn btn-outline text-xs py-2 px-4">
+        <div className="modal-footer">
+          <button onClick={onClose} className="btn btn-outline text-xs py-2 px-4 font-semibold">
             Close
           </button>
         </div>

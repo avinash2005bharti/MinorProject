@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "migrate": "node src/migrations/migrate.js",
+    "migrate": "prisma db push",
     "test": "node test_e2e_rebuild.js"
   },
   "prisma": {
@@ -31,12 +31,9 @@
     "nodemailer": "^6.9.14",
     "pdfkit": "^0.15.0",
     "pg": "^8.23.0",
-    "pg-hstore": "^2.3.4",
     "prisma": "^5.22.0",
     "qrcode": "^1.5.3",
-    "sequelize": "^6.37.8",
     "socket.io": "^4.7.5",
-    "sqlite3": "^6.0.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "winston": "^3.19.0",

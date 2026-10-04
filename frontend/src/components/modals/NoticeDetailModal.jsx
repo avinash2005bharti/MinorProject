@@ -171,9 +171,10 @@ export default function NoticeDetailModal({ notice, onClose, onReadChange, onDel
               </div>
               <h2
                 style={{
-                  fontSize: '18px',
+                  fontFamily: 'var(--font-heading)',
+                  fontSize: 'var(--text-lg)',
                   fontWeight: 800,
-                  color: '#0F172A',
+                  color: 'var(--text-primary)',
                   margin: '2px 0 0 0',
                   lineHeight: 1.3
                 }}

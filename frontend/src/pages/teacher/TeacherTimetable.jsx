@@ -43,6 +43,45 @@ export default function TeacherTimetable() {
     fetchTimetable();
   }, [currentUser]);
 
+  const subjectNameMap = {
+    'CS501': 'Database Management Systems',
+    'CS502': 'Operating Systems',
+    'CS503': 'Computer Networks',
+    'CS504': 'Theory of Computation',
+    'CS505': 'Database & OS Lab',
+    'CS506': 'Computer Networks Lab',
+    'CS301': 'Data Structures & Algorithms',
+    'CS302': 'Digital Electronics',
+    'CS303': 'Discrete Mathematics',
+    'CS304': 'Object Oriented Programming (Java)',
+    'CS305': 'Data Structures Lab',
+    'CS401': 'Analysis & Design of Algorithms',
+    'CS402': 'Software Engineering',
+    'CS403': 'Computer Organization & Architecture',
+    'CS404': 'Analog & Digital Communication',
+    'CS405': 'Algorithms Lab',
+    'CS601': 'Compiler Design',
+    'CS602': 'Web Development & Frameworks',
+    'CS603': 'Cloud Computing',
+    'CS604': 'Cyber Security',
+    'CS701': 'Artificial Intelligence & Machine Learning',
+    'CS702': 'Big Data Analytics',
+    'CS703': 'Internet of Things (IoT)',
+    'CS704': 'Major Project Phase-I',
+    'CS801': 'Deep Learning & Neural Networks',
+    'CS802': 'Distributed Systems',
+    'CS803': 'Major Project Phase-II'
+  };
+
+  const resolveSubjectName = (sub) => {
+    if (!sub) return 'Scheduled Lecture';
+    const clean = String(sub).trim();
+    if (subjectNameMap[clean.toUpperCase()]) {
+      return `${subjectNameMap[clean.toUpperCase()]} (${clean.toUpperCase()})`;
+    }
+    return clean;
+  };
+
   const daySchedule = Array.isArray(slots) ? slots.filter((s) => s && s.day === selectedDay) : [];
 
   return (
@@ -150,7 +189,7 @@ export default function TeacherTimetable() {
                           Period {cls.period}
                         </span>
                         <h4 style={{ fontSize: '14px', fontWeight: 700, color: '#0F172A', margin: 0 }}>
-                          {cls.subject}
+                          {resolveSubjectName(cls.subject)}
                         </h4>
                         <span className="badge badge-indigo">Sec {cls.section}</span>
                       </div>

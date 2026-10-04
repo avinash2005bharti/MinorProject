@@ -9,6 +9,8 @@ import StudentFeedbackModal from './StudentFeedbackModal';
 import StudentDetailModal from './StudentDetailModal';
 import RequestConsiderationModal from './RequestConsiderationModal';
 import NoticeDetailModal from './NoticeDetailModal';
+import GoogleSheetSyncModal from './GoogleSheetSyncModal';
+import FormalApplicationModal from './FormalApplicationModal';
 
 export default function GlobalModals() {
   const { modalState, closeModal } = useERP();
@@ -34,6 +36,10 @@ export default function GlobalModals() {
       return <StudentFeedbackModal data={modalState.data} onClose={closeModal} />;
     case 'studentDetail':
       return <StudentDetailModal data={modalState.data} onClose={closeModal} />;
+    case 'googleSheet':
+      return <GoogleSheetSyncModal data={modalState.data} onClose={closeModal} />;
+    case 'formalApplication':
+      return <FormalApplicationModal request={modalState.data?.request || modalState.data} onClose={closeModal} />;
     default:
       return null;
   }

@@ -29,6 +29,7 @@ const leaveRoutes = require('./leaveRoutes');
 const teacherSchedulerController = require('../controllers/teacherSchedulerController');
 const leaveController = require('../controllers/leaveController');
 const masterDataController = require('../controllers/masterDataController');
+const { verifyToken, checkRole } = require('../middleware/auth');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
@@ -63,12 +64,13 @@ router.use('/documents', fileRoutes);
 router.use('/classrooms', classroomRoutes);
 router.use('/master-data', masterDataRoutes);
 router.use('/leaves', leaveRoutes);
+router.use('/leave', leaveRoutes);
 
-// Direct REST routes & Aliases for Teachers, Leave, and Master Data Import
+// Direct REST routes & Aliases for Teachers, Leave, and Master Data Import (SEC-04: Protected)
 router.get('/teachers/availability', leaveController.getFacultyAvailability);
-router.post('/teachers/:id/leave-toggle', leaveController.toggleTeacherLeave);
-router.get('/teachers/:id/affected-classes', leaveController.getAffectedClasses);
-router.post('/teachers/:id/propose-substitutes', leaveController.proposeSubstitutes);
+router.post('/teachers/:id/leave-toggle', verifyToken, leaveController.toggleTeacherLeave);
+router.get('/teachers/:id/affected-classes', verifyToken, leaveController.getAffectedClasses);
+router.post('/teachers/:id/propose-substitutes', verifyToken, checkRole('HOD', 'ADMIN', 'TEACHER', 'TG'), leaveController.proposeSubstitutes);
 router.post('/teachers/import', upload.single('file'), masterDataController.importTeachers);
 router.get('/teachers/export', masterDataController.exportTeachers);
 router.post('/students/import', upload.single('file'), masterDataController.importStudents);

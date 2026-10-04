@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authApi } from '../../api/authApi';
+import { Button } from '../../components/common';
 import {
   Lock,
   Mail,
@@ -127,12 +128,7 @@ export default function LoginPage() {
     setForgotLoading(true);
     try {
       const res = await authApi.forgotPassword(forgotEmail.trim().toLowerCase());
-      if (res.otp) {
-        setOtpCode(res.otp);
-        setForgotSuccess((res.message || 'OTP sent to your email.') + ` (Dev Code: ${res.otp})`);
-      } else {
-        setForgotSuccess(res.message || 'OTP sent to your email.');
-      }
+      setForgotSuccess(res.message || 'If an account exists with this email, a password reset code has been sent.');
       setForgotStep(2);
     } catch (err) {
       setForgotError(err.message || 'Failed to send OTP. Please verify email.');
@@ -249,45 +245,45 @@ export default function LoginPage() {
 
           {/* Header */}
           <div style={{ marginBottom: '1.75rem' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, color: '#2563EB', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               Authentication Gateway
             </span>
-            <h2 style={{ fontSize: '26px', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', marginTop: '2px' }}>
+            <h2 style={{ fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', marginTop: '4px' }}>
               Sign in to CampusFlow
             </h2>
-            <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px' }}>
+            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginTop: '4px' }}>
               Enter your registered official email address and password to sign in.
             </p>
           </div>
 
           {error && (
-            <div className="p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
-              <AlertCircle size={16} className="shrink-0 text-rose-600" />
+            <div className="p-3 mb-4 rounded-xl bg-danger-50 border border-danger-200 text-danger-800 text-xs flex items-center gap-2">
+              <AlertCircle size={16} className="shrink-0 text-danger-600" />
               <span>{error}</span>
             </div>
           )}
 
           {successNotice && (
-            <div className="p-3 mb-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
-              <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+            <div className="p-3 mb-4 rounded-xl bg-success-50 border border-success-200 text-success-800 text-xs flex items-center gap-2">
+              <CheckCircle2 size={16} className="shrink-0 text-success-600" />
               <span>{successNotice}</span>
             </div>
           )}
 
           {/* Login Form */}
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
             {/* Role-Based Portal Selection Tabs */}
             <div>
-              <label className="form-label" style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: '0.4rem', display: 'block' }}>
+              <label className="form-label" style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.5rem', display: 'block' }}>
                 Select Portal / Role
               </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.35rem', backgroundColor: '#F1F5F9', padding: '0.25rem', borderRadius: '10px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.35rem', backgroundColor: 'var(--surface-low)', padding: '0.25rem', borderRadius: 'var(--radius-lg)' }}>
                 {[
-                  { role: 'student', label: 'Student', icon: <GraduationCap size={14} /> },
-                  { role: 'faculty', label: 'Faculty', icon: <Briefcase size={14} /> },
-                  { role: 'tg', label: 'TG', icon: <Award size={14} /> },
-                  { role: 'hod', label: 'HOD', icon: <Building2 size={14} /> },
-                  { role: 'admin', label: 'Admin', icon: <ShieldCheck size={14} /> }
+                  { role: 'student', label: 'Student', icon: <GraduationCap size={15} /> },
+                  { role: 'faculty', label: 'Faculty', icon: <Briefcase size={15} /> },
+                  { role: 'tg', label: 'TG', icon: <Award size={15} /> },
+                  { role: 'hod', label: 'HOD', icon: <Building2 size={15} /> },
+                  { role: 'admin', label: 'Admin', icon: <ShieldCheck size={15} /> }
                 ].map((item) => {
                   const isActive = selectedRole === item.role;
                   return (
@@ -304,15 +300,15 @@ export default function LoginPage() {
                         flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        gap: '0.2rem',
-                        padding: '0.45rem 0.2rem',
-                        borderRadius: '8px',
+                        gap: '0.25rem',
+                        padding: '0.5rem 0.25rem',
+                        borderRadius: 'var(--radius-md)',
                         border: 'none',
-                        backgroundColor: isActive ? '#FFFFFF' : 'transparent',
-                        color: isActive ? '#1D4ED8' : '#64748B',
+                        backgroundColor: isActive ? 'var(--surface)' : 'transparent',
+                        color: isActive ? 'var(--primary)' : 'var(--text-muted)',
                         fontWeight: isActive ? 700 : 500,
-                        fontSize: '11px',
-                        boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                        fontSize: 'var(--text-xs)',
+                        boxShadow: isActive ? 'var(--shadow-sm)' : 'none',
                         cursor: 'pointer',
                         transition: 'all 0.15s ease'
                       }}
@@ -326,7 +322,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="form-label" style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+              <label className="form-label" style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem', display: 'block' }}>
                 Email Address
               </label>
               <div style={{ position: 'relative' }}>
@@ -339,19 +335,19 @@ export default function LoginPage() {
                   className="input-field"
                   style={{ paddingLeft: '2.5rem' }}
                 />
-                <Mail size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                <Mail size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
               </div>
             </div>
 
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
-                <label className="form-label" style={{ fontSize: '12px', fontWeight: 700, color: '#334155', marginBottom: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <label className="form-label" style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 0 }}>
                   Password
                 </label>
                 <button
                   type="button"
                   onClick={handleOpenForgotModal}
-                  style={{ fontSize: '11px', color: '#2563EB', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
+                  style={{ fontSize: 'var(--text-xs)', color: 'var(--primary)', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer' }}
                 >
                   Forgot Password?
                 </button>
@@ -366,50 +362,33 @@ export default function LoginPage() {
                   className="input-field"
                   style={{ paddingLeft: '2.5rem', paddingRight: '2.5rem' }}
                 />
-                <Lock size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
+                <Lock size={16} style={{ position: 'absolute', left: '0.85rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  style={{ position: 'absolute', right: '0.85rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}
+                  style={{ position: 'absolute', right: '0.85rem', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
               </div>
             </div>
 
-            <button
+            <Button
               type="submit"
-              disabled={loading}
-              className="btn btn-primary"
-              style={{
-                width: '100%',
-                padding: '0.85rem',
-                fontSize: '14px',
-                fontWeight: 700,
-                marginTop: '0.5rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.5rem'
-              }}
+              variant="primary"
+              size="lg"
+              loading={loading}
+              rightIcon={<ArrowRight size={16} />}
+              style={{ width: '100%', marginTop: '0.5rem' }}
             >
-              {loading ? (
-                <>
-                  <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                  <span>Authenticating via Server...</span>
-                </>
-              ) : (
-                <>
-                  <span>Sign In to ERP Portal</span>
-                  <ArrowRight size={16} />
-                </>
-              )}
-            </button>
+              Sign In to ERP Portal
+            </Button>
           </form>
 
           {/* Registration Links */}
-          <div style={{ marginTop: '2rem', borderTop: '1px solid #E2E8F0', paddingTop: '1.25rem' }}>
-            <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748B', display: 'block', marginBottom: '0.75rem' }}>
+          <div style={{ marginTop: '2rem', borderTop: '1px solid var(--border-subtle)', paddingTop: '1.25rem' }}>
+            <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-muted)', display: 'block', marginBottom: '0.75rem' }}>
               Self-Registration Gateways
             </span>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
@@ -417,7 +396,7 @@ export default function LoginPage() {
                 to="/register/student"
                 className="btn btn-outline"
                 style={{
-                  fontSize: '12px',
+                  fontSize: 'var(--text-xs)',
                   padding: '0.6rem 0.5rem',
                   display: 'flex',
                   alignItems: 'center',
@@ -426,7 +405,7 @@ export default function LoginPage() {
                   textDecoration: 'none'
                 }}
               >
-                <GraduationCap size={15} className="text-blue-600" />
+                <GraduationCap size={15} style={{ color: 'var(--primary)' }} />
                 <span>New Student?</span>
               </Link>
 
@@ -434,7 +413,7 @@ export default function LoginPage() {
                 to="/register/teacher"
                 className="btn btn-outline"
                 style={{
-                  fontSize: '12px',
+                  fontSize: 'var(--text-xs)',
                   padding: '0.6rem 0.5rem',
                   display: 'flex',
                   alignItems: 'center',
@@ -443,7 +422,7 @@ export default function LoginPage() {
                   textDecoration: 'none'
                 }}
               >
-                <Briefcase size={15} className="text-indigo-600" />
+                <Briefcase size={15} style={{ color: 'var(--accent-purple)' }} />
                 <span>New Faculty?</span>
               </Link>
             </div>
@@ -457,7 +436,8 @@ export default function LoginPage() {
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
+            backgroundColor: 'rgba(15, 23, 42, 0.6)',
+            backdropFilter: 'blur(4px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -467,49 +447,50 @@ export default function LoginPage() {
         >
           <div
             style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: '16px',
+              backgroundColor: 'var(--surface)',
+              borderRadius: 'var(--radius-xl)',
               padding: '2rem',
               width: '100%',
               maxWidth: '420px',
-              boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+              boxShadow: 'var(--shadow-xl)',
+              border: '1px solid var(--border-subtle)'
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <KeyRound size={20} className="text-blue-600" />
-                <h3 style={{ fontSize: '17px', fontWeight: 800, color: '#0F172A', margin: 0 }}>
+                <KeyRound size={20} style={{ color: 'var(--primary)' }} />
+                <h3 style={{ fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
                   Reset Password
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={handleCloseForgotModal}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}
               >
                 <X size={18} />
               </button>
             </div>
 
             {forgotError && (
-              <div className="p-3 mb-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs">
+              <div className="p-3 mb-3 rounded-lg bg-danger-50 border border-danger-200 text-danger-800 text-xs">
                 {forgotError}
               </div>
             )}
 
             {forgotSuccess && (
-              <div className="p-3 mb-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
+              <div className="p-3 mb-3 rounded-lg bg-success-50 border border-success-200 text-success-800 text-xs">
                 {forgotSuccess}
               </div>
             )}
 
             {forgotStep === 1 ? (
               <form onSubmit={handleSendOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
                   Enter your registered CSE email address. A 6-digit OTP code will be generated to reset your password.
                 </p>
                 <div>
-                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>Email Address</label>
+                  <label className="form-label" style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem', display: 'block' }}>Email Address</label>
                   <input
                     type="email"
                     required
@@ -521,29 +502,29 @@ export default function LoginPage() {
                   />
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={handleCloseForgotModal}
-                    className="btn btn-secondary"
-                    style={{ flex: 1, padding: '0.75rem', fontWeight: 600 }}
+                    style={{ flex: 1 }}
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
-                    disabled={forgotLoading}
-                    className="btn btn-primary"
-                    style={{ flex: 2, padding: '0.75rem', fontWeight: 700 }}
+                    variant="primary"
+                    loading={forgotLoading}
+                    style={{ flex: 2 }}
                   >
-                    {forgotLoading ? 'Sending OTP...' : 'Send Reset Code'}
-                  </button>
+                    Send Reset Code
+                  </Button>
                 </div>
               </form>
             ) : (
               <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F8FAFC', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
-                  <span style={{ fontSize: '12px', color: '#64748B' }}>
-                    Email: <strong style={{ color: '#0F172A' }}>{forgotEmail}</strong>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface-low)', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                    Email: <strong style={{ color: 'var(--text-primary)' }}>{forgotEmail}</strong>
                   </span>
                   <button
                     type="button"
@@ -552,16 +533,16 @@ export default function LoginPage() {
                       setForgotError('');
                       setForgotSuccess('');
                     }}
-                    style={{ background: 'none', border: 'none', color: '#2563EB', fontSize: '11px', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                    style={{ background: 'none', border: 'none', color: 'var(--primary)', fontSize: 'var(--text-xs)', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
                   >
                     Change Email
                   </button>
                 </div>
-                <p style={{ fontSize: '13px', color: '#64748B', margin: 0 }}>
+                <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
                   Enter the 6-digit verification OTP code and your new password.
                 </p>
                 <div>
-                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>6-Digit OTP Code</label>
+                  <label className="form-label" style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem', display: 'block' }}>6-Digit OTP Code</label>
                   <input
                     type="text"
                     required
@@ -573,7 +554,7 @@ export default function LoginPage() {
                   />
                 </div>
                 <div>
-                  <label className="form-label" style={{ fontSize: '12px', fontWeight: 700 }}>New Password</label>
+                  <label className="form-label" style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: '0.4rem', display: 'block' }}>New Password</label>
                   <input
                     type="password"
                     required
@@ -584,26 +565,26 @@ export default function LoginPage() {
                   />
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <button
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => {
                       setForgotStep(1);
                       setForgotError('');
                       setForgotSuccess('');
                     }}
-                    className="btn btn-secondary"
-                    style={{ flex: 1, padding: '0.75rem', fontWeight: 600 }}
+                    style={{ flex: 1 }}
                   >
                     Back
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
-                    disabled={forgotLoading}
-                    className="btn btn-primary"
-                    style={{ flex: 2, padding: '0.75rem', fontWeight: 700 }}
+                    variant="primary"
+                    loading={forgotLoading}
+                    style={{ flex: 2 }}
                   >
-                    {forgotLoading ? 'Updating Password...' : 'Verify & Reset'}
-                  </button>
+                    Verify & Reset
+                  </Button>
                 </div>
               </form>
             )}

@@ -4,13 +4,19 @@
 // ============================================================================
 
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const jwt = require('jsonwebtoken');
 const { prisma } = require('../config/postgres');
 const { getPermissionsForRole } = require('../config/permissions');
 const { logger } = require('../services/loggerService');
+const emailService = require('../services/emailService');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'cse_agentic_erp_super_secure_jwt_secret_2025';
+const { envConfig } = require('../config/env');
+const JWT_SECRET = process.env.JWT_SECRET || envConfig.jwtSecret;
 const ACCESS_TOKEN_EXPIRY = '7d';
+
+// In-memory OTP store with 10-minute TTL: Map<email, { otp, expiresAt } >
+const otpStore = new Map();
 
 /**
  * Helper to build safe user representation for API clients
@@ -277,16 +283,49 @@ exports.registerStudent = async (req, res) => {
         }
       });
 
-      // Find active Tutor Guardian for the department
-      const activeTg = await tx.teacher.findFirst({
-        where: {
-          departmentId: department.id,
-          isTG: true,
-          status: 'ACTIVE'
+      // Find Tutor Guardian specifically assigned to this section (Test S4 fix)
+      let targetTgId = null;
+
+      if (sectionId) {
+        const secRecord = await tx.section.findUnique({
+          where: { id: sectionId }
+        });
+        if (secRecord?.tgTeacherId) {
+          targetTgId = secRecord.tgTeacherId;
+        } else {
+          // Check peer students in same section
+          const peer = await tx.student.findFirst({
+            where: { sectionId, tgTeacherId: { not: null } }
+          });
+          if (peer?.tgTeacherId) {
+            targetTgId = peer.tgTeacherId;
+          }
         }
-      }) || await tx.teacher.findFirst({
-        where: { isTG: true, status: 'ACTIVE' }
-      });
+      }
+
+      // If no section TG on record, look for section by name with assigned TG
+      if (!targetTgId && sectionName) {
+        const secByName = await tx.section.findFirst({
+          where: { name: sectionName.toUpperCase(), tgTeacherId: { not: null } }
+        });
+        if (secByName?.tgTeacherId) {
+          targetTgId = secByName.tgTeacherId;
+        }
+      }
+
+      // Fallback: active Tutor Guardian in department
+      if (!targetTgId) {
+        const activeTg = await tx.teacher.findFirst({
+          where: {
+            departmentId: department.id,
+            isTG: true,
+            status: 'ACTIVE'
+          }
+        }) || await tx.teacher.findFirst({
+          where: { isTG: true, status: 'ACTIVE' }
+        });
+        if (activeTg) targetTgId = activeTg.id;
+      }
 
       const newStudent = await tx.student.create({
         data: {
@@ -302,7 +341,7 @@ exports.registerStudent = async (req, res) => {
           semester: parseInt(semester, 10) || 5,
           departmentId: department.id,
           sectionId,
-          tgTeacherId: activeTg?.id || null,
+          tgTeacherId: targetTgId || null,
           status: 'ACTIVE'
         },
         include: {
@@ -431,7 +470,7 @@ exports.registerTeacher = async (req, res) => {
           phone: phone || null,
           designation: designation.trim(),
           departmentId: department.id,
-          isTG: Boolean(isTG),
+          isTG: false, // SEC-06: Never permit self-appointment as TG. Appointed solely by HOD/ADMIN via /faculty/:id/appoint-tg
           status: 'ACTIVE'
         },
         include: {
@@ -442,7 +481,7 @@ exports.registerTeacher = async (req, res) => {
       return { user: newUser, teacher: newTeacher };
     }, { timeout: 25000, maxWait: 15000 });
 
-    const effectiveRole = isTG ? 'TG' : 'TEACHER';
+    const effectiveRole = 'TEACHER'; // SEC-06: Registered faculty always start as TEACHER
     const token = signToken(result.user, effectiveRole);
     const safeUser = buildSafeUser({
       ...result.user,
@@ -477,12 +516,24 @@ exports.registerAdmin = async (req, res) => {
   try {
     const { name, email, password, departmentCode = 'CSE', adminSecret } = req.body;
 
-    // Optional environment secret protection if ADMIN_REGISTRATION_SECRET is set
-    const expectedSecret = process.env.ADMIN_REGISTRATION_SECRET;
-    if (expectedSecret && adminSecret !== expectedSecret) {
+    // Required admin registration secret key with constant-time verification (SEC-07)
+    const expectedSecret = process.env.ADMIN_REGISTRATION_SECRET || envConfig.adminRegistrationSecret;
+    if (!adminSecret) {
       return res.status(403).json({
         success: false,
-        message: 'Invalid or missing admin registration secret key.',
+        message: 'Forbidden: Valid admin registration secret key is required.',
+        code: 'INVALID_ADMIN_SECRET'
+      });
+    }
+
+    const providedBuf = Buffer.from(String(adminSecret));
+    const expectedBuf = Buffer.from(String(expectedSecret));
+    const isMatch = providedBuf.length === expectedBuf.length && crypto.timingSafeEqual(providedBuf, expectedBuf);
+
+    if (!isMatch) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: Valid admin registration secret key is required.',
         code: 'INVALID_ADMIN_SECRET'
       });
     }
@@ -612,33 +663,195 @@ exports.refreshToken = async (req, res) => {
 };
 
 // ----------------------------------------------------------------------------
-// 7. Forgot Password / OTP Stubs (Production-safe)
+// 7. Forgot Password & OTP (Test S3 fix: Real OTP dispatch and verification)
+// ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// 7. Forgot Password & OTP
 // ----------------------------------------------------------------------------
 exports.forgotPassword = async (req, res) => {
-  const { email } = req.body;
-  if (!email) {
-    return res.status(400).json({ success: false, message: 'Email is required.' });
-  }
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required.' });
+    }
 
-  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
-  if (!user) {
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
+
+    // Always return generic message to prevent account enumeration
+    const genericSuccessMsg = 'If an account is associated with this email, a password reset code has been dispatched.';
+
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message: genericSuccessMsg
+      });
+    }
+
+    // Generate secure 6-digit numeric OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+    // ARCH-03: Persist hashed OTP token to PostgreSQL and clean up expired rows
+    try {
+      await prisma.passwordResetToken.deleteMany({
+        where: { email: cleanEmail }
+      });
+      await prisma.passwordResetToken.deleteMany({
+        where: { expiresAt: { lt: new Date() } }
+      }).catch(() => {});
+
+      await prisma.passwordResetToken.create({
+        data: {
+          email: cleanEmail,
+          otpHash,
+          expiresAt,
+          attempts: 0
+        }
+      });
+    } catch (dbErr) {
+      logger.warn(`[ForgotPassword] DB token write warning: ${dbErr.message}`);
+    }
+
+    otpStore.set(cleanEmail, {
+      otpHash,
+      expiresAt: expiresAt.getTime(),
+      attempts: 0
+    });
+
+    // Only log OTP to console in development environment
+    if (process.env.NODE_ENV === 'development') {
+      logger.info(`[ForgotPassword] Dev OTP for ${cleanEmail}: ${otp}`);
+    }
+
+    // Send real email via emailService
+    try {
+      await emailService.sendOtpEmail(cleanEmail, otp, user.name);
+    } catch (mailErr) {
+      logger.error(`[ForgotPassword Email Error]: ${mailErr.message}`);
+    }
+
     return res.status(200).json({
       success: true,
-      message: 'If an account with this email exists, password reset instructions have been sent.'
+      message: genericSuccessMsg
     });
+  } catch (err) {
+    logger.error(`[ForgotPassword Error]: ${err.message}`);
+    return res.status(500).json({ success: false, message: 'An error occurred while processing your request.' });
   }
-
-  return res.status(200).json({
-    success: true,
-    message: 'If an account with this email exists, password reset instructions have been sent.'
-  });
 };
 
 exports.verifyOtp = async (req, res) => {
-  return res.status(200).json({
-    success: true,
-    message: 'OTP verified successfully.'
-  });
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, OTP, and new password are required.'
+      });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    
+    // ARCH-03: Look up from persistent DB store first, fallback to memory
+    let dbToken = null;
+    try {
+      dbToken = await prisma.passwordResetToken.findFirst({
+        where: {
+          email: cleanEmail,
+          usedAt: null
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+    } catch (err) {
+      logger.warn(`[VerifyOtp] DB lookup warning: ${err.message}`);
+    }
+
+    const memEntry = otpStore.get(cleanEmail);
+    const effectiveToken = dbToken || (memEntry ? {
+      otpHash: memEntry.otpHash,
+      expiresAt: new Date(memEntry.expiresAt),
+      attempts: memEntry.attempts
+    } : null);
+
+    if (!effectiveToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'No active OTP request found for this email. Please request a new code.'
+      });
+    }
+
+    if (Date.now() > new Date(effectiveToken.expiresAt).getTime()) {
+      if (dbToken?.id) {
+        await prisma.passwordResetToken.delete({ where: { id: dbToken.id } }).catch(() => {});
+      }
+      otpStore.delete(cleanEmail);
+      return res.status(400).json({
+        success: false,
+        message: 'OTP has expired. Please request a new code.'
+      });
+    }
+
+    const currentAttempts = (effectiveToken.attempts || 0) + 1;
+    if (dbToken?.id) {
+      await prisma.passwordResetToken.update({
+        where: { id: dbToken.id },
+        data: { attempts: currentAttempts }
+      }).catch(() => {});
+    }
+    if (memEntry) memEntry.attempts = currentAttempts;
+
+    if (currentAttempts > 5) {
+      if (dbToken?.id) {
+        await prisma.passwordResetToken.delete({ where: { id: dbToken.id } }).catch(() => {});
+      }
+      otpStore.delete(cleanEmail);
+      return res.status(400).json({
+        success: false,
+        message: 'Too many incorrect attempts. This OTP has been invalidated. Please request a new one.'
+      });
+    }
+
+    const candidateHash = crypto.createHash('sha256').update(String(otp).trim()).digest('hex');
+    const isMatch = crypto.timingSafeEqual(Buffer.from(effectiveToken.otpHash, 'hex'), Buffer.from(candidateHash, 'hex'));
+
+    if (!isMatch) {
+      const remainingAttempts = 5 - currentAttempts;
+      return res.status(400).json({
+        success: false,
+        message: remainingAttempts > 0 
+          ? `Invalid OTP code. ${remainingAttempts} attempt${remainingAttempts === 1 ? '' : 's'} remaining.`
+          : 'Too many incorrect attempts. This OTP has been invalidated. Please request a new one.'
+      });
+    }
+
+    // Hash new password and update in PostgreSQL
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { email: cleanEmail },
+        data: { passwordHash }
+      });
+      await tx.passwordResetToken.updateMany({
+        where: { email: cleanEmail },
+        data: { usedAt: new Date() }
+      });
+    });
+
+    // Invalidate cached auth user & delete OTP
+    const { invalidateAuthUser } = require('../middleware/auth');
+    invalidateAuthUser(cleanEmail);
+    otpStore.delete(cleanEmail);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password reset successful. You may now login with your new password.'
+    });
+  } catch (err) {
+    logger.error(`[VerifyOtp Error]: ${err.message}`);
+    return res.status(500).json({ success: false, message: 'An error occurred while verifying OTP.' });
+  }
 };
 
 // ----------------------------------------------------------------------------

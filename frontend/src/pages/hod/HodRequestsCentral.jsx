@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import RequestCard from '../../components/RequestCard';
+import GoogleSheetSyncModal from '../../components/modals/GoogleSheetSyncModal';
+import { PageHeader, Badge, Button, Card, EmptyState } from '../../components/common';
 import {
   Compass,
   Filter,
@@ -11,7 +13,9 @@ import {
   FileSpreadsheet,
   FileText,
   Printer,
-  CheckSquare
+  CheckSquare,
+  Radio,
+  Sparkles
 } from 'lucide-react';
 
 export default function HodRequestsCentral() {
@@ -24,10 +28,13 @@ export default function HodRequestsCentral() {
     hodApproveLeave,
     hodRejectLeave,
     hodApproveAttendanceQuery,
+    hodRejectAttendanceQuery,
     addToast
   } = useERP();
 
   const [filter, setFilter] = useState('all');
+  const [showGoogleSheetModal, setShowGoogleSheetModal] = useState(false);
+  const [periodAdjustments, setPeriodAdjustments] = useState({});
 
   const allRequests = [
     ...attendanceRequests.map((r) => ({ ...r, type: 'attendance_consideration' })),
@@ -241,10 +248,14 @@ export default function HodRequestsCentral() {
     }, 250);
   };
 
-  const handleApproveAction = async (req) => {
+  const handleApproveAction = async (req, customPeriods) => {
     try {
+      const finalPeriods = customPeriods ?? periodAdjustments[req.id] ?? req.periodsCount ?? 4;
       if (req.type === 'attendance_consideration') {
-        await hodApproveAttendanceConsideration(req.id, req.status === 'pending_tg');
+        await hodApproveAttendanceConsideration(req.id, req.status === 'pending_tg', {
+          approvedPeriodsCount: finalPeriods,
+          comments: `Sanctioned by HOD CSE: ${finalPeriods} consideration lecture periods credited.`
+        });
       } else if (req.type === 'leave_request' || req.leaveType) {
         await hodApproveLeave(req.id, req.status === 'pending_tg');
       } else {
@@ -252,7 +263,7 @@ export default function HodRequestsCentral() {
       }
       addToast?.(
         'Request Cleared',
-        'Approval recorded successfully. You can download the updated approved list anytime from the top bar.',
+        `Approval recorded successfully${req.type === 'attendance_consideration' ? ` (${finalPeriods} consideration periods sanctioned)` : ''}.`,
         'success'
       );
     } catch (err) {
@@ -262,95 +273,74 @@ export default function HodRequestsCentral() {
 
   return (
     <div className="page-wrapper">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+      <div className="flex flex-col gap-5">
         {/* Top Header with Multi-Format Download Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                Department Requests & Approvals Central
-              </h1>
-              <span className="badge badge-indigo">HOD Digital Sign-off</span>
+        <PageHeader
+          title="Department Requests & Approvals Central"
+          description="Central repository of attendance considerations, student leave applications, and attendance dispute queries with direct TG bypass authority."
+          badge={<Badge variant="purple" size="sm">HOD Digital Sign-off</Badge>}
+          actions={
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Google Live Sheet Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowGoogleSheetModal(true)}
+                id="btn-requests-google-live-sheet"
+                leftIcon={<FileSpreadsheet size={15} className="text-emerald-600" />}
+                rightIcon={
+                  <span className="flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                    LIVE
+                  </span>
+                }
+              >
+                Google Live Sheet
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleExportExcel()}
+                disabled={allAccepted.length === 0}
+                id="btn-requests-download-excel"
+                leftIcon={<FileSpreadsheet size={15} className="text-emerald-600" />}
+                rightIcon={<Badge variant="success" size="xs">{allAccepted.length}</Badge>}
+              >
+                Export Excel
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleExportCsv()}
+                disabled={allAccepted.length === 0}
+                id="btn-requests-download-csv"
+                leftIcon={<Download size={15} />}
+              >
+                CSV
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handlePrintReport()}
+                disabled={allAccepted.length === 0}
+                id="btn-requests-print-report"
+                leftIcon={<Printer size={15} className="text-primary-600" />}
+              >
+                Print Report
+              </Button>
             </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Central repository of attendance considerations, student leave applications, and attendance dispute queries with direct TG bypass authority
-            </p>
-          </div>
-
-          {/* Quick Downloads Toolbar */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => handleExportExcel()}
-              disabled={allAccepted.length === 0}
-              className="btn btn-sm btn-outline-success"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                borderRadius: 'var(--radius-lg)',
-                padding: '0.45rem 0.85rem',
-                fontSize: '12px',
-                fontWeight: 600,
-                backgroundColor: '#FFFFFF'
-              }}
-              id="btn-requests-download-excel"
-              title="Download all approved clearances in Excel format"
-            >
-              <FileSpreadsheet size={15} className="text-emerald-600" />
-              <span>Download Approved (Excel)</span>
-              <span className="badge badge-emerald" style={{ fontSize: '10px' }}>{allAccepted.length}</span>
-            </button>
-
-            <button
-              onClick={() => handleExportCsv()}
-              disabled={allAccepted.length === 0}
-              className="btn btn-sm btn-outline"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                borderRadius: 'var(--radius-lg)',
-                padding: '0.45rem 0.85rem',
-                fontSize: '12px',
-                fontWeight: 600,
-                backgroundColor: '#FFFFFF'
-              }}
-              id="btn-requests-download-csv"
-              title="Download all approved clearances in CSV format"
-            >
-              <Download size={15} />
-              <span>Download CSV</span>
-            </button>
-
-            <button
-              onClick={() => handlePrintReport()}
-              disabled={allAccepted.length === 0}
-              className="btn btn-sm btn-outline-primary"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                borderRadius: 'var(--radius-lg)',
-                padding: '0.45rem 0.85rem',
-                fontSize: '12px',
-                fontWeight: 600,
-                backgroundColor: '#FFFFFF'
-              }}
-              id="btn-requests-print-report"
-              title="Print or Save PDF report of approved requests"
-            >
-              <Printer size={15} className="text-blue-600" />
-              <span>Print Report</span>
-            </button>
-          </div>
-        </div>
+          }
+        />
 
         {/* Filter Pills */}
-        <div style={{ display: 'flex', gap: '0.4rem', overflowX: 'auto', paddingBottom: '2px' }}>
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {[
             { id: 'all', label: `All Requests (${allRequests.length})` },
             { id: 'pending', label: `Awaiting HOD Sign-off (${allRequests.filter((r) => isAwaitingHod(r.status)).length})` },
-            { id: 'bypass', label: `⚡ In TG Queue / Direct Bypass (${allRequests.filter((r) => isPendingTg(r.status)).length})` },
+            { id: 'bypass', label: `⚡ Direct Bypass Queue (${allRequests.filter((r) => isPendingTg(r.status)).length})` },
             { id: 'leaves', label: `Leave Applications (${allRequests.filter((r) => r.type === 'leave_request').length})` },
             { id: 'considerations', label: `Considerations (${allRequests.filter((r) => r.type === 'attendance_consideration').length})` },
             { id: 'approved', label: `Cleared & Synced (${allAccepted.length})` }
@@ -358,15 +348,11 @@ export default function HodRequestsCentral() {
             <button
               key={f.id}
               onClick={() => setFilter(f.id)}
-              className="btn btn-sm"
-              style={{
-                backgroundColor: filter === f.id ? 'var(--primary)' : '#FFFFFF',
-                color: filter === f.id ? '#FFFFFF' : 'var(--text-secondary)',
-                border: filter === f.id ? '1px solid var(--primary)' : '1px solid var(--border-subtle)',
-                fontSize: '12px',
-                fontWeight: filter === f.id ? 700 : 500,
-                boxShadow: filter === f.id ? '0 2px 6px rgba(29, 78, 216, 0.2)' : 'var(--shadow-sm)'
-              }}
+              className={`py-1.5 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition-all cursor-pointer border ${
+                filter === f.id
+                  ? 'bg-primary text-white border-primary shadow-xs font-bold'
+                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:text-slate-900'
+              }`}
               id={`filter-pill-${f.id}`}
             >
               {f.label}
@@ -403,6 +389,14 @@ export default function HodRequestsCentral() {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
               <button
+                onClick={() => setShowGoogleSheetModal(true)}
+                className="btn btn-sm btn-outline-success"
+                style={{ fontSize: '11px', fontWeight: 700, backgroundColor: '#FFFFFF' }}
+              >
+                <FileSpreadsheet size={13} className="me-1 text-emerald-600" />
+                Live Google Sheet
+              </button>
+              <button
                 onClick={() => handleExportExcel(filtered)}
                 className="btn btn-sm btn-success"
                 style={{ fontSize: '11px', fontWeight: 700 }}
@@ -429,25 +423,119 @@ export default function HodRequestsCentral() {
               No requests match the selected filter.
             </div>
           ) : (
-            filtered.map((req) => (
-              <RequestCard
-                key={req.id}
-                request={req}
-                showActions={req.status !== 'completed' && req.status !== 'approved' && req.status !== 'rejected'}
-                role="hod"
-                onApprove={() => handleApproveAction(req)}
-                onReject={() => {
-                  if (req.type === 'attendance_consideration') {
-                    hodRejectAttendanceConsideration(req.id);
-                  } else if (req.type === 'leave_request' || req.leaveType) {
-                    hodRejectLeave(req.id);
-                  }
-                }}
-              />
-            ))
+            filtered.map((req) => {
+              const normStatus = String(req.status || '').toLowerCase();
+              const isActionable = !['completed', 'approved', 'rejected', 'approved_by_hod'].includes(normStatus);
+              const isConsideration = req.type === 'attendance_consideration';
+              const currentPeriods = periodAdjustments[req.id] ?? req.periodsCount ?? 4;
+
+              return (
+                <div key={req.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
+                  <RequestCard
+                    request={{
+                      ...req,
+                      periodsCount: currentPeriods,
+                      approvedPeriodsCount: req.approvedPeriodsCount || (normStatus === 'approved' ? currentPeriods : undefined)
+                    }}
+                    showActions={isActionable}
+                    role="hod"
+                    onApprove={() => handleApproveAction(req, currentPeriods)}
+                    onReject={() => {
+                      if (req.type === 'attendance_consideration') {
+                        hodRejectAttendanceConsideration(req.id);
+                      } else if (req.type === 'leave_request' || req.leaveType) {
+                        hodRejectLeave(req.id);
+                      } else if (req.type === 'attendance_query') {
+                        hodRejectAttendanceQuery(req.id);
+                      }
+                    }}
+                  />
+
+                  {/* HOD Consideration Authority Stepper */}
+                  {isConsideration && isActionable && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.65rem 1rem',
+                        backgroundColor: '#FAF5FF',
+                        border: '1px solid #E9D5FF',
+                        borderRadius: 'var(--radius-xl)',
+                        flexWrap: 'wrap',
+                        gap: '0.65rem'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                        <Sparkles size={16} className="text-purple-600 shrink-0" />
+                        <div>
+                          <span style={{ fontWeight: 800, color: '#581C87' }}>HOD Consideration Control: </span>
+                          <span style={{ color: '#7E22CE' }}>
+                            Increase or decrease sanctioned periods to be credited for this activity
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontSize: '11px', color: '#6B21A8', fontWeight: 600 }}>Sanctioned Periods:</span>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', backgroundColor: '#FFFFFF', borderRadius: '8px', border: '1px solid #D8B4FE', padding: '2px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (currentPeriods > 1) {
+                                setPeriodAdjustments((prev) => ({ ...prev, [req.id]: currentPeriods - 1 }));
+                              }
+                            }}
+                            className="btn btn-xs"
+                            style={{ width: '26px', height: '26px', padding: 0, fontWeight: 800, color: '#7E22CE', borderRadius: '6px' }}
+                            title="Decrease period count"
+                          >
+                            –
+                          </button>
+                          <span
+                            style={{
+                              minWidth: '42px',
+                              textAlign: 'center',
+                              fontWeight: 800,
+                              fontSize: '12.5px',
+                              color: '#581C87',
+                              padding: '0 4px'
+                            }}
+                          >
+                            {currentPeriods}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (currentPeriods < 14) {
+                                setPeriodAdjustments((prev) => ({ ...prev, [req.id]: currentPeriods + 1 }));
+                              }
+                            }}
+                            className="btn btn-xs"
+                            style={{ width: '26px', height: '26px', padding: 0, fontWeight: 800, color: '#7E22CE', borderRadius: '6px' }}
+                            title="Increase period count"
+                          >
+                            +
+                          </button>
+                        </div>
+                        <span style={{ fontSize: '10.5px', color: '#7E22CE', fontWeight: 600 }}>Period{currentPeriods > 1 ? 's' : ''}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </div>
+
+      {/* Google Live Sheet Sync Modal */}
+      {showGoogleSheetModal && (
+        <GoogleSheetSyncModal
+          onClose={() => setShowGoogleSheetModal(false)}
+          totalApprovedCount={allAccepted.length}
+        />
+      )}
     </div>
   );
 }

@@ -212,6 +212,16 @@ exports.updateFaculty = async (req, res) => {
 exports.appointTg = async (req, res) => {
   try {
     const { id } = req.params;
+    const { section, sectionName, academicYear } = req.body;
+
+    const teacher = await prisma.teacher.findUnique({
+      where: { id },
+      include: { user: true, department: true }
+    });
+
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: 'Teacher record not found.' });
+    }
 
     const updated = await prisma.teacher.update({
       where: { id },
@@ -219,9 +229,47 @@ exports.appointTg = async (req, res) => {
       include: { department: true }
     });
 
+    // Update user role if user is linked
+    if (teacher.userId) {
+      const tgRole = await prisma.role.findUnique({ where: { name: 'TG' } });
+      if (tgRole) {
+        await prisma.user.update({
+          where: { id: teacher.userId },
+          data: { roleId: tgRole.id }
+        });
+      }
+    }
+
+    // Link TG to Section & its students
+    const targetSectionName = (section || sectionName || '').trim().toUpperCase();
+    if (targetSectionName) {
+      const sec = await prisma.section.findFirst({
+        where: {
+          departmentId: teacher.departmentId,
+          name: targetSectionName
+        }
+      });
+
+      if (sec) {
+        await prisma.section.update({
+          where: { id: sec.id },
+          data: { tgTeacherId: id }
+        });
+
+        // Update all students in that section
+        await prisma.student.updateMany({
+          where: { sectionId: sec.id },
+          data: { tgTeacherId: id }
+        });
+      }
+    }
+
+    const { invalidateAuthUser } = require('../middleware/auth');
+    if (updated?.userId) invalidateAuthUser(updated.userId);
+
     return res.status(200).json({
       success: true,
-      message: 'Teacher appointed as Tutor Guardian (TG).',
+      message: `Teacher appointed as Tutor Guardian (TG)${targetSectionName ? ` for Section ${targetSectionName}` : ''}.`,
       faculty: formatTeacher(updated)
     });
   } catch (error) {
@@ -234,11 +282,40 @@ exports.removeTg = async (req, res) => {
   try {
     const { id } = req.params;
 
+    const teacher = await prisma.teacher.findUnique({
+      where: { id },
+      include: { user: true, department: true }
+    });
+
     const updated = await prisma.teacher.update({
       where: { id },
       data: { isTG: false },
       include: { department: true }
     });
+
+    if (teacher?.userId) {
+      const teacherRole = await prisma.role.findUnique({ where: { name: 'TEACHER' } });
+      if (teacherRole) {
+        await prisma.user.update({
+          where: { id: teacher.userId },
+          data: { roleId: teacherRole.id }
+        });
+      }
+    }
+
+    // Unlink from sections and students
+    await prisma.section.updateMany({
+      where: { tgTeacherId: id },
+      data: { tgTeacherId: null }
+    });
+
+    await prisma.student.updateMany({
+      where: { tgTeacherId: id },
+      data: { tgTeacherId: null }
+    });
+
+    const { invalidateAuthUser } = require('../middleware/auth');
+    if (teacher?.userId) invalidateAuthUser(teacher.userId);
 
     return res.status(200).json({
       success: true,

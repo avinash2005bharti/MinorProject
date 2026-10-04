@@ -191,8 +191,14 @@ export function ERPProvider({ children }) {
         console.warn('[ERPContext] Session verification error:', err.message);
         if (isMounted) {
           apiClient.clearSession();
+          localStorage.removeItem('oist_user');
+          localStorage.removeItem('oist_role');
           setIsAuthenticated(false);
           setCurrentUser(null);
+          setCurrentRole(null);
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
         }
       } finally {
         if (isMounted) setLoadingAuth(false);
@@ -201,11 +207,26 @@ export function ERPProvider({ children }) {
 
     verifySession();
 
+    // FE-02: Re-validate user session and active roles on tab focus
+    const handleFocus = () => {
+      if (apiClient.getToken()) {
+        verifySession();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+
     // Listen for global auth events dispatched by API client
     const handleUnauthorized = () => {
+      apiClient.clearSession();
+      localStorage.removeItem('oist_user');
+      localStorage.removeItem('oist_role');
       setIsAuthenticated(false);
       setCurrentUser(null);
+      setCurrentRole(null);
       addToast('Session Expired', 'Your authentication session has expired. Please sign in again.', 'warning');
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     };
 
     const handleForbidden = (e) => {
@@ -217,6 +238,7 @@ export function ERPProvider({ children }) {
 
     return () => {
       isMounted = false;
+      window.removeEventListener('focus', handleFocus);
       window.removeEventListener('erp:auth:unauthorized', handleUnauthorized);
       window.removeEventListener('erp:auth:forbidden', handleForbidden);
     };
@@ -496,6 +518,14 @@ export function ERPProvider({ children }) {
     return res;
   };
 
+  const tgRejectAttendanceConsideration = async (id, reason) => {
+    const res = await requestApi.tgRejectAttendanceConsideration(id, reason);
+    addToast('Request Rejected', 'Attendance consideration rejected by TG.', 'warning');
+    refreshAllData();
+    fetchDashboard();
+    return res;
+  };
+
   const hodRejectAttendanceConsideration = async (id, reason) => {
     const res = await requestApi.hodRejectAttendanceConsideration(id, reason);
     addToast('Request Rejected', 'Attendance consideration request was rejected by HOD.', 'warning');
@@ -513,9 +543,17 @@ export function ERPProvider({ children }) {
     return res;
   };
 
-  const tgReviewAttendanceQuery = async (id) => {
-    const res = await requestApi.tgReviewAttendanceQuery(id);
+  const tgReviewAttendanceQuery = async (id, note) => {
+    const res = await requestApi.tgReviewAttendanceQuery(id, note);
     addToast('Dispute Verified', 'Attendance query verified by TG; forwarded to HOD.', 'info');
+    refreshAllData();
+    fetchDashboard();
+    return res;
+  };
+
+  const tgRejectAttendanceQuery = async (id, reason) => {
+    const res = await requestApi.tgRejectAttendanceQuery(id, reason);
+    addToast('Dispute Rejected', 'Attendance query rejected by TG.', 'warning');
     refreshAllData();
     fetchDashboard();
     return res;
@@ -524,6 +562,14 @@ export function ERPProvider({ children }) {
   const hodApproveAttendanceQuery = async (id) => {
     const res = await requestApi.hodApproveAttendanceQuery(id);
     addToast('Attendance Corrected', 'Absent record corrected to Present in relational database.', 'success');
+    refreshAllData();
+    fetchDashboard();
+    return res;
+  };
+
+  const hodRejectAttendanceQuery = async (id, reason) => {
+    const res = await requestApi.hodRejectAttendanceQuery(id, reason);
+    addToast('Query Rejected', 'Attendance dispute query was rejected by HOD.', 'warning');
     refreshAllData();
     fetchDashboard();
     return res;
@@ -538,16 +584,24 @@ export function ERPProvider({ children }) {
     return res;
   };
 
-  const tgReviewLeave = async (id, approved = true) => {
-    const res = await requestApi.tgReviewLeave(id, approved);
+  const tgReviewLeave = async (id, approved = true, comments) => {
+    const res = await requestApi.tgReviewLeave(id, approved, comments);
     addToast(approved ? 'Leave Recommended' : 'Leave Rejected', res.message || 'Leave updated.', approved ? 'info' : 'warning');
     refreshAllData();
     fetchDashboard();
     return res;
   };
 
-  const hodApproveLeave = async (id) => {
-    const res = await requestApi.hodApproveLeave(id);
+  const tgRejectLeave = async (id, reason) => {
+    const res = await requestApi.tgRejectLeave(id, reason);
+    addToast('Leave Rejected', res.message || 'Leave rejected by TG.', 'warning');
+    refreshAllData();
+    fetchDashboard();
+    return res;
+  };
+
+  const hodApproveLeave = async (id, comments) => {
+    const res = await requestApi.hodApproveLeave(id, comments);
     addToast('Leave Granted', 'Leave officially approved by HOD.', 'success');
     refreshAllData();
     fetchDashboard();
@@ -559,6 +613,35 @@ export function ERPProvider({ children }) {
     addToast('Leave Rejected', 'Leave application was rejected by HOD.', 'warning');
     refreshAllData();
     fetchDashboard();
+    return res;
+  };
+
+  // Google Live Sheet Actions
+  const getGoogleSheetConfig = async () => {
+    try {
+      const res = await requestApi.getGoogleSheetConfig();
+      return res?.config || res;
+    } catch (err) {
+      console.warn('Failed to fetch Google Sheet config:', err.message);
+      return null;
+    }
+  };
+
+  const saveGoogleSheetConfig = async (config) => {
+    const res = await requestApi.saveGoogleSheetConfig(config);
+    addToast('Sheet Settings Saved', 'Google Live Sheet integration settings updated.', 'success');
+    return res;
+  };
+
+  const syncAllToGoogleSheet = async (params) => {
+    const res = await requestApi.syncAllToGoogleSheet(params);
+    addToast('Sync Complete', res.message || 'Records synchronized to Google Sheet.', 'success');
+    return res;
+  };
+
+  const testGoogleSheetConnection = async (webhookUrl) => {
+    const res = await requestApi.testGoogleSheetConnection(webhookUrl);
+    addToast('Connection Verified', res.message || 'Successfully reached Google Sheet webhook!', 'success');
     return res;
   };
 
@@ -678,15 +761,23 @@ export function ERPProvider({ children }) {
     bulkMarkAttendance,
     submitAttendanceConsideration,
     tgReviewAttendanceConsideration,
+    tgRejectAttendanceConsideration,
     hodApproveAttendanceConsideration,
     hodRejectAttendanceConsideration,
     submitAttendanceQuery,
     tgReviewAttendanceQuery,
+    tgRejectAttendanceQuery,
     hodApproveAttendanceQuery,
+    hodRejectAttendanceQuery,
     applyLeave,
     tgReviewLeave,
+    tgRejectLeave,
     hodApproveLeave,
     hodRejectLeave,
+    getGoogleSheetConfig,
+    saveGoogleSheetConfig,
+    syncAllToGoogleSheet,
+    testGoogleSheetConnection,
     generateTimetableAI,
     approveTimetable,
     publishTimetable,

@@ -1,5 +1,6 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
+require('./config/env');
 const http = require('http');
 const express = require('express');
 const cors = require('cors');
@@ -19,14 +20,32 @@ const routes = require('./routes/index');
 const app = express();
 const server = http.createServer(app);
 
-// Initialize Socket.IO with cloud origin support
-const allowedOrigins = process.env.CLIENT_URL
-  ? process.env.CLIENT_URL.split(',').map((s) => s.trim())
-  : [
-      'http://localhost:5173',
-      'http://127.0.0.1:5173',
-      'http://localhost:3000'
-    ];
+// Initialize Whitelisted Origins (SEC-08)
+const parseCorsOrigins = () => {
+  const envOrigins = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || process.env.CLIENT_URL;
+  if (!envOrigins) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('[FATAL CONFIG] CORS_ORIGINS environment variable is required in production.');
+      process.exit(1);
+    }
+    return ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000'];
+  }
+  return envOrigins.split(',').map((s) => s.trim()).filter(Boolean);
+};
+
+const allowedOrigins = parseCorsOrigins();
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow non-browser requests with no origin (curl, server-to-server, mobile native)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS policy does not allow access from origin: ${origin}`));
+  },
+  credentials: true
+};
 
 const io = new Server(server, {
   cors: {
@@ -42,10 +61,7 @@ app.use(helmet({
   crossOriginResourcePolicy: false // Allow loading static uploads
 }));
 
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || true,
-  credentials: true
-}));
+app.use(cors(corsOptions));
 
 // Winston Request Logger
 app.use(requestLogger);
@@ -63,9 +79,26 @@ app.use('/api', limiter);
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 
-// Static uploads directory
+// Static uploads directory (SEC-03: Hardened against arbitrary file and secret disclosure)
 const uploadPath = process.env.UPLOAD_PATH || path.join(__dirname, '../uploads');
-app.use('/uploads', express.static(uploadPath));
+const ALLOWED_STATIC_EXTENSIONS = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp',
+  '.pdf', '.xlsx', '.xls', '.csv', '.doc', '.docx', '.txt'
+]);
+
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  const ext = path.extname(req.path).toLowerCase();
+  if (!ALLOWED_STATIC_EXTENSIONS.has(ext) || req.path.includes('..') || path.basename(req.path).startsWith('.')) {
+    return res.status(404).json({ success: false, message: 'Resource not found.' });
+  }
+  next();
+}, express.static(uploadPath, {
+  dotfiles: 'deny',
+  setHeaders: (res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+}));
 
 // Swagger Documentation
 setupSwagger(app);
@@ -100,14 +133,16 @@ app.get('/api/health/databases', async (req, res) => {
     getQdrantHealth()
   ]);
 
-  const coreHealthy = pgHealth.status === 'UP' && mongoHealth.status === 'UP';
+  const isPgUp = pgHealth.status === 'UP';
+  const isMongoUp = Boolean(app.locals.mongoAvailable && mongoHealth.status === 'UP');
 
-  res.status(coreHealthy ? 200 : 503).json({
-    status: coreHealthy ? (qdrantHealth.status === 'UP' ? 'HEALTHY' : 'DEGRADED') : 'UNHEALTHY',
+  // Relational PostgreSQL is the primary authority; MongoDB degradation does not bring down ERP (ARCH-01)
+  res.status(isPgUp ? 200 : 503).json({
+    status: isPgUp ? (isMongoUp ? 'HEALTHY' : 'DEGRADED') : 'UNHEALTHY',
     timestamp: new Date().toISOString(),
     databases: {
       postgres: pgHealth,
-      mongodb: mongoHealth,
+      mongodb: { ...mongoHealth, available: isMongoUp },
       qdrant: qdrantHealth
     }
   });
@@ -134,13 +169,18 @@ const startServer = async () => {
       setTimeout(() => connectPostgres().catch(() => {}), 5000);
     }
 
-    // 2. MongoDB (Mongoose) - User/App Data & LLM STM
+    // 2. MongoDB (Mongoose) - User/App Data & LLM STM (ARCH-01: Non-fatal degradation)
+    app.locals.mongoAvailable = false;
+    global.appInstance = app;
     try {
       await connectMongo();
+      app.locals.mongoAvailable = true;
       console.log('  [MongoDB + Mongoose]  : ✓ CONNECTED (User Data & LLM STM)');
     } catch (mErr) {
-      console.error(`  [MongoDB + Mongoose]  : ✗ FAILED - ${mErr.message}`);
-      throw mErr;
+      app.locals.mongoAvailable = false;
+      console.warn(`  [MongoDB + Mongoose]  : ⚠️  UNAVAILABLE (${mErr.message}) - Degrading to stateless conversational memory. Core ERP remains active.`);
+      const { scheduleMongoReconnect } = require('./config/mongo');
+      scheduleMongoReconnect();
     }
 
     // 3. Qdrant Vector Database - LLM LTM & RAG

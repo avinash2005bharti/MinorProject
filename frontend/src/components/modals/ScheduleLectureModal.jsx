@@ -70,13 +70,13 @@ export default function ScheduleLectureModal({ data, onClose }) {
         style={{ maxWidth: '480px', width: '92%' }}
       >
         <div className="modal-header">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Calendar size={18} />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary-50 text-primary-700 flex items-center justify-center flex-shrink-0">
+              <Calendar size={20} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 leading-snug">Schedule / Reschedule Lecture</h3>
-              <p className="text-xs text-slate-500">Autonomous room check & timetable update</p>
+              <h3 className="modal-title">Schedule / Reschedule Lecture</h3>
+              <p className="modal-subtitle">Autonomous room check & timetable update</p>
             </div>
           </div>
           <button onClick={onClose} className="modal-close-btn" aria-label="Close modal">
@@ -187,8 +187,8 @@ export default function ScheduleLectureModal({ data, onClose }) {
             </select>
           </div>
 
-          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
-            <button type="button" onClick={onClose} className="btn btn-outline text-xs py-2 px-4">
+          <div className="modal-footer">
+            <button type="button" onClick={onClose} className="btn btn-outline text-xs py-2 px-4 font-semibold">
               Cancel
             </button>
             <button type="submit" disabled={saving || !subjects.length || !sections.length || !teachers.length} className="btn btn-primary text-xs py-2 px-5 font-bold shadow-sm disabled:opacity-50">

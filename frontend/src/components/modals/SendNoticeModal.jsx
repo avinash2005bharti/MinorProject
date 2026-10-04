@@ -96,13 +96,13 @@ export default function SendNoticeModal({ data, onClose }) {
         style={{ maxWidth: '580px', width: '92%', maxHeight: '92vh', overflowY: 'auto' }}
       >
         <div className="modal-header">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-              <Send size={18} />
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
+              <Send size={20} />
             </div>
             <div>
-              <h3 className="text-base font-bold text-slate-900 leading-snug">Broadcast Official Notice</h3>
-              <p className="text-xs text-slate-500">Autonomous delivery with document attachment</p>
+              <h3 className="modal-title">Broadcast Official Notice</h3>
+              <p className="modal-subtitle">Autonomous delivery with document attachment</p>
             </div>
           </div>
           <button onClick={onClose} className="modal-close-btn" aria-label="Close modal">
@@ -355,8 +355,8 @@ export default function SendNoticeModal({ data, onClose }) {
             </label>
           </div>
 
-          <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
-            <button type="button" onClick={onClose} disabled={saving} className="btn btn-outline text-xs py-2 px-4">
+          <div className="modal-footer">
+            <button type="button" onClick={onClose} disabled={saving} className="btn btn-outline text-xs py-2 px-4 font-semibold">
               Cancel
             </button>
             <button

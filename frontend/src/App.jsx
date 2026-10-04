@@ -189,13 +189,13 @@ export default function App() {
         <Route path="/register/student" element={<StudentRegisterPage />} />
         <Route path="/register/teacher" element={<TeacherRegisterPage />} />
 
-        {/* Full-Screen Dedicated AI Workspace (Accessible to any authenticated user) */}
-        <Route path="/ai-workspace" element={<RoleRouteGuard><AIWorkspace /></RoleRouteGuard>} />
-
         {/* Protected ERP Dashboard Layout */}
         <Route path="/" element={<ProtectedLayout />}>
           {/* Default Route redirects to active role */}
           <Route index element={<RoleRedirect />} />
+
+          {/* Unified AI Workspace (renders inside shared DashboardLayout) */}
+          <Route path="ai-workspace" element={<AIWorkspace />} />
 
           {/* Student Routes */}
           <Route path="student" element={<RoleRouteGuard role="student"><StudentDashboard /></RoleRouteGuard>} />

@@ -8,7 +8,8 @@ const { prisma } = require('../config/postgres');
 const { getPermissionsForRole, PERMISSIONS } = require('../config/permissions');
 const { logger } = require('../services/loggerService');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'cse_agentic_erp_super_secure_jwt_secret_2025';
+const { envConfig } = require('../config/env');
+const JWT_SECRET = process.env.JWT_SECRET || envConfig.jwtSecret;
 
 // High-speed in-memory user session cache (60s TTL)
 // Drastically speeds up API requests by eliminating redundant 5-join database lookups
@@ -79,9 +80,17 @@ const resolveAuthUser = async (userId) => {
   return userPayload;
 };
 
-const invalidateAuthUser = (userId) => {
-  if (userId) authUserCache.delete(userId);
-  else authUserCache.clear();
+const invalidateAuthUser = (identifier) => {
+  if (!identifier) {
+    authUserCache.clear();
+    return;
+  }
+  authUserCache.delete(identifier);
+  for (const [key, value] of authUserCache.entries()) {
+    if (value?.userPayload?.id === identifier || value?.userPayload?.email === identifier) {
+      authUserCache.delete(key);
+    }
+  }
 };
 
 /**
@@ -180,6 +189,14 @@ const requireRole = (...allowedRoles) => {
     const userRole = (req.user.role || '').toUpperCase();
     const userRoleName = (req.user.roleName || '').toUpperCase();
     const normalizedAllowed = allowedRoles.map(r => r.toUpperCase());
+
+    // Interoperability between FACULTY and TEACHER aliases
+    if (normalizedAllowed.includes('FACULTY') && !normalizedAllowed.includes('TEACHER')) {
+      normalizedAllowed.push('TEACHER');
+    }
+    if (normalizedAllowed.includes('TEACHER') && !normalizedAllowed.includes('FACULTY')) {
+      normalizedAllowed.push('FACULTY');
+    }
 
     // Admin always has bypass access
     if (userRole === 'ADMIN' || userRoleName === 'ADMIN') {

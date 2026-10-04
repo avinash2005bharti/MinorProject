@@ -6,6 +6,7 @@ import QuickActions from '../../components/QuickActions';
 import QuickDisplay from '../../components/QuickDisplay';
 import { dashboardApi } from '../../api/dashboardApi';
 import { leaveApi } from '../../api/leaveApi';
+import { Card, Badge, Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell, EmptyState } from '../../components/common';
 import {
   CheckCircle2,
   Clock,
@@ -233,80 +234,82 @@ export default function StudentDashboard() {
             </div>
 
             {/* Today's Faculty Status (RBAC protected: no private reasons shown) */}
-            <div className="card shadow-sm p-4" style={{ borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-              <div className="d-flex align-items-center justify-content-between mb-3">
-                <div className="d-flex align-items-center gap-2">
-                  <div className="rounded p-2 bg-primary-subtle text-primary">
+            <Card>
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-primary-50 text-primary-600 flex items-center justify-center">
                     <UserCheck size={18} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900 mb-0">
+                    <h3 className="text-sm font-bold text-slate-900 m-0">
                       Today's Faculty Status
                     </h3>
-                    <span className="text-[11px] text-slate-500">Live teacher availability for your department</span>
+                    <span className="text-xs text-slate-500">Live teacher availability for your department</span>
                   </div>
                 </div>
 
-                <div className="d-flex gap-2">
-                  <span className="badge bg-success-subtle text-success border border-success-subtle small">
-                    🟢 {facultyAvailability.filter((f) => f.status !== 'ON_LEAVE').length} Available
-                  </span>
-                  <span className="badge bg-danger-subtle text-danger border border-danger-subtle small">
-                    🔴 {facultyAvailability.filter((f) => f.status === 'ON_LEAVE').length} On Leave
-                  </span>
+                <div className="flex items-center gap-2">
+                  <Badge variant="success" size="sm" dot>
+                    {facultyAvailability.filter((f) => f.status !== 'ON_LEAVE').length} Available
+                  </Badge>
+                  <Badge variant="danger" size="sm" dot>
+                    {facultyAvailability.filter((f) => f.status === 'ON_LEAVE').length} On Leave
+                  </Badge>
                 </div>
               </div>
 
-              <div className="table-responsive">
-                <table className="table table-hover align-middle mb-0 small text-xs">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Faculty Member</th>
-                      <th>Subject / Specialization</th>
-                      <th>Live Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {facultyAvailability.length === 0 ? (
-                      <tr><td colSpan="3" className="text-center py-3 text-muted">No faculty records available</td></tr>
-                    ) : (
-                      facultyAvailability.map((f, i) => {
-                        const onLeave = f.status === 'ON_LEAVE';
-                        return (
-                          <tr key={f.id || i}>
-                            <td className="fw-bold text-slate-900">{f.name}</td>
-                            <td className="text-slate-600">{f.subject || f.specialization || 'Computer Science & Engineering'}</td>
-                            <td>
-                              <span
-                                className={`badge ${onLeave ? 'bg-danger text-white' : 'bg-success text-white'}`}
-                                style={{ padding: '4px 10px', borderRadius: '12px' }}
-                              >
-                                {onLeave ? '🔴 On Leave' : '🟢 Available'}
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+              {facultyAvailability.length === 0 ? (
+                <EmptyState
+                  title="No Faculty Records Available"
+                  description="Today's attendance data for faculty members has not been posted yet."
+                />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Faculty Member</TableHead>
+                      <TableHead>Subject / Specialization</TableHead>
+                      <TableHead>Live Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {facultyAvailability.map((f, i) => {
+                      const onLeave = f.status === 'ON_LEAVE';
+                      return (
+                        <TableRow key={f.id || i}>
+                          <TableCell className="font-semibold text-slate-900">{f.name}</TableCell>
+                          <TableCell className="text-slate-600">{f.subject || f.specialization || 'Computer Science & Engineering'}</TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={onLeave ? 'danger' : 'success'}
+                              size="sm"
+                              dot
+                            >
+                              {onLeave ? 'On Leave' : 'Available'}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              )}
+            </Card>
 
             {/* Pending Clearances & Alerts */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="card">
+              <Card>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <FileText size={16} className="text-amber-600" />
-                    <h3 className="text-sm font-bold text-slate-900">My Pending Requests</h3>
+                    <h3 className="text-sm font-bold text-slate-900 m-0">My Pending Requests</h3>
                   </div>
-                  <span className="badge badge-amber">{pendingRequests.length} Pending</span>
+                  <Badge variant="warning" size="xs">{pendingRequests.length} Pending</Badge>
                 </div>
 
                 {pendingRequests.length === 0 ? (
-                  <div className="p-4 text-center text-slate-500 text-xs bg-slate-50 rounded-xl">
-                    No records found.
+                  <div className="p-4 text-center text-slate-500 text-xs bg-slate-50 rounded-xl border border-slate-100">
+                    No pending requests at this time.
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2">
@@ -316,37 +319,37 @@ export default function StudentDashboard() {
                           <div className="font-bold text-slate-800">{req.title || req.requestType}</div>
                           <div className="text-[11px] text-slate-500 mt-0.5">{req.reason || req.dateRangeLabel}</div>
                         </div>
-                        <span className="badge badge-amber text-[10px]">{req.status}</span>
+                        <Badge variant="warning" size="xs">{req.status}</Badge>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
+              </Card>
 
-              <div className="card">
+              <Card>
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Bell size={16} className="text-blue-600" />
-                    <h3 className="text-sm font-bold text-slate-900">System Notifications</h3>
+                    <Bell size={16} className="text-primary-600" />
+                    <h3 className="text-sm font-bold text-slate-900 m-0">System Notifications</h3>
                   </div>
-                  <span className="badge badge-blue">{studentNotif.length}</span>
+                  <Badge variant="primary" size="xs">{studentNotif.length}</Badge>
                 </div>
 
                 {studentNotif.length === 0 ? (
-                  <div className="p-4 text-center text-slate-500 text-xs bg-slate-50 rounded-xl">
-                    No records found.
+                  <div className="p-4 text-center text-slate-500 text-xs bg-slate-50 rounded-xl border border-slate-100">
+                    No active notifications.
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2">
                     {studentNotif.map((n) => (
-                      <div key={n.id} className="p-2.5 rounded-xl border border-slate-100 text-xs flex flex-col gap-0.5">
+                      <div key={n.id} className="p-2.5 rounded-xl border border-slate-100 bg-slate-50/50 text-xs flex flex-col gap-0.5">
                         <span className="font-bold text-slate-800">{n.title}</span>
                         <span className="text-[11px] text-slate-600">{n.message}</span>
                       </div>
                     ))}
                   </div>
                 )}
-              </div>
+              </Card>
             </div>
           </>
         )}

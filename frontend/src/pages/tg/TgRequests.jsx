@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import RequestCard from '../../components/RequestCard';
-import { FileText, CheckCircle2, UserCheck, AlertTriangle } from 'lucide-react';
+import { FileText, CheckCircle2, UserCheck, AlertTriangle, FileSpreadsheet } from 'lucide-react';
 
 export default function TgRequests() {
   const {
@@ -9,10 +9,16 @@ export default function TgRequests() {
     leaveRequests,
     attendanceQueries,
     tgReviewAttendanceConsideration,
+    tgRejectAttendanceConsideration,
     tgReviewAttendanceQuery,
+    tgRejectAttendanceQuery,
     tgReviewLeave,
-    currentUser
+    tgRejectLeave,
+    currentUser,
+    openModal
   } = useERP();
+
+  const [activeTab, setActiveTab] = useState('attendance');
 
   const isAwaitingTg = (status) => {
     const s = String(status || '').toLowerCase();
@@ -32,6 +38,17 @@ export default function TgRequests() {
               1st-tier verification pipeline before forwarding to Head of Department
             </p>
           </div>
+
+          <button
+            onClick={() => openModal('googleSheet')}
+            className="btn btn-outline text-xs py-2 px-3 flex items-center gap-1.5"
+            style={{ borderColor: '#10B981', color: '#047857', backgroundColor: '#ECFDF5' }}
+            id="btn-tg-requests-google-sheet"
+          >
+            <FileSpreadsheet size={14} className="text-emerald-600" />
+            <span>Live Google Sheet</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+          </button>
         </div>
 
         {/* Request Category Tabs */}
@@ -88,6 +105,7 @@ export default function TgRequests() {
                   showActions={isAwaitingTg(req.status)}
                   role="tg"
                   onRecommend={() => tgReviewAttendanceConsideration(req.id, `Verified by Mentor ${currentUser?.name || ''}: Valid documentation verified.`)}
+                  onReject={() => tgRejectAttendanceConsideration(req.id, 'Disapproved by Mentor')}
                 />
               ))
             )
@@ -112,6 +130,7 @@ export default function TgRequests() {
                   showActions={isAwaitingTg(q.status)}
                   role="tg"
                   onRecommend={() => tgReviewAttendanceQuery(q.id)}
+                  onReject={() => tgRejectAttendanceQuery(q.id, 'Dispute rejected by Tutor Guardian')}
                 />
               ))
             )
@@ -132,6 +151,7 @@ export default function TgRequests() {
                   showActions={isAwaitingTg(lv.status)}
                   role="tg"
                   onRecommend={() => tgReviewLeave(lv.id, true)}
+                  onReject={() => tgRejectLeave(lv.id, 'Leave rejected by Tutor Guardian')}
                 />
               ))
             )

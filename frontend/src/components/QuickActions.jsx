@@ -17,7 +17,8 @@ import {
   Layers,
   ShieldCheck,
   UserCheck,
-  GraduationCap
+  GraduationCap,
+  FileSpreadsheet
 } from 'lucide-react';
 
 export default function QuickActions({ role }) {
@@ -184,6 +185,17 @@ export default function QuickActions({ role }) {
         </span>
         <span className="qa-label">Send Notice</span>
       </button>
+
+      <button
+        onClick={() => openModal('googleSheet')}
+        className="quick-action-btn"
+        id="qa-teacher-live-sheet"
+      >
+        <span className="qa-icon-wrapper qa-icon-emerald">
+          <FileSpreadsheet size={16} />
+        </span>
+        <span className="qa-label">Google Sheet</span>
+      </button>
     </div>
   );
 
@@ -220,6 +232,17 @@ export default function QuickActions({ role }) {
           <CheckSquare size={16} />
         </span>
         <span className="qa-label">Attendance Audit</span>
+      </button>
+
+      <button
+        onClick={() => openModal('googleSheet')}
+        className="quick-action-btn"
+        id="qa-tg-live-sheet"
+      >
+        <span className="qa-icon-wrapper qa-icon-emerald">
+          <FileSpreadsheet size={16} />
+        </span>
+        <span className="qa-label">Google Sheet</span>
       </button>
 
       <button

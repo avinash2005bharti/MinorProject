@@ -75,3 +75,4 @@ ai-service/qdrant_data/
 backend/uploads/*.xlsx
 backend/uploads/*.pdf
 backend/uploads/*.docx
+backend/data/

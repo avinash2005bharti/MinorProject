@@ -49,11 +49,13 @@ exports.getTimetable = async (req, res) => {
   try {
     const { semester = 5, section = 'A', academicYear = '2026-27' } = req.query;
 
-    const timetableRecord = await prisma.timetable.findFirst({
+    // Prefer ACTIVE timetable (LOGIC-03)
+    let timetableRecord = await prisma.timetable.findFirst({
       where: {
         semester: parseInt(semester, 10) || 5,
         academicYear,
-        ...(section ? { section: { name: section.toUpperCase() } } : {})
+        ...(section ? { section: { name: section.toUpperCase() } } : {}),
+        status: 'ACTIVE'
       },
       orderBy: { version: 'desc' },
       include: {
@@ -69,8 +71,63 @@ exports.getTimetable = async (req, res) => {
       }
     });
 
+    if (!timetableRecord) {
+      timetableRecord = await prisma.timetable.findFirst({
+        where: {
+          semester: parseInt(semester, 10) || 5,
+          academicYear,
+          ...(section ? { section: { name: section.toUpperCase() } } : {})
+        },
+        orderBy: { version: 'desc' },
+        include: {
+          slots: {
+            include: {
+              subject: true,
+              teacher: true,
+              classroom: true,
+              section: true
+            },
+            orderBy: [{ periodNumber: 'asc' }]
+          }
+        }
+      });
+    }
+
     const slots = timetableRecord?.slots || [];
-    const formattedSlots = slots.map(formatSlot);
+    const queryDate = req.query?.date ? new Date(req.query.date) : new Date();
+    queryDate.setHours(0, 0, 0, 0);
+
+    const slotIds = slots.map(s => s.id);
+    const activeSubs = slotIds.length > 0 ? await prisma.dailySubstitution.findMany({
+      where: {
+        slotId: { in: slotIds },
+        date: queryDate,
+        status: 'ACTIVE'
+      },
+      include: {
+        substituteTeacher: true,
+        originalTeacher: true
+      }
+    }) : [];
+
+    const subMap = new Map();
+    for (const sub of activeSubs) {
+      subMap.set(sub.slotId, sub);
+    }
+
+    const formattedSlots = slots.map(s => {
+      const fmt = formatSlot(s);
+      if (subMap.has(s.id)) {
+        const sub = subMap.get(s.id);
+        fmt.isSubstituted = true;
+        fmt.substituteTeacherId = sub.substituteTeacherId;
+        fmt.substituteTeacherName = `${sub.substituteTeacher?.firstName} ${sub.substituteTeacher?.lastName || ''}`.trim();
+        fmt.originalTeacherName = `${sub.originalTeacher?.firstName} ${sub.originalTeacher?.lastName || ''}`.trim();
+        fmt.faculty = fmt.substituteTeacherName;
+        fmt.teacher = sub.substituteTeacher;
+      }
+      return fmt;
+    });
     const config = timetableRecord?.metrics?.config || {};
 
     const workingDays = Array.isArray(config.workingDays) && config.workingDays.length > 0
@@ -119,17 +176,84 @@ exports.getMyTimetable = async (req, res) => {
 
     if (userRole === 'TEACHER' || userRole === 'TG' || req.user?.teacherId) {
       const teacherId = req.user.teacherId;
+      if (!teacherId) {
+        return res.status(200).json({ success: true, timetable: {}, slots: [] });
+      }
+
+      // Filter slots by ACTIVE timetable (LOGIC-03)
       const slots = await prisma.timetableSlot.findMany({
-        where: { teacherId },
+        where: {
+          teacherId,
+          timetable: { status: 'ACTIVE' }
+        },
         include: {
           subject: true,
           classroom: true,
-          section: true
+          section: true,
+          timetable: true
         },
         orderBy: [{ periodNumber: 'asc' }]
       });
 
-      const formatted = slots.map(formatSlot);
+      // Overlay DailySubstitution for today or requested date (LOGIC-01)
+      const queryDate = req.query.date ? new Date(req.query.date) : new Date();
+      queryDate.setHours(0, 0, 0, 0);
+      const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const todayDayName = dayNames[queryDate.getDay()];
+
+      // Get active substitutions where teacher is either original or substitute
+      const dailySubs = await prisma.dailySubstitution.findMany({
+        where: {
+          date: queryDate,
+          status: 'ACTIVE',
+          OR: [
+            { originalTeacherId: teacherId },
+            { substituteTeacherId: teacherId }
+          ]
+        },
+        include: {
+          slot: {
+            include: {
+              subject: true,
+              classroom: true,
+              section: true,
+              teacher: true,
+              timetable: true
+            }
+          },
+          originalTeacher: true,
+          substituteTeacher: true
+        }
+      });
+
+      const substitutedOutSlotIds = new Set(
+        dailySubs.filter(s => s.originalTeacherId === teacherId).map(s => s.slotId)
+      );
+
+      // Slots teacher is scheduled to teach
+      let formatted = slots.map(s => {
+        const fmt = formatSlot(s);
+        if (s.dayOfWeek === todayDayName && substitutedOutSlotIds.has(s.id)) {
+          const sub = dailySubs.find(ds => ds.slotId === s.id);
+          fmt.isSubstituted = true;
+          fmt.substituteTeacherName = sub ? `${sub.substituteTeacher?.firstName} ${sub.substituteTeacher?.lastName || ''}`.trim() : 'Substitute';
+          fmt.status = 'Substituted (On Leave)';
+        }
+        return fmt;
+      });
+
+      // Add slots where this teacher is the substitute for today
+      const assignedAsSub = dailySubs.filter(s => s.substituteTeacherId === teacherId && s.slot);
+      for (const asSub of assignedAsSub) {
+        if (asSub.slot && asSub.slot.timetable?.status === 'ACTIVE') {
+          const subFmt = formatSlot(asSub.slot);
+          subFmt.isSubstituteCover = true;
+          subFmt.originalTeacherName = `${asSub.originalTeacher?.firstName} ${asSub.originalTeacher?.lastName || ''}`.trim();
+          subFmt.notes = asSub.notes;
+          formatted.push(subFmt);
+        }
+      }
+
       const grouped = { Monday: [], Tuesday: [], Wednesday: [], Thursday: [], Friday: [], Saturday: [] };
       for (const s of formatted) {
         if (!grouped[s.day]) grouped[s.day] = [];
@@ -155,7 +279,11 @@ exports.getConflicts = async (req, res) => {
   try {
     const { section, semester } = req.query;
 
+    // Filter by ACTIVE timetable only to prevent false conflicts with archived versions (LOGIC-03)
     const allSlots = await prisma.timetableSlot.findMany({
+      where: {
+        timetable: { status: 'ACTIVE' }
+      },
       include: {
         subject: true,
         teacher: true,

@@ -1,33 +1,36 @@
 const express = require('express');
 const router = express.Router();
 const aiController = require('../controllers/aiController');
-const { verifyToken, optionalAuth } = require('../middleware/auth');
+const { verifyToken } = require('../middleware/auth');
+
+// All AI endpoints require verified authentication (SEC-02)
+router.use(verifyToken);
 
 // Central Chat Orchestrator (Node ↔ Python)
-router.post('/chat', optionalAuth, aiController.chat);
-router.post('/', optionalAuth, aiController.chat); // for /api/chat directly
-router.post('/stream', optionalAuth, aiController.chatStream);
-router.post('/chat/stream', optionalAuth, aiController.chatStream);
+router.post('/chat', aiController.chat);
+router.post('/', aiController.chat); // for /api/chat directly
+router.post('/stream', aiController.chatStream);
+router.post('/chat/stream', aiController.chatStream);
 
 // Static routes first
-router.get('/suggestions', optionalAuth, aiController.getSuggestions);
-router.get('/memory', optionalAuth, aiController.getUserMemory);
-router.post('/rag/search', optionalAuth, aiController.ragSearch);
-router.post('/tools/execute', optionalAuth, aiController.executeTool);
-router.get('/observability', optionalAuth, aiController.getObservability);
+router.get('/suggestions', aiController.getSuggestions);
+router.get('/memory', aiController.getUserMemory);
+router.post('/rag/search', aiController.ragSearch);
+router.post('/tools/execute', aiController.executeTool);
+router.get('/observability', aiController.getObservability);
 
 // Conversations & Chats routes
-router.get('/conversations', optionalAuth, aiController.getConversations);
-router.get('/conversations/:id', optionalAuth, aiController.getConversationById);
-router.delete('/conversations/:id', optionalAuth, aiController.deleteConversation);
-router.get('/chats', optionalAuth, aiController.getConversations);
-router.get('/chats/:id', optionalAuth, aiController.getConversationById);
-router.delete('/chats/:id', optionalAuth, aiController.deleteConversation);
+router.get('/conversations', aiController.getConversations);
+router.get('/conversations/:id', aiController.getConversationById);
+router.delete('/conversations/:id', aiController.deleteConversation);
+router.get('/chats', aiController.getConversations);
+router.get('/chats/:id', aiController.getConversationById);
+router.delete('/chats/:id', aiController.deleteConversation);
 
 // Root routes
-router.get('/', optionalAuth, aiController.getConversations);
-router.get('/:id', optionalAuth, aiController.getConversationById);
-router.delete('/:id', optionalAuth, aiController.deleteConversation);
+router.get('/', aiController.getConversations);
+router.get('/:id', aiController.getConversationById);
+router.delete('/:id', aiController.deleteConversation);
 
 module.exports = router;
 

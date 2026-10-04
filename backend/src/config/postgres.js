@@ -6,10 +6,15 @@
 const { PrismaClient } = require('@prisma/client');
 const dns = require('dns');
 
-// Configure reliable DNS servers for cloud database lookups on Windows
-try {
-  dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
-} catch (dnsErr) {}
+// ARCH-04: Opt-in custom DNS servers instead of unconditional hardcoding
+if (process.env.CUSTOM_DNS_SERVERS) {
+  try {
+    const servers = process.env.CUSTOM_DNS_SERVERS.split(',').map(s => s.trim()).filter(Boolean);
+    if (servers.length > 0) {
+      dns.setServers(servers);
+    }
+  } catch (dnsErr) {}
+}
 
 let dbUrl = process.env.DATABASE_URL || '';
 if (dbUrl && !dbUrl.includes('sslmode=') && (dbUrl.includes('render.com') || process.env.DB_SSL === 'true')) {

@@ -96,11 +96,13 @@ model Section {
   departmentId String   @map("department_id") @db.Uuid
   academicYear String   @default("2026-27") @map("academic_year") @db.VarChar(50)
   capacity     Int      @default(60)
+  tgTeacherId  String?  @map("tg_teacher_id") @db.Uuid
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   department      Department               @relation(fields: [departmentId], references: [id], onDelete: Cascade)
   semester        Semester?                @relation(fields: [semesterId], references: [id], onDelete: SetNull)
+  tgTeacher       Teacher?                 @relation("SectionTutorGuardian", fields: [tgTeacherId], references: [id], onDelete: SetNull)
   students        Student[]
   teacherSubjects TeacherSubject[]
   timetables      Timetable[]
@@ -133,6 +135,7 @@ model User {
   uploadedDocuments  DocumentMetadata[]
   notifications      Notification[]
   approvedAIGenerated AIGeneratedRecord[]
+  createdDailySubstitutions DailySubstitution[] @relation("CreatedDailySubstitutions")
 
   @@map("users")
 }
@@ -161,12 +164,15 @@ model Teacher {
   department      Department        @relation(fields: [departmentId], references: [id], onDelete: Restrict)
   hodAssignments  HOD[]
   mentorStudents  Student[]         @relation("TutorGuardian")
+  tgSections      Section[]         @relation("SectionTutorGuardian")
   teacherSubjects TeacherSubject[]
   timetableSlots  TimetableSlot[]
   attendances     Attendance[]
   reviewedCorrections AttendanceCorrectionRequest[]
   reviewedLeaves  LeaveApplication[] @relation("ReviewedTeacherLeaves")
   leaveApplications LeaveApplication[] @relation("TeacherLeaveApplicant")
+  originalDailySubstitutions DailySubstitution[] @relation("OriginalDailySubstitutions")
+  assignedDailySubstitutions DailySubstitution[] @relation("AssignedDailySubstitutions")
 
   @@map("teachers")
 }
@@ -363,6 +369,7 @@ model TimetableSlot {
   classroom   Classroom?   @relation(fields: [classroomId], references: [id], onDelete: SetNull)
   section     Section?     @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   attendances Attendance[]
+  dailySubstitutions DailySubstitution[]
 
   @@map("timetable_slots")
 }
@@ -393,6 +400,7 @@ model Attendance {
   section       Section?           @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   records       AttendanceRecord[]
 
+  @@unique([subjectId, date, periodNumber, sectionId])
   @@map("attendance")
 }
 
@@ -433,6 +441,14 @@ model AttendanceCorrectionRequest {
   status              String    @default("PENDING") @db.VarChar(20) // PENDING, APPROVED, REJECTED
   reviewedByTeacherId String?   @map("reviewed_by_teacher_id") @db.Uuid
   reviewNote          String?   @map("review_note") @db.Text
+  tgRemarks           String?   @map("tg_remarks") @db.Text
+  recommendedAt       DateTime? @map("recommended_at") @db.Timestamptz
+  approvedByHodId     String?   @map("approved_by_hod_id") @db.Uuid
+  hodRemarks          String?   @map("hod_remarks") @db.Text
+  approvedAt          DateTime? @map("approved_at") @db.Timestamptz
+  rejectedBy          String?   @map("rejected_by") @db.VarChar(50)
+  rejectedAt          DateTime? @map("rejected_at") @db.Timestamptz
+  rejectionReason     String?   @map("rejection_reason") @db.Text
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
@@ -456,11 +472,19 @@ model AttendanceConsiderationRequest {
   category         String   @db.VarChar(50) // MEDICAL, SPORTS, CULTURAL, ACADEMIC
   reason           String   @db.Text
   proofDocumentUrl String?  @map("proof_document_url") @db.Text
-  status           String   @default("PENDING") @db.VarChar(30) // PENDING, RECOMMENDED_BY_TG, APPROVED_BY_HOD, REJECTED
-  tgRemarks        String?  @map("tg_remarks") @db.Text
-  hodRemarks       String?  @map("hod_remarks") @db.Text
-  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  periods          Json?
+  status           String    @default("PENDING") @db.VarChar(30) // PENDING, RECOMMENDED_BY_TG, APPROVED_BY_HOD, REJECTED
+  reviewedByTgId   String?   @map("reviewed_by_tg_id") @db.Uuid
+  tgRemarks        String?   @map("tg_remarks") @db.Text
+  recommendedAt    DateTime? @map("recommended_at") @db.Timestamptz
+  approvedByHodId  String?   @map("approved_by_hod_id") @db.Uuid
+  hodRemarks       String?   @map("hod_remarks") @db.Text
+  approvedAt       DateTime? @map("approved_at") @db.Timestamptz
+  rejectedBy       String?   @map("rejected_by") @db.VarChar(50)
+  rejectedAt       DateTime? @map("rejected_at") @db.Timestamptz
+  rejectionReason  String?   @map("rejection_reason") @db.Text
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   student Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
   subject Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
@@ -484,6 +508,16 @@ model LeaveApplication {
   proofDocumentUrl    String?   @map("proof_document_url") @db.Text
   status              String    @default("PENDING") @db.VarChar(30) // PENDING, RECOMMENDED_BY_TG, APPROVED, REJECTED
   reviewedByTeacherId String?   @map("reviewed_by_teacher_id") @db.Uuid
+  tgRemarks           String?   @map("tg_remarks") @db.Text
+  recommendedAt       DateTime? @map("recommended_at") @db.Timestamptz
+  approvedByHodId     String?   @map("approved_by_hod_id") @db.Uuid
+  hodRemarks          String?   @map("hod_remarks") @db.Text
+  approvedAt          DateTime? @map("approved_at") @db.Timestamptz
+  rejectedBy          String?   @map("rejected_by") @db.VarChar(50)
+  rejectedAt          DateTime? @map("rejected_at") @db.Timestamptz
+  rejectionReason     String?   @map("rejection_reason") @db.Text
+  cancelledById       String?   @map("cancelled_by_id") @db.Uuid
+  cancelledAt         DateTime? @map("cancelled_at") @db.Timestamptz
   approvalComments    String?   @map("approval_comments") @db.Text
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz
   updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
@@ -491,6 +525,7 @@ model LeaveApplication {
   student            Student?  @relation("StudentLeaveApplicant", fields: [studentId], references: [id], onDelete: Cascade)
   teacher            Teacher?  @relation("TeacherLeaveApplicant", fields: [teacherId], references: [id], onDelete: Cascade)
   reviewedByTeacher  Teacher?  @relation("ReviewedTeacherLeaves", fields: [reviewedByTeacherId], references: [id], onDelete: SetNull)
+  dailySubstitutions DailySubstitution[]
 
   @@map("leave_applications")
 }
@@ -564,3 +599,48 @@ model AIGeneratedRecord {
 
   @@map("ai_generated_records")
 }
+
+// ----------------------------------------------------------------------------
+// 24. Daily Substitutions (LOGIC-01: Non-destructive daily schedule substitution)
+// ----------------------------------------------------------------------------
+model DailySubstitution {
+  id                  String            @id @default(uuid()) @db.Uuid
+  slotId              String            @map("slot_id") @db.Uuid
+  date                DateTime          @db.Date
+  originalTeacherId   String            @map("original_teacher_id") @db.Uuid
+  substituteTeacherId String            @map("substitute_teacher_id") @db.Uuid
+  leaveApplicationId  String?           @map("leave_application_id") @db.Uuid
+  status              String            @default("ACTIVE") @db.VarChar(20) // ACTIVE, CANCELLED
+  notes               String?           @db.Text
+  createdById         String?           @map("created_by_id") @db.Uuid
+  createdAt           DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  slot                TimetableSlot     @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  originalTeacher     Teacher           @relation("OriginalDailySubstitutions", fields: [originalTeacherId], references: [id], onDelete: Restrict)
+  substituteTeacher   Teacher           @relation("AssignedDailySubstitutions", fields: [substituteTeacherId], references: [id], onDelete: Restrict)
+  leaveApplication    LeaveApplication? @relation(fields: [leaveApplicationId], references: [id], onDelete: SetNull)
+  createdBy           User?             @relation("CreatedDailySubstitutions", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([slotId, date])
+  @@index([date])
+  @@index([substituteTeacherId])
+  @@map("daily_substitutions")
+}
+
+// ----------------------------------------------------------------------------
+// 25. Password Reset Tokens (ARCH-03: Persistent hashed OTP credentials)
+// ----------------------------------------------------------------------------
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  email     String    @db.VarChar(255)
+  otpHash   String    @map("otp_hash") @db.VarChar(255)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz
+  attempts  Int       @default(0)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([email])
+  @@map("password_reset_tokens")
+}
+

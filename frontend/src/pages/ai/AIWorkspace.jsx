@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { aiApi } from '../../api/aiApi';
 import { fileApi } from '../../api/fileApi';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Bot,
   Sparkles,
@@ -20,7 +20,6 @@ import {
   Plus,
   Trash2,
   Search,
-  ArrowLeft,
   ChevronRight,
   ChevronDown,
   Layers,
@@ -32,8 +31,11 @@ import {
   ExternalLink,
   MessageSquare,
   HelpCircle,
-  FileCheck
+  FileCheck,
+  PanelLeftClose,
+  PanelLeft
 } from 'lucide-react';
+import { Badge, Button } from '../../components/common';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -64,7 +66,7 @@ export default function AIWorkspace() {
       role: 'assistant',
       agentUsed: 'ERPAssistantAgent',
       text: `## 🚀 Welcome to CampusFlow AI Workspace\n\nI am your **Universal Departmental AI Operating Layer**. I execute real ERP actions, analyze files, reason over timetables and attendance, and coordinate departmental operations under **${(currentRole || 'Student').toUpperCase()}** authorization.\n\n### What would you like me to do today?\n- **Files:** Attach PDFs, Excel sheets, PPTs, or images for immediate reasoning.\n- **ERP Actions:** Ask me to check attendance, view or generate schedules, process leaves, or inspect faculty workloads.\n- **Destructive Operations:** High-impact modifications will always prompt for your explicit confirmation first.`,
-      time: 'Just now'
+      timestamp: new Date().toISOString()
     }
   ]);
 
@@ -74,7 +76,9 @@ export default function AIWorkspace() {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [selectedAgent, setSelectedAgent] = useState(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    return typeof window !== 'undefined' ? window.innerWidth >= 1024 : true;
+  });
 
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
@@ -84,6 +88,42 @@ export default function AIWorkspace() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isGenerating]);
+
+  // Timestamp formatting helper
+  const formatMessageTimestamp = (dateInput) => {
+    if (!dateInput) return 'Just now';
+    const date = new Date(dateInput);
+    if (isNaN(date.getTime())) return String(dateInput);
+    const now = new Date();
+    const diffSec = Math.floor((now - date) / 1000);
+    if (diffSec < 60) return 'Just now';
+    if (diffSec < 3600) return `${Math.floor(diffSec / 60)} min ago`;
+    const isToday = now.toDateString() === date.toDateString();
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return timeStr;
+    const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return `${dateStr}, ${timeStr}`;
+  };
+
+  // Intent label mapping helper
+  const formatIntentLabel = (intent) => {
+    if (!intent) return null;
+    const clean = String(intent).toUpperCase();
+    if (clean === 'GENERAL_QUERY') {
+      return currentRole === 'admin' ? 'General Query' : null;
+    }
+    const mapping = {
+      'TIMETABLE_GENERATION': 'Timetable',
+      'GENERATETIMETABLE': 'Timetable',
+      'ATTENDANCE_QUERY': 'Attendance',
+      'GETTEACHERSONLEAVE': 'Faculty Availability',
+      'MARKTEACHERLEAVE': 'Leave Processing',
+      'DEACTIVATETEACHER': 'Faculty Management',
+      'ACTION_EXECUTION': 'ERP Action',
+      'FILEPROCESSINGSTATUS': 'Document Processing'
+    };
+    return mapping[clean] || (currentRole === 'admin' ? intent : 'ERP Assistant');
+  };
 
   // Load user conversation list
   const loadConversations = async () => {
@@ -139,7 +179,7 @@ export default function AIWorkspace() {
     { id: 'leave_management', name: 'Leave Workflow Agent', desc: 'Applies, reviews, and sanctions teacher & student leave applications', roles: ['ALL'] },
     { id: 'rag', name: 'Document Intelligence Agent', desc: 'Performs semantic retrieval over syllabus, PDFs, policies in Qdrant', roles: ['ALL'] },
     { id: 'spreadsheet', name: 'Spreadsheet Intelligence Agent', desc: 'Direct pandas calculation over XLSX/CSV data with zero hallucination', roles: ['ALL'] },
-    { id: 'vision', name: 'Vision Intelligence Agent', desc: 'Qwen 2.7B visual reasoning over timetables, diagrams, handwritten charts', roles: ['ALL'] },
+    { id: 'vision', name: 'Vision Intelligence Agent', desc: 'Qwen visual reasoning over timetables, diagrams, handwritten charts', roles: ['ALL'] },
     { id: 'file_generation', name: 'Report & Export Agent', desc: 'Generates downloadable Excel spreadsheets and printable official PDFs', roles: ['ALL'] }
   ];
 
@@ -191,7 +231,7 @@ export default function AIWorkspace() {
         role: 'assistant',
         agentUsed: 'ERPAssistantAgent',
         text: `### 💬 New AI Session Initialized\n\nReady to assist you with departmental records, document intelligence, or autonomous ERP operations. What would you like to do?`,
-        time: 'Just now'
+        timestamp: new Date().toISOString()
       }
     ]);
     textareaRef.current?.focus();
@@ -209,7 +249,7 @@ export default function AIWorkspace() {
           text: m.content,
           citations: m.citations || [],
           toolCalls: m.toolCalls || [],
-          time: new Date(m.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          timestamp: m.timestamp || new Date().toISOString()
         }));
         setMessages(mapped);
       }
@@ -238,7 +278,7 @@ export default function AIWorkspace() {
     if (!file) return;
 
     setUploadingFile(true);
-    setUploadProgress('Uploading to ImageKit & queueing processing...');
+    setUploadProgress('Uploading to cloud storage & queueing processing...');
 
     try {
       const res = await fileApi.upload(file, conversationId);
@@ -258,8 +298,8 @@ export default function AIWorkspace() {
             id: `sys-upload-${Date.now()}`,
             role: 'assistant',
             agentUsed: 'DocumentIntelligenceAgent',
-            text: `📁 **File Uploaded:** \`${file.name}\` (${(file.size / 1024).toFixed(1)} KB)\n\nThe Universal File Intelligence Pipeline has queued this document for extraction, chunking, and Qdrant vector indexing. You can now ask questions directly about this document!`,
-            time: 'Just now'
+            text: `📁 **File Attached:** \`${file.name}\` (${(file.size / 1024).toFixed(1)} KB)\n\nThe Universal File Intelligence Pipeline has queued this document for extraction, chunking, and semantic indexing. You can now execute operations or ask questions referencing this file!`,
+            timestamp: new Date().toISOString()
           }
         ]);
 
@@ -280,12 +320,13 @@ export default function AIWorkspace() {
     const query = (textToSend !== undefined ? textToSend : prompt).trim();
     if (!query && !attachedFile && !confirmedAction) return;
 
+    const fileRef = attachedFile ? { ...attachedFile } : null;
     const userMessage = {
       id: `usr-${Date.now()}`,
       role: 'user',
-      text: query || (confirmedAction ? `[Confirmed ${confirmedAction.tool}]` : 'Analyze uploaded file'),
-      attachment: attachedFile ? { ...attachedFile } : null,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      text: query || (confirmedAction ? `[Confirmed ${confirmedAction.tool}]` : `Analyze ${fileRef?.name || 'uploaded file'}`),
+      attachment: fileRef,
+      timestamp: new Date().toISOString()
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -300,7 +341,9 @@ export default function AIWorkspace() {
         conversation_id: conversationId,
         role: currentRole || 'student',
         user_id: currentUser?.id || 'user_default',
-        confirmed_action: confirmedAction
+        confirmed_action: confirmedAction,
+        attachment: fileRef,
+        file_id: fileRef?.id || null
       });
 
       const answerText = res?.answer || res?.response || 'Operation processed by ERP agent.';
@@ -316,7 +359,7 @@ export default function AIWorkspace() {
         confirmationAction: res?.confirmation_action || null,
         generatedFiles: res?.generated_files || [],
         citations: res?.citations || [],
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        timestamp: new Date().toISOString()
       };
 
       setMessages(prev => [...prev, assistantMessage]);
@@ -327,8 +370,10 @@ export default function AIWorkspace() {
         {
           id: `err-${Date.now()}`,
           role: 'assistant',
-          text: `⚠️ **Agent Execution Error:** ${err.message || 'The AI service encountered an issue. Please try again.'}`,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          isError: true,
+          lastPrompt: query,
+          text: `⚠️ **Agent Execution Notice:** ${err.message || 'The AI service encountered a temporary timeout or connection delay. Please try again.'}`,
+          timestamp: new Date().toISOString()
         }
       ]);
     } finally {
@@ -349,74 +394,82 @@ export default function AIWorkspace() {
     (c.title || c.conversationId).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const displayName = (!currentUser?.name || currentUser?.name.toLowerCase() === 'hod')
+    ? (currentRole === 'hod' ? 'Dr. Alok Verma' : 'Authorized User')
+    : currentUser.name;
+
   return (
-    <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#F8FAFC', overflow: 'hidden', fontFamily: 'Inter, system-ui, sans-serif' }}>
-      
-      {/* ----------------- SIDEBAR ----------------- */}
+    <div className="ai-workspace-container">
+      {/* Mobile Backdrop for secondary sessions panel */}
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-35 lg:hidden"
+        />
+      )}
+
+      {/* ----------------- SECONDARY PANEL (SESSIONS & TOOLS) ----------------- */}
       <aside
+        className="ai-sidebar"
         style={{
-          width: isSidebarOpen ? '320px' : '0px',
-          minWidth: isSidebarOpen ? '320px' : '0px',
-          backgroundColor: '#0F172A',
-          color: '#F8FAFC',
+          width: isSidebarOpen ? '300px' : '0px',
+          minWidth: isSidebarOpen ? '300px' : '0px',
+          backgroundColor: 'var(--surface)',
+          borderRight: '1px solid var(--border-subtle)',
           display: 'flex',
           flexDirection: 'column',
-          transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
           overflow: 'hidden',
-          zIndex: 30,
-          borderRight: '1px solid rgba(255, 255, 255, 0.1)'
+          zIndex: 40
         }}
       >
-        {/* Brand Header */}
-        <div style={{ padding: '1.25rem 1.25rem 1rem', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.4)' }}>
-              <Bot size={22} color="#FFFFFF" />
+        {/* Panel Header */}
+        <div style={{ padding: '1rem 1.15rem 0.85rem', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--primary-50)', color: 'var(--primary-700)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Bot size={18} />
             </div>
             <div>
-              <div style={{ fontSize: '15px', fontWeight: 800, letterSpacing: '-0.02em', color: '#FFFFFF' }}>CampusFlow AI</div>
-              <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>Universal ERP Operating Layer</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: '13px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.2 }}>
+                Chat Sessions
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>History & Documents</div>
             </div>
           </div>
           <button
             onClick={() => setIsSidebarOpen(false)}
-            style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
-            title="Collapse sidebar"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer border border-transparent"
+            title="Collapse sessions panel"
+            aria-label="Collapse panel"
           >
-            <ChevronRight size={18} />
+            <PanelLeftClose size={16} />
           </button>
         </div>
 
         {/* New Chat Button */}
-        <div style={{ padding: '0.85rem 1.25rem' }}>
+        <div style={{ padding: '0.75rem 1rem' }}>
           <button
             onClick={handleNewChat}
+            className="btn btn-primary"
             style={{
               width: '100%',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: '0.5rem',
-              padding: '0.75rem 1rem',
-              backgroundColor: '#1E293B',
-              color: '#FFFFFF',
-              border: '1px solid rgba(255, 255, 255, 0.12)',
-              borderRadius: '12px',
-              fontSize: '13px',
+              borderRadius: 'var(--radius-xl)',
+              fontSize: 'var(--text-xs)',
               fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease'
+              padding: '0.65rem 1rem'
             }}
-            onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#2563EB'}
-            onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1E293B'}
           >
-            <Plus size={16} />
+            <Plus size={15} />
             <span>New Chat Session</span>
           </button>
         </div>
 
         {/* Navigation Tabs */}
-        <div style={{ display: 'flex', borderBottom: '1px solid rgba(255, 255, 255, 0.08)', padding: '0 0.75rem' }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border-subtle)', padding: '0 0.5rem' }}>
           {[
             { id: 'chats', label: 'Chats', icon: MessageSquare },
             { id: 'documents', label: 'Docs', icon: FileText },
@@ -429,20 +482,12 @@ export default function AIWorkspace() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
+                className={`ai-sidebar-nav-btn ${active ? 'active' : ''}`}
                 style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.35rem',
-                  padding: '0.65rem 0.25rem',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: active ? '2px solid #3B82F6' : '2px solid transparent',
-                  color: active ? '#FFFFFF' : '#94A3B8',
+                  padding: '0.6rem 0.25rem',
                   fontSize: '12px',
                   fontWeight: active ? 700 : 500,
-                  cursor: 'pointer'
+                  color: active ? 'var(--primary-700)' : 'var(--text-secondary)'
                 }}
               >
                 <Icon size={14} />
@@ -455,21 +500,21 @@ export default function AIWorkspace() {
         {/* Tab 1: Recent Chats */}
         {activeTab === 'chats' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <div style={{ padding: '0.75rem 1.25rem 0.5rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#1E293B', padding: '0.45rem 0.75rem', borderRadius: '8px' }}>
-                <Search size={14} color="#64748B" />
+            <div style={{ padding: '0.65rem 1rem 0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--surface-low)', padding: '0.45rem 0.75rem', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)' }}>
+                <Search size={14} className="text-slate-400" />
                 <input
                   type="text"
                   placeholder="Search chats..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{ background: 'none', border: 'none', outline: 'none', color: '#FFFFFF', fontSize: '12px', width: '100%' }}
+                  style={{ background: 'none', border: 'none', outline: 'none', color: 'var(--text-primary)', fontSize: '12px', width: '100%' }}
                 />
               </div>
             </div>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0.5rem 0.75rem' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '0.35rem 0.65rem' }}>
               {filteredConversations.length === 0 ? (
-                <div style={{ padding: '2rem 1rem', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
+                <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
                   No saved conversations found.
                 </div>
               ) : (
@@ -480,27 +525,28 @@ export default function AIWorkspace() {
                       key={c._id || c.conversationId}
                       onClick={() => handleSelectConversation(c)}
                       style={{
-                        padding: '0.65rem 0.85rem',
-                        borderRadius: '10px',
+                        padding: '0.6rem 0.75rem',
+                        borderRadius: 'var(--radius-lg)',
                         marginBottom: '4px',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'space-between',
                         cursor: 'pointer',
-                        backgroundColor: isCurrent ? '#2563EB' : 'transparent',
-                        color: isCurrent ? '#FFFFFF' : '#CBD5E1',
+                        backgroundColor: isCurrent ? 'var(--primary-50)' : 'transparent',
+                        color: isCurrent ? 'var(--primary-700)' : 'var(--text-primary)',
+                        border: isCurrent ? '1px solid var(--primary-200)' : '1px solid transparent',
                         transition: 'background 0.15s ease'
                       }}
-                      onMouseOver={(e) => !isCurrent && (e.currentTarget.style.backgroundColor = '#1E293B')}
-                      onMouseOut={(e) => !isCurrent && (e.currentTarget.style.backgroundColor = 'transparent')}
+                      className="hover:bg-slate-100"
                     >
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px', fontWeight: isCurrent ? 600 : 400 }}>
+                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px', fontWeight: isCurrent ? 700 : 500 }}>
                         {c.title || c.conversationId}
                       </div>
                       <button
                         onClick={(e) => handleDeleteConversation(e, c.conversationId)}
-                        style={{ background: 'none', border: 'none', color: isCurrent ? 'rgba(255,255,255,0.7)' : '#64748B', cursor: 'pointer', padding: '2px' }}
+                        style={{ background: 'none', border: 'none', color: isCurrent ? 'var(--primary-500)' : 'var(--text-muted)', cursor: 'pointer', padding: '2px' }}
                         title="Delete chat"
+                        aria-label="Delete chat"
                       >
                         <Trash2 size={13} />
                       </button>
@@ -514,13 +560,13 @@ export default function AIWorkspace() {
 
         {/* Tab 2: User Documents */}
         {activeTab === 'documents' && (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
-            <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748B', fontWeight: 700, padding: '0 0.5rem 0.5rem' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0.65rem' }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, padding: '0 0.5rem 0.5rem' }}>
               Indexed Documents ({userDocuments.length})
             </div>
             {userDocuments.length === 0 ? (
-              <div style={{ padding: '2rem 1rem', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
-                No uploaded documents yet. Use the "+ Attach" button below to upload course files.
+              <div style={{ padding: '2rem 1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
+                No uploaded documents yet. Use "+ Attach" below to upload files.
               </div>
             ) : (
               userDocuments.map(doc => (
@@ -528,32 +574,31 @@ export default function AIWorkspace() {
                   key={doc._id}
                   onClick={() => handleSendMessage(`Analyze ${doc.originalName || doc.filename} and summarize its key contents.`)}
                   style={{
-                    backgroundColor: '#1E293B',
-                    padding: '0.75rem',
-                    borderRadius: '10px',
-                    marginBottom: '8px',
+                    backgroundColor: 'var(--surface)',
+                    padding: '0.65rem',
+                    borderRadius: 'var(--radius-lg)',
+                    marginBottom: '6px',
                     cursor: 'pointer',
-                    transition: 'border 0.2s ease',
-                    border: '1px solid rgba(255,255,255,0.06)'
+                    transition: 'all 0.15s ease',
+                    border: '1px solid var(--border-subtle)'
                   }}
-                  onMouseOver={(e) => e.currentTarget.style.borderColor = '#3B82F6'}
-                  onMouseOut={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'}
+                  className="hover:border-primary hover:bg-blue-50/40"
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '4px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '3px' }}>
                     {doc.fileType === 'pdf' && <FileText size={15} color="#EF4444" />}
                     {['xlsx', 'xls', 'csv'].includes(doc.fileType) && <FileSpreadsheet size={15} color="#10B981" />}
                     {['pptx', 'ppt'].includes(doc.fileType) && <Presentation size={15} color="#F59E0B" />}
                     {['png', 'jpg', 'jpeg'].includes(doc.fileType) && <FileImage size={15} color="#3B82F6" />}
-                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#F1F5F9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {doc.originalName || doc.filename}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11px', color: '#94A3B8' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '10.5px', color: 'var(--text-muted)' }}>
                     <span>{doc.extractedContent?.chunksIndexed || 0} vectors</span>
                     <span style={{
-                      backgroundColor: doc.processingStatus === 'completed' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
-                      color: doc.processingStatus === 'completed' ? '#10B981' : '#F59E0B',
-                      padding: '2px 6px',
+                      backgroundColor: doc.processingStatus === 'completed' ? 'var(--success-50)' : 'var(--warning-50)',
+                      color: doc.processingStatus === 'completed' ? 'var(--success-700)' : 'var(--warning-700)',
+                      padding: '1px 5px',
                       borderRadius: '4px',
                       fontWeight: 700
                     }}>
@@ -568,8 +613,8 @@ export default function AIWorkspace() {
 
         {/* Tab 3: Specialized Agents */}
         {activeTab === 'agents' && (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
-            <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748B', fontWeight: 700, padding: '0 0.5rem 0.5rem' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0.65rem' }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, padding: '0 0.5rem 0.5rem' }}>
               10 Specialized Agents
             </div>
             {specializedAgents.map(ag => (
@@ -577,16 +622,22 @@ export default function AIWorkspace() {
                 key={ag.id}
                 onClick={() => setSelectedAgent(ag)}
                 style={{
-                  backgroundColor: selectedAgent?.id === ag.id ? '#2563EB' : '#1E293B',
-                  padding: '0.75rem',
-                  borderRadius: '10px',
-                  marginBottom: '8px',
+                  backgroundColor: selectedAgent?.id === ag.id ? 'var(--primary-50)' : 'var(--surface)',
+                  padding: '0.65rem',
+                  borderRadius: 'var(--radius-lg)',
+                  marginBottom: '6px',
                   cursor: 'pointer',
-                  border: '1px solid rgba(255,255,255,0.06)'
+                  border: selectedAgent?.id === ag.id ? '1.5px solid var(--primary-500)' : '1px solid var(--border-subtle)',
+                  transition: 'all 0.15s ease'
                 }}
+                className="hover:border-primary"
               >
-                <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', marginBottom: '2px' }}>{ag.name}</div>
-                <div style={{ fontSize: '11px', color: selectedAgent?.id === ag.id ? '#E0E7FF' : '#94A3B8', lineHeight: 1.4 }}>{ag.desc}</div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: selectedAgent?.id === ag.id ? 'var(--primary-700)' : 'var(--text-primary)', marginBottom: '2px' }}>
+                  {ag.name}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', lineHeight: 1.35 }}>
+                  {ag.desc}
+                </div>
               </div>
             ))}
           </div>
@@ -594,8 +645,8 @@ export default function AIWorkspace() {
 
         {/* Tab 4: Role-Based Quick Tools */}
         {activeTab === 'tools' && (
-          <div style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
-            <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748B', fontWeight: 700, padding: '0 0.5rem 0.5rem' }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '0.65rem' }}>
+            <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, padding: '0 0.5rem 0.5rem' }}>
               Available Tools ({currentRole?.toUpperCase()})
             </div>
             {getRoleTools().map((t, idx) => (
@@ -605,38 +656,38 @@ export default function AIWorkspace() {
                 style={{
                   width: '100%',
                   textAlign: 'left',
-                  backgroundColor: '#1E293B',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  color: '#F1F5F9',
-                  padding: '0.75rem',
-                  borderRadius: '10px',
-                  marginBottom: '8px',
+                  backgroundColor: 'var(--surface)',
+                  border: '1px solid var(--border-subtle)',
+                  color: 'var(--text-primary)',
+                  padding: '0.65rem 0.75rem',
+                  borderRadius: 'var(--radius-lg)',
+                  marginBottom: '6px',
                   fontSize: '12px',
                   fontWeight: 600,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between'
+                  justifyContent: 'space-between',
+                  transition: 'all 0.15s ease'
                 }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#2563EB'}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#1E293B'}
+                className="hover:bg-blue-50 hover:border-blue-300 hover:text-primary"
               >
                 <span>{t.name}</span>
-                <ChevronRight size={13} color="#94A3B8" />
+                <ChevronRight size={13} className="text-slate-400" />
               </button>
             ))}
           </div>
         )}
 
-        {/* Sidebar Footer User Info */}
-        <div style={{ padding: '0.85rem 1.25rem', borderTop: '1px solid rgba(255, 255, 255, 0.08)', backgroundColor: '#0B1120', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        {/* Secondary Panel Footer */}
+        <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border-subtle)', backgroundColor: 'var(--surface-low)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-            <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#3B82F6', color: '#FFFFFF', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px' }}>
-              {currentUser?.name ? currentUser.name.charAt(0) : 'U'}
+            <div style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: 'var(--primary-100)', color: 'var(--primary-700)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '12px' }}>
+              {displayName.charAt(0)}
             </div>
             <div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF' }}>{currentUser?.name || 'Authorized User'}</div>
-              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: '#10B981', fontWeight: 800 }}>{currentRole}</div>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)' }}>{displayName}</div>
+              <div style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--secondary)', fontWeight: 800 }}>{currentRole}</div>
             </div>
           </div>
           <button
@@ -644,71 +695,80 @@ export default function AIWorkspace() {
               loadObservability();
               setObservabilityOpen(true);
             }}
-            style={{ background: 'none', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' }}
-            title="System Observability"
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-500 hover:text-primary hover:bg-white transition-colors cursor-pointer border border-transparent"
+            title="System Observability & Vector Status"
+            aria-label="Observability stats"
           >
-            <Activity size={18} />
+            <Activity size={16} />
           </button>
         </div>
       </aside>
 
-      {/* ----------------- MAIN WORKSPACE ----------------- */}
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+      {/* ----------------- MAIN WORKSPACE CONTENT ----------------- */}
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', position: 'relative', backgroundColor: 'var(--bg-canvas)' }}>
         
-        {/* Top Header Bar */}
+        {/* Unified Workspace Top Bar */}
         <header style={{
-          height: '60px',
-          backgroundColor: '#FFFFFF',
-          borderBottom: '1px solid #E2E8F0',
+          height: '56px',
+          backgroundColor: 'var(--surface)',
+          borderBottom: '1px solid var(--border-subtle)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          padding: '0 1.5rem',
-          zIndex: 10
+          padding: '0 1.25rem',
+          zIndex: 10,
+          flexShrink: 0
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
             {!isSidebarOpen && (
               <button
                 onClick={() => setIsSidebarOpen(true)}
-                style={{ background: '#F1F5F9', border: 'none', padding: '6px 10px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600 }}
+                className="btn btn-outline text-xs py-1.5 px-2.5"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                title="Open Chat Sessions & Tools Panel"
+                aria-label="Open sessions panel"
               >
-                <Bot size={16} color="#2563EB" />
-                <span>Menu</span>
+                <PanelLeft size={15} className="text-primary" />
+                <span className="font-semibold">Sessions</span>
               </button>
             )}
-            <Link
-              to={`/${currentRole}`}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', color: '#64748B', textDecoration: 'none', fontSize: '13px', fontWeight: 600 }}
-            >
-              <ArrowLeft size={16} />
-              <span>Back to Dashboard</span>
-            </Link>
-            <span style={{ color: '#CBD5E1' }}>|</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#10B981' }} />
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A' }}>
-                {selectedAgent ? selectedAgent.name : 'Universal Agentic Operating Layer'}
+
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <h1 style={{ fontFamily: 'var(--font-heading)', fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', margin: 0, lineHeight: 1.2 }}>
+                  AI Workspace
+                </h1>
+                {selectedAgent && (
+                  <Badge variant="primary" size="xs">
+                    {selectedAgent.name}
+                  </Badge>
+                )}
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', lineHeight: 1.1 }}>
+                Ask, automate and analyze
               </span>
             </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <span style={{
-              fontSize: '11px',
-              backgroundColor: '#EFF6FF',
-              color: '#1D4ED8',
-              padding: '4px 10px',
-              borderRadius: '20px',
-              fontWeight: 700,
-              border: '1px solid #BFDBFE'
-            }}>
-              Qwen Vision + GPT-OSS Active
-            </span>
+            {/* Status Pill: AI Assistant · Online */}
+            <div
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold shadow-xs"
+              title={currentRole === 'admin' ? 'Active Models: Qwen 2.5-Coder Vision + FastAPI Orchestrator' : 'CampusFlow AI Services Active'}
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>AI Assistant · Online</span>
+              {currentRole === 'admin' && (
+                <span className="text-[10px] text-emerald-600 border-l border-emerald-300 pl-1.5 ml-0.5">
+                  Qwen + OSS
+                </span>
+              )}
+            </div>
           </div>
         </header>
 
         {/* Conversation Thread Area */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
           {messages.map((msg, index) => {
             const isUser = msg.role === 'user';
             return (
@@ -720,29 +780,24 @@ export default function AIWorkspace() {
                   width: '100%'
                 }}
               >
-                <div style={{
-                  maxWidth: isUser ? '75%' : '85%',
-                  backgroundColor: isUser ? '#2563EB' : '#FFFFFF',
-                  color: isUser ? '#FFFFFF' : '#0F172A',
-                  padding: '1.25rem 1.5rem',
-                  borderRadius: isUser ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
-                  boxShadow: isUser
-                    ? '0 4px 14px rgba(37, 99, 235, 0.25)'
-                    : '0 2px 8px rgba(15, 23, 42, 0.05), 0 0 0 1px #E2E8F0',
-                  lineHeight: 1.6
-                }}>
+                <div
+                  className={isUser ? 'ai-bubble-user' : 'ai-bubble-assistant'}
+                  style={{
+                    maxWidth: isUser ? '75%' : '85%'
+                  }}
+                >
                   {/* Assistant Header Badge */}
                   {!isUser && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', paddingBottom: '0.5rem', borderBottom: '1px solid #F1F5F9' }}>
-                      <div style={{ width: '22px', height: '22px', borderRadius: '6px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-subtle)' }}>
+                      <div style={{ width: '22px', height: '22px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--primary-50)', color: 'var(--primary-600)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <Bot size={14} />
                       </div>
-                      <span style={{ fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                      <span style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)' }}>
                         {msg.agentUsed || 'ERPAssistantAgent'}
                       </span>
-                      {msg.detectedIntent && (
-                        <span style={{ fontSize: '10px', backgroundColor: '#F1F5F9', color: '#64748B', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                          {msg.detectedIntent}
+                      {formatIntentLabel(msg.detectedIntent) && (
+                        <span className="badge badge-slate text-[10px]">
+                          {formatIntentLabel(msg.detectedIntent)}
                         </span>
                       )}
                     </div>
@@ -750,32 +805,32 @@ export default function AIWorkspace() {
 
                   {/* Attachment indicator if user attached a file */}
                   {msg.attachment && (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(255,255,255,0.2)', padding: '4px 10px', borderRadius: '8px', marginBottom: '0.5rem', fontSize: '12px', fontWeight: 600 }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', backgroundColor: 'rgba(255,255,255,0.2)', padding: '4px 10px', borderRadius: 'var(--radius-md)', marginBottom: '0.5rem', fontSize: 'var(--text-xs)', fontWeight: 600, color: '#FFFFFF' }}>
                       <Paperclip size={13} />
                       <span>{msg.attachment.name}</span>
                     </div>
                   )}
 
-                  {/* Visual Tool Execution Step Indicators (Section 6) */}
+                  {/* Visual Tool Execution Step Indicators */}
                   {msg.toolCalls && msg.toolCalls.length > 0 && (
                     <div style={{
-                      backgroundColor: '#F8FAFC',
-                      border: '1px solid #E2E8F0',
-                      borderRadius: '10px',
+                      backgroundColor: 'var(--surface-low)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-lg)',
                       padding: '0.75rem 1rem',
                       marginBottom: '1rem'
                     }}>
-                      <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#64748B', fontWeight: 800, marginBottom: '6px' }}>
+                      <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 800, marginBottom: '6px' }}>
                         ⚡ Autonomous Tool Execution
                       </div>
                       {msg.toolCalls.map((tc, tcIdx) => (
                         <div key={tcIdx} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <div style={{ fontSize: '12px', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <CheckCircle2 size={14} color="#10B981" />
+                          <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <CheckCircle2 size={14} color="var(--secondary)" />
                             <span>Tool: <code>{tc.tool}</code></span>
                           </div>
                           {tc.steps && tc.steps.map((st, sIdx) => (
-                            <div key={sIdx} style={{ fontSize: '12px', color: '#475569', paddingLeft: '1.25rem' }}>
+                            <div key={sIdx} style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', paddingLeft: '1.25rem' }}>
                               ✓ {st}
                             </div>
                           ))}
@@ -785,77 +840,69 @@ export default function AIWorkspace() {
                   )}
 
                   {/* Main Markdown Content */}
-                  <div className="prose max-w-none" style={{ fontSize: '14px' }}>
+                  <div className="ai-prose">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
                       rehypePlugins={[rehypeKatex]}
-                      components={{
-                        table: ({ node, ...props }) => (
-                          <div style={{ overflowX: 'auto', margin: '1rem 0' }}>
-                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', border: '1px solid #E2E8F0' }} {...props} />
-                          </div>
-                        ),
-                        th: ({ node, ...props }) => (
-                          <th style={{ backgroundColor: '#F8FAFC', padding: '8px 12px', textAlign: 'left', fontWeight: 700, border: '1px solid #E2E8F0', color: '#0F172A' }} {...props} />
-                        ),
-                        td: ({ node, ...props }) => (
-                          <td style={{ padding: '8px 12px', border: '1px solid #E2E8F0', color: '#334155' }} {...props} />
-                        ),
-                        code: ({ node, inline, ...props }) => (
-                          inline
-                            ? <code style={{ backgroundColor: isUser ? 'rgba(255,255,255,0.25)' : '#F1F5F9', padding: '2px 5px', borderRadius: '4px', fontSize: '12px', fontFamily: 'monospace' }} {...props} />
-                            : <pre style={{ backgroundColor: '#0F172A', color: '#F8FAFC', padding: '1rem', borderRadius: '8px', overflowX: 'auto', fontSize: '13px' }} {...props} />
-                        )
-                      }}
                     >
                       {msg.text}
                     </ReactMarkdown>
                   </div>
 
-                  {/* Destructive Action Interactive Confirmation Card (Section 5) */}
+                  {/* Error State with Actionable Retry Button */}
+                  {msg.isError && (
+                    <div style={{
+                      marginTop: '0.75rem',
+                      padding: '0.75rem 1rem',
+                      backgroundColor: 'var(--danger-50)',
+                      border: '1px solid var(--danger-200)',
+                      borderRadius: 'var(--radius-lg)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.75rem'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger-700)', fontSize: 'var(--text-xs)', fontWeight: 600 }}>
+                        <AlertTriangle size={15} />
+                        <span>Execution issue detected. Would you like to retry?</span>
+                      </div>
+                      <button
+                        onClick={() => handleSendMessage(msg.lastPrompt || prompt)}
+                        className="btn btn-outline text-xs py-1 px-3 font-semibold"
+                        style={{ borderColor: 'var(--danger-300)', color: 'var(--danger-700)', backgroundColor: '#FFFFFF' }}
+                      >
+                        <RotateCcw size={12} className="mr-1 inline" />
+                        Retry
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Destructive Action Interactive Confirmation Card */}
                   {msg.requiresConfirmation && msg.confirmationAction && (
                     <div style={{
                       marginTop: '1rem',
                       padding: '1rem',
-                      backgroundColor: '#FEF2F2',
-                      border: '1px solid #FCA5A5',
-                      borderRadius: '12px',
+                      backgroundColor: 'var(--danger-50)',
+                      border: '1px solid var(--danger-200)',
+                      borderRadius: 'var(--radius-xl)',
                       display: 'flex',
                       flexDirection: 'column',
                       gap: '0.75rem'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#B91C1C', fontWeight: 700, fontSize: '13px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--danger-700)', fontWeight: 700, fontSize: 'var(--text-xs)' }}>
                         <AlertTriangle size={16} />
                         <span>High-Impact Action Verification</span>
                       </div>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         <button
                           onClick={() => handleSendMessage('Confirm', msg.confirmationAction)}
-                          style={{
-                            padding: '0.5rem 1.25rem',
-                            backgroundColor: '#DC2626',
-                            color: '#FFFFFF',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontWeight: 700,
-                            fontSize: '12px',
-                            cursor: 'pointer'
-                          }}
+                          className="btn btn-danger text-xs py-1.5 px-3 font-bold"
                         >
                           Confirm & Execute
                         </button>
                         <button
-                          onClick={() => setMessages(prev => [...prev, { id: `cancel-${Date.now()}`, role: 'assistant', text: 'Action cancelled.', time: 'Just now' }])}
-                          style={{
-                            padding: '0.5rem 1.25rem',
-                            backgroundColor: '#E2E8F0',
-                            color: '#475569',
-                            border: 'none',
-                            borderRadius: '8px',
-                            fontWeight: 600,
-                            fontSize: '12px',
-                            cursor: 'pointer'
-                          }}
+                          onClick={() => setMessages(prev => [...prev, { id: `cancel-${Date.now()}`, role: 'assistant', text: 'Action cancelled.', timestamp: new Date().toISOString() }])}
+                          className="btn btn-outline text-xs py-1.5 px-3"
                         >
                           Cancel
                         </button>
@@ -863,7 +910,7 @@ export default function AIWorkspace() {
                     </div>
                   )}
 
-                  {/* Generated Files Card (Section 14) */}
+                  {/* Generated Files Card */}
                   {msg.generatedFiles && msg.generatedFiles.length > 0 && (
                     <div style={{ marginTop: '1rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                       {msg.generatedFiles.map((gf, gIdx) => (
@@ -873,34 +920,24 @@ export default function AIWorkspace() {
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            backgroundColor: '#F0FDF4',
-                            border: '1px solid #BBF7D0',
+                            backgroundColor: 'var(--success-50)',
+                            border: '1px solid var(--success-200)',
                             padding: '0.75rem 1rem',
-                            borderRadius: '10px'
+                            borderRadius: 'var(--radius-lg)'
                           }}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
-                            <FileSpreadsheet size={18} color="#15803D" />
+                            <FileSpreadsheet size={18} color="var(--success-700)" />
                             <div>
-                              <div style={{ fontSize: '13px', fontWeight: 700, color: '#166534' }}>{gf.name}</div>
-                              <div style={{ fontSize: '11px', color: '#15803D' }}>Real generated deliverable ready</div>
+                              <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--success-900)' }}>{gf.name}</div>
+                              <div style={{ fontSize: '11px', color: 'var(--success-700)' }}>Generated deliverable ready</div>
                             </div>
                           </div>
                           <a
                             href={gf.url}
                             download={gf.name}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '0.35rem',
-                              backgroundColor: '#166534',
-                              color: '#FFFFFF',
-                              padding: '6px 12px',
-                              borderRadius: '6px',
-                              textDecoration: 'none',
-                              fontSize: '12px',
-                              fontWeight: 700
-                            }}
+                            className="btn btn-primary text-xs py-1.5 px-3 font-bold"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', textDecoration: 'none' }}
                           >
                             <Download size={13} />
                             <span>Download</span>
@@ -910,33 +947,33 @@ export default function AIWorkspace() {
                     </div>
                   )}
 
-                  {/* Source Citations Pills (Section 24) */}
+                  {/* Source Citations Pills */}
                   {msg.citations && msg.citations.length > 0 && (
-                    <div style={{ marginTop: '0.85rem', paddingTop: '0.5rem', borderTop: '1px solid #F1F5F9', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    <div style={{ marginTop: '0.85rem', paddingTop: '0.5rem', borderTop: '1px solid var(--border-subtle)', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                       {msg.citations.map((c, cIdx) => (
                         <div
                           key={cIdx}
                           style={{
                             fontSize: '11px',
-                            backgroundColor: '#F1F5F9',
-                            color: '#475569',
+                            backgroundColor: 'var(--surface-low)',
+                            color: 'var(--text-secondary)',
                             padding: '3px 8px',
-                            borderRadius: '6px',
+                            borderRadius: 'var(--radius-sm)',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
-                            border: '1px solid #E2E8F0'
+                            border: '1px solid var(--border-subtle)'
                           }}
                         >
-                          <FileCheck size={11} color="#3B82F6" />
+                          <FileCheck size={11} color="var(--primary-600)" />
                           <span>{c.sourceCitation || `Source: ${c.title}`}</span>
                         </div>
                       ))}
                     </div>
                   )}
 
-                  <div style={{ fontSize: '10px', color: isUser ? 'rgba(255,255,255,0.7)' : '#94A3B8', textAlign: 'right', marginTop: '4px' }}>
-                    {msg.time}
+                  <div style={{ fontSize: '10px', color: isUser ? 'rgba(255,255,255,0.85)' : 'var(--text-muted)', textAlign: 'right', marginTop: '4px' }}>
+                    {formatMessageTimestamp(msg.timestamp || msg.time)}
                   </div>
                 </div>
               </div>
@@ -945,7 +982,7 @@ export default function AIWorkspace() {
 
           {/* Thinking / Streaming Indicator */}
           {isGenerating && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#64748B', fontSize: '13px', padding: '0.5rem 1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', padding: '0.5rem 1rem' }}>
               <div className="spinner-border text-primary" role="status" style={{ width: '1.25rem', height: '1.25rem' }} />
               <span>Orchestrating agent, checking permissions, and querying PostgreSQL...</span>
             </div>
@@ -956,37 +993,28 @@ export default function AIWorkspace() {
 
         {/* Uploading Status Overlay */}
         {uploadingFile && (
-          <div style={{ padding: '0.5rem 1.5rem', backgroundColor: '#EFF6FF', color: '#1D4ED8', fontSize: '12px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <div style={{ padding: '0.5rem 1.5rem', backgroundColor: 'var(--primary-50)', color: 'var(--primary-700)', fontSize: 'var(--text-xs)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <div className="spinner-border text-primary" style={{ width: '1rem', height: '1rem' }} />
             <span>{uploadProgress || 'Processing document through AI pipeline...'}</span>
           </div>
         )}
 
         {/* Bottom Input Area */}
-        <div style={{ padding: '1rem 1.5rem 1.25rem', backgroundColor: '#FFFFFF', borderTop: '1px solid #E2E8F0' }}>
+        <div style={{ padding: '0.85rem 1.25rem 1rem', backgroundColor: 'var(--surface)', borderTop: '1px solid var(--border-subtle)' }}>
           
           {/* File attachment preview pill */}
           {attachedFile && (
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#F1F5F9', padding: '6px 12px', borderRadius: '10px', marginBottom: '0.5rem', fontSize: '12px', border: '1px solid #CBD5E1' }}>
-              <FileText size={14} color="#2563EB" />
-              <span style={{ fontWeight: 600, color: '#0F172A' }}>{attachedFile.name}</span>
-              <span style={{ color: '#64748B' }}>({attachedFile.size})</span>
-              <button onClick={() => setAttachedFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', backgroundColor: 'var(--surface-low)', padding: '6px 12px', borderRadius: 'var(--radius-lg)', marginBottom: '0.5rem', fontSize: 'var(--text-xs)', border: '1px solid var(--border-subtle)' }}>
+              <FileText size={14} color="var(--primary-600)" />
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{attachedFile.name}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>({attachedFile.size})</span>
+              <button onClick={() => setAttachedFile(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }} aria-label="Remove attached file">
                 <X size={13} />
               </button>
             </div>
           )}
 
-          <div style={{
-            display: 'flex',
-            alignItems: 'flex-end',
-            gap: '0.75rem',
-            backgroundColor: '#F8FAFC',
-            border: '1.5px solid #CBD5E1',
-            borderRadius: '16px',
-            padding: '0.5rem 0.75rem',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.03)'
-          }}>
+          <div className="ai-input-container">
             {/* Hidden file input */}
             <input
               type="file"
@@ -999,20 +1027,10 @@ export default function AIWorkspace() {
             {/* Attach button */}
             <button
               onClick={() => fileInputRef.current?.click()}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.35rem',
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E2E8F0',
-                padding: '8px 12px',
-                borderRadius: '10px',
-                color: '#334155',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer'
-              }}
+              className="btn btn-outline text-xs py-2 px-3"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', flexShrink: 0 }}
               title="Attach PDF, Excel, PPTX, or Image"
+              aria-label="Attach file"
             >
               <Paperclip size={14} />
               <span>Attach</span>
@@ -1025,14 +1043,14 @@ export default function AIWorkspace() {
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={`Ask anything as ${currentRole?.toUpperCase()} (e.g. "Show teachers on leave today", "Generate timetable for 5A")...`}
+              placeholder={`Ask anything as ${(currentRole || 'User').toUpperCase()} (e.g. "Show teachers on leave today", "Generate timetable for 5A")...`}
               style={{
                 flex: 1,
                 background: 'none',
                 border: 'none',
                 outline: 'none',
-                fontSize: '14px',
-                color: '#0F172A',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--text-primary)',
                 lineHeight: 1.5,
                 maxHeight: '120px',
                 resize: 'none',
@@ -1044,107 +1062,98 @@ export default function AIWorkspace() {
             <button
               onClick={() => handleSendMessage()}
               disabled={isGenerating || (!prompt.trim() && !attachedFile)}
+              className="btn btn-primary"
               style={{
                 width: '38px',
                 height: '38px',
-                borderRadius: '10px',
-                backgroundColor: isGenerating || (!prompt.trim() && !attachedFile) ? '#CBD5E1' : '#2563EB',
-                color: '#FFFFFF',
-                border: 'none',
+                borderRadius: 'var(--radius-lg)',
+                padding: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: isGenerating || (!prompt.trim() && !attachedFile) ? 'not-allowed' : 'pointer',
-                transition: 'background 0.2s ease'
+                flexShrink: 0,
+                opacity: (!prompt.trim() && !attachedFile) ? 0.45 : 1,
+                cursor: (!prompt.trim() && !attachedFile) ? 'not-allowed' : 'pointer',
+                transition: 'all 0.15s ease'
               }}
+              title="Send Prompt (Enter)"
+              aria-label="Send Message"
             >
-              <Send size={16} />
+              <Send size={15} />
             </button>
           </div>
         </div>
-
       </main>
 
-      {/* ----------------- OBSERVABILITY MODAL (Section 30) ----------------- */}
+      {/* ----------------- OBSERVABILITY MODAL ----------------- */}
       {observabilityOpen && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          backgroundColor: 'rgba(15, 23, 42, 0.6)',
-          backdropFilter: 'blur(4px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 100
-        }}>
-          <div style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: '20px',
-            width: '600px',
-            maxWidth: '90vw',
-            maxHeight: '85vh',
-            overflowY: 'auto',
-            padding: '2rem',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', borderBottom: '1px solid #E2E8F0', paddingBottom: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Activity size={22} color="#2563EB" />
-                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: '#0F172A' }}>
-                  Admin Observability & Vector Health
-                </h3>
+        <div className="modal-backdrop" onClick={() => setObservabilityOpen(false)}>
+          <div
+            className="modal-container"
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: '620px', width: '92%' }}
+          >
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: 'var(--radius-lg)', backgroundColor: 'var(--primary-50)', color: 'var(--primary-600)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Activity size={20} />
+                </div>
+                <div>
+                  <h3 className="modal-title">
+                    Admin Observability & Vector Health
+                  </h3>
+                  <p className="modal-subtitle">Real-time status of reasoning engines and knowledge base</p>
+                </div>
               </div>
               <button
                 onClick={() => setObservabilityOpen(false)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B' }}
+                className="modal-close-btn"
+                aria-label="Close modal"
               >
-                <X size={20} />
+                <X size={18} />
               </button>
             </div>
 
             {observabilityStats ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem' }}>
-                  <div style={{ backgroundColor: '#F8FAFC', padding: '1rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Total Documents</div>
-                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#0F172A' }}>{observabilityStats.totalDocuments}</div>
-                    <div style={{ fontSize: '11px', color: '#10B981', marginTop: '2px' }}>{observabilityStats.completedDocuments} Indexed & Ready</div>
+                  <div style={{ backgroundColor: 'var(--surface-low)', padding: '1rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 600 }}>Total Documents</div>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--text-primary)' }}>{observabilityStats.totalDocuments}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--secondary)', marginTop: '2px', fontWeight: 600 }}>{observabilityStats.completedDocuments} Indexed & Ready</div>
                   </div>
-                  <div style={{ backgroundColor: '#F8FAFC', padding: '1rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                    <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 600 }}>Qdrant Chunks (Vectors)</div>
-                    <div style={{ fontSize: '24px', fontWeight: 800, color: '#2563EB' }}>{observabilityStats.totalChunksIndexed}</div>
-                    <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px' }}>{observabilityStats.qdrantStatus}</div>
+                  <div style={{ backgroundColor: 'var(--surface-low)', padding: '1rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-subtle)' }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', fontWeight: 600 }}>Qdrant Chunks (Vectors)</div>
+                    <div style={{ fontFamily: 'var(--font-heading)', fontSize: 'var(--text-2xl)', fontWeight: 800, color: 'var(--primary-700)' }}>{observabilityStats.totalChunksIndexed}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px' }}>{observabilityStats.qdrantStatus}</div>
                   </div>
                 </div>
 
-                <div style={{ backgroundColor: '#F8FAFC', padding: '1rem', borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '8px' }}>Active LLM & Vision Models</div>
-                  <div style={{ fontSize: '12px', color: '#475569', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <div><strong>Reasoning LLM:</strong> <code>{observabilityStats.models?.llm}</code></div>
-                    <div><strong>Vision Engine:</strong> <code>{observabilityStats.models?.vision}</code></div>
-                    <div><strong>Embeddings:</strong> <code>{observabilityStats.models?.embeddings}</code></div>
+                <div style={{ backgroundColor: 'var(--surface-low)', padding: '1rem', borderRadius: 'var(--radius-xl)', border: '1px solid var(--border-subtle)' }}>
+                  <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Active LLM & Vision Models</div>
+                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div><strong style={{ color: 'var(--text-primary)' }}>Reasoning LLM:</strong> <code>{observabilityStats.models?.llm}</code></div>
+                    <div><strong style={{ color: 'var(--text-primary)' }}>Vision Engine:</strong> <code>{observabilityStats.models?.vision}</code></div>
+                    <div><strong style={{ color: 'var(--text-primary)' }}>Embeddings:</strong> <code>{observabilityStats.models?.embeddings}</code></div>
                   </div>
                 </div>
 
                 <div>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '8px' }}>Recent Agent Tool Executions</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                  <div style={{ fontSize: 'var(--text-xs)', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>Recent Agent Tool Executions</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
                     {observabilityStats.recentExecutions?.map((ex, idx) => (
-                      <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: '#F1F5F9', borderRadius: '6px', fontSize: '12px' }}>
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', backgroundColor: 'var(--surface-low)', borderRadius: 'var(--radius-md)', fontSize: 'var(--text-xs)', border: '1px solid var(--border-subtle)' }}>
                         <div>
-                          <strong style={{ color: '#1E293B' }}>{ex.agent}:</strong> <span style={{ color: '#475569' }}>{ex.action}</span>
+                          <strong style={{ color: 'var(--text-primary)' }}>{ex.agent}:</strong> <span style={{ color: 'var(--text-secondary)' }}>{ex.action}</span>
                         </div>
-                        <span style={{ fontSize: '11px', color: '#64748B' }}>{ex.durationMs}ms</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{ex.durationMs}ms</span>
                       </div>
                     ))}
                   </div>
                 </div>
               </div>
             ) : (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#64748B' }}>
+              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)', fontSize: 'var(--text-xs)' }}>
                 Loading real observability statistics...
               </div>
             )}

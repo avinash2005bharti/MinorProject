@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useERP } from '../context/ERPContext';
+import { Badge } from './common';
 import {
   LayoutDashboard,
   CheckSquare,
@@ -15,17 +16,15 @@ import {
   Activity,
   Award,
   Clock,
-  Compass,
+  Megaphone,
   GraduationCap,
-  LogOut,
   PanelLeftClose,
-  PanelLeftOpen,
   Database,
   Bot
 } from 'lucide-react';
 
 export default function Sidebar({ isOpen, onClose, onToggle }) {
-  const { currentRole, currentUser, logout } = useERP();
+  const { currentRole, currentUser } = useERP();
   const navigate = useNavigate();
 
   const isAppointedTg = Boolean(
@@ -34,6 +33,10 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
     (currentUser?.mentorGroups && currentUser?.mentorGroups.length > 0) ||
     (currentUser?.designation || '').toLowerCase().includes('(tg)')
   );
+
+  const displayName = (!currentUser?.name || currentUser?.name.toLowerCase() === 'hod')
+    ? (currentRole === 'hod' ? 'Dr. Alok Verma' : 'Authorized User')
+    : currentUser.name;
 
   const getNavLinks = () => {
     switch (currentRole) {
@@ -59,7 +62,7 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
           { to: '/hod/requests', label: 'Requests', icon: <FileText size={19} /> },
           { to: '/hod/approvals', label: 'Approvals', icon: <CheckSquare size={19} />, badge: 'Action' },
           { to: '/hod/timetable', label: 'Timetable', icon: <Sparkles size={19} />, badge: 'AI' },
-          { to: '/hod/notices', label: 'Notices', icon: <Compass size={19} /> },
+          { to: '/hod/notices', label: 'Notices', icon: <Megaphone size={19} /> },
           { to: '/hod/reports', label: 'Reports', icon: <Activity size={19} /> }
         ];
       case 'tg':
@@ -69,7 +72,7 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
           { to: '/tg/students', label: 'Mentee Students', icon: <Users size={19} /> },
           { to: '/tg/attendance', label: 'Attendance', icon: <CheckSquare size={19} /> },
           { to: '/tg/requests', label: 'Requests', icon: <FileText size={19} />, badge: 'Review' },
-          { to: '/tg/notices', label: 'Notices', icon: <Compass size={19} /> },
+          { to: '/tg/notices', label: 'Notices', icon: <Megaphone size={19} /> },
           { to: '/teacher', label: 'Teaching Classes', icon: <BookOpen size={19} />, badge: 'Faculty' }
         ];
       case 'teacher':
@@ -81,7 +84,7 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
           { to: '/teacher/assignments', label: 'Assignments', icon: <BookOpen size={19} /> },
           { to: '/teacher/tests', label: 'Online Tests', icon: <Activity size={19} /> },
           { to: '/teacher/students', label: 'Students', icon: <Users size={19} /> },
-          { to: '/teacher/notices', label: 'Notices', icon: <Compass size={19} /> }
+          { to: '/teacher/notices', label: 'Notices', icon: <Megaphone size={19} /> }
         ];
         if (isAppointedTg) {
           teacherLinks.push({ to: '/tg', label: 'TG Mentorship Portal', icon: <Sparkles size={19} />, badge: 'TG' });
@@ -96,7 +99,7 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
           { to: '/student/timetable', label: 'Timetable', icon: <Calendar size={19} /> },
           { to: '/student/assignments', label: 'Assignments', icon: <BookOpen size={19} /> },
           { to: '/student/requests', label: 'Requests', icon: <FileText size={19} /> },
-          { to: '/student/notices', label: 'Notices', icon: <Compass size={19} /> },
+          { to: '/student/notices', label: 'Notices', icon: <Megaphone size={19} /> },
           { to: '/student/profile', label: 'My Profile', icon: <Award size={19} /> }
         ];
     }
@@ -107,6 +110,23 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
   const handleLinkClick = () => {
     if (typeof window !== 'undefined' && window.innerWidth < 1024) {
       onClose();
+    }
+  };
+
+  const getBadgeVariant = (badgeText) => {
+    switch (badgeText) {
+      case 'AI':
+      case 'Agent':
+        return 'primary';
+      case 'Live':
+        return 'danger';
+      case 'Action':
+        return 'warning';
+      case 'Review':
+        return 'purple';
+      case 'Core':
+      default:
+        return 'neutral';
     }
   };
 
@@ -234,7 +254,7 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
             <NavLink
               key={link.to}
               to={link.to}
-              end={link.to === '/student' || link.to === '/teacher' || link.to === '/tg' || link.to === '/hod' || link.to === '/admin'}
+              end={link.to === '/student' || link.to === '/teacher' || link.to === '/tg' || link.to === '/hod' || link.to === '/admin' || link.to === '/ai-workspace'}
               onClick={handleLinkClick}
               className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
             >
@@ -248,57 +268,61 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
               </div>
 
               {link.badge && (
-                <span
-                  className="badge badge-emerald"
-                  style={{
-                    fontSize: '10px',
-                    padding: '0.15rem 0.45rem',
-                    backgroundColor: link.badge === 'AI' ? 'var(--primary)' : undefined,
-                    color: link.badge === 'AI' ? '#FFFFFF' : undefined
-                  }}
+                <Badge
+                  variant={getBadgeVariant(link.badge)}
+                  size="xs"
+                  dot={link.badge === 'Live'}
+                  pulse={link.badge === 'Live'}
                 >
                   {link.badge}
-                </span>
+                </Badge>
               )}
             </NavLink>
           ))}
         </nav>
 
-        {/* Sidebar Footer & Logout */}
+        {/* Sidebar Footer User Info (Replaces duplicate logout with authenticated display name) */}
         <div
           style={{
-            padding: '0.75rem',
+            padding: '0.75rem 0.85rem',
             borderTop: '1px solid var(--border-subtle)',
+            backgroundColor: 'var(--surface-low)',
             display: 'flex',
-            flexDirection: 'column',
-            gap: '0.5rem'
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.65rem'
           }}
         >
-          {/* Logout Button */}
-          <button
-            onClick={() => {
-              logout();
-              onClose?.();
-              navigate('/login');
-            }}
-            className="hover:bg-error-container"
-            style={{
-              width: '100%',
-              backgroundColor: 'transparent',
-              borderRadius: 'var(--radius-lg)',
-              padding: '0.5rem 0.75rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.65rem',
-              color: 'var(--error)',
-              fontSize: '12px',
-              fontWeight: 600,
-              transition: 'background 0.15s ease'
-            }}
-          >
-            <LogOut size={16} />
-            <span>Sign Out (Logout)</span>
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                backgroundColor: 'var(--primary-100)',
+                color: 'var(--primary-700)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 700,
+                fontSize: '12px',
+                flexShrink: 0
+              }}
+            >
+              {displayName.charAt(0)}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {displayName}
+              </div>
+              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
+                {currentUser?.designation || `${currentRole} role`}
+              </div>
+            </div>
+          </div>
+          <Badge variant="primary" size="xs">
+            {currentRole?.toUpperCase()}
+          </Badge>
         </div>
       </aside>
     </>

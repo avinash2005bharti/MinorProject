@@ -13,13 +13,19 @@ exports.chat = async (req, res) => {
     const promptText = (req.body.prompt || req.body.message || '').trim();
     const conversationId = req.body.conversation_id || req.body.conversationId || `conv-${Date.now()}`;
     const targetAgent = req.body.agent || null;
+    const attachment = req.body.attachment || null;
+    const fileId = req.body.file_id || req.body.fileId || attachment?.id || null;
 
     if (!promptText) {
       return res.status(400).json({ success: false, message: 'A prompt or message string is required.' });
     }
 
-    const userId = req.user ? String(req.user.id) : (req.body.user_id || 'guest_user');
-    const userRole = req.user ? req.user.role : (req.body.role || 'hod');
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, message: 'Authentication required to access AI Assistant.' });
+    }
+
+    const userId = String(req.user.id);
+    const userRole = String(req.user.role || 'STUDENT').toLowerCase();
 
     aiLogger.info(`[AI Chat] Received query from User #${userId} (${userRole}) [Agent: ${targetAgent}]: "${promptText.slice(0, 60)}..."`);
 
@@ -39,8 +45,9 @@ exports.chat = async (req, res) => {
     try {
       directAction = await executeAgentActionByIntent(
         promptText,
-        req.user || { id: userId, role: userRole },
-        req.body.confirmed_action || req.body.confirmedAction
+        req.user,
+        req.body.confirmed_action || req.body.confirmedAction,
+        { fileId, attachment }
       );
     } catch (actErr) {
       aiLogger.warn(`[AI Chat] Direct action check warning: ${actErr.message}`);
@@ -193,11 +200,21 @@ exports.chat = async (req, res) => {
   }
 };
 
-// 2. Get User Conversations List
+// 2. Get User Conversations List (ARCH-01: Graceful degradation when MongoDB is offline)
 exports.getConversations = async (req, res) => {
   try {
-    const userId = req.user ? String(req.user.id) : req.query.userId;
-    if (!userId) return res.status(400).json({ success: false, message: 'User ID required' });
+    if (!req.user || !req.user.id) return res.status(401).json({ success: false, message: 'Authentication required' });
+    const userId = String(req.user.id);
+
+    if (req.app?.locals?.mongoAvailable === false) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        conversations: [],
+        degraded: true,
+        message: 'Conversational memory storage is temporarily unavailable.'
+      });
+    }
 
     const conversations = await Conversation.find({ userId })
       .select('conversationId title messageCount updatedAt createdAt')
@@ -206,18 +223,32 @@ exports.getConversations = async (req, res) => {
 
     return res.status(200).json({ success: true, count: conversations.length, conversations });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(200).json({ success: true, count: 0, conversations: [], degraded: true });
   }
 };
 
 // 3. Get Single Conversation Messages
 exports.getConversationById = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) return res.status(401).json({ success: false, message: 'Authentication required' });
     const { id } = req.params;
+
+    if (req.app?.locals?.mongoAvailable === false) {
+      return res.status(503).json({
+        success: false,
+        message: 'Conversational memory service is temporarily offline.',
+        code: 'MEMORY_UNAVAILABLE'
+      });
+    }
+
     const conversation = await Conversation.findOne({ conversationId: id });
 
     if (!conversation) {
       return res.status(404).json({ success: false, message: 'Conversation not found.' });
+    }
+
+    if (conversation.userId && conversation.userId !== String(req.user.id) && req.user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Forbidden: Access to another user\'s conversation is denied.' });
     }
 
     return res.status(200).json({ success: true, conversation });
@@ -229,8 +260,16 @@ exports.getConversationById = async (req, res) => {
 // 4. Get User AI Memory Profile
 exports.getUserMemory = async (req, res) => {
   try {
-    const userId = req.user ? String(req.user.id) : req.query.userId;
-    if (!userId) return res.status(400).json({ success: false, message: 'User ID required' });
+    if (!req.user || !req.user.id) return res.status(401).json({ success: false, message: 'Authentication required' });
+    const userId = String(req.user.id);
+
+    if (req.app?.locals?.mongoAvailable === false) {
+      return res.status(200).json({
+        success: true,
+        memory: { userId, longTermFacts: [], academicInterests: [] },
+        degraded: true
+      });
+    }
 
     const memory = await UserMemory.findOne({ userId });
     return res.status(200).json({
@@ -238,14 +277,18 @@ exports.getUserMemory = async (req, res) => {
       memory: memory || { userId, longTermFacts: [], academicInterests: [] }
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(200).json({
+      success: true,
+      memory: { userId: String(req.user?.id), longTermFacts: [], academicInterests: [] },
+      degraded: true
+    });
   }
 };
 
 // 5. Contextual Query Suggestions
 exports.getSuggestions = async (req, res) => {
   try {
-    const role = req.user ? req.user.role : (req.query.role || 'student');
+    const role = (req.user?.role || 'student').toLowerCase();
 
     let suggestions = [];
     if (role === 'student') {
@@ -316,14 +359,22 @@ exports.ragSearch = async (req, res) => {
 // 7. Delete Conversation
 exports.deleteConversation = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) return res.status(401).json({ success: false, message: 'Authentication required' });
     const { id } = req.params;
-    const result = await Conversation.findOneAndDelete({
+
+    const conv = await Conversation.findOne({
       $or: [{ conversationId: id }, { _id: id }]
     });
 
-    if (!result) {
+    if (!conv) {
       return res.status(404).json({ success: false, message: 'Conversation not found.' });
     }
+
+    if (conv.userId && conv.userId !== String(req.user.id) && req.user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Forbidden: Access to another user\'s conversation is denied.' });
+    }
+
+    await Conversation.deleteOne({ _id: conv._id });
 
     return res.status(200).json({
       success: true,
@@ -337,10 +388,17 @@ exports.deleteConversation = async (req, res) => {
 // 8. Streaming Chat Endpoint (SSE Proxy to Python or Local Simulated Tokens)
 exports.chatStream = async (req, res) => {
   try {
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ success: false, message: 'Authentication required.' });
+    }
+
     const promptText = (req.body.prompt || req.body.message || '').trim();
     if (!promptText) {
       return res.status(400).json({ success: false, message: 'Message text is required.' });
     }
+
+    const userId = String(req.user.id);
+    const userRole = String(req.user.role || 'STUDENT').toLowerCase();
 
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
@@ -354,8 +412,8 @@ exports.chatStream = async (req, res) => {
         data: {
           prompt: promptText,
           message: promptText,
-          role: req.user ? req.user.role : (req.body.role || 'student'),
-          user_id: req.user ? String(req.user.id) : (req.body.user_id || 'user_1')
+          role: userRole,
+          user_id: userId
         },
         responseType: 'stream',
         timeout: 25000
