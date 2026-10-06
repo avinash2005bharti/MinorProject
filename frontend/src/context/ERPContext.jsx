@@ -269,7 +269,14 @@ export function ERPProvider({ children }) {
       ]);
 
       if (studentsRes.status === 'fulfilled' && studentsRes.value?.students) {
-        setStudents(studentsRes.value.students);
+        const normalizedStudents = studentsRes.value.students.map((st) => ({
+          ...st,
+          section: typeof st.section === 'object' && st.section !== null ? (st.section.name || 'A') : (st.section || 'A'),
+          sectionName: typeof st.section === 'object' && st.section !== null ? (st.section.name || 'A') : (st.sectionName || st.section || 'A'),
+          department: typeof st.department === 'object' && st.department !== null ? (st.department.name || 'CSE') : (st.department || 'CSE'),
+          departmentName: typeof st.department === 'object' && st.department !== null ? (st.department.name || 'CSE') : (st.departmentName || st.department || 'CSE')
+        }));
+        setStudents(normalizedStudents);
       }
       if (teachersRes.status === 'fulfilled' && teachersRes.value?.faculty) {
         setTeachers(teachersRes.value.faculty);

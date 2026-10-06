@@ -16,6 +16,8 @@ import {
   Mail,
   Phone,
   GraduationCap,
+  Edit3,
+  CheckCircle2,
   X
 } from 'lucide-react';
 
@@ -39,6 +41,21 @@ export default function HodStudents() {
   const [section, setSection] = useState('A');
   const [admissionYear, setAdmissionYear] = useState('2023');
   const [status, setStatus] = useState('ACTIVE');
+
+  // Edit Student Modal State (HOD: No Password Field)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [editForm, setEditForm] = useState({
+    id: '',
+    name: '',
+    email: '',
+    rollNo: '',
+    phone: '',
+    semester: '5',
+    section: 'A',
+    status: 'ACTIVE'
+  });
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -109,6 +126,54 @@ export default function HodStudents() {
       addToast('Enrollment Error', err.message || 'Unable to enroll student.', 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleOpenEditStudent = (st) => {
+    setEditingStudent(st);
+    setEditForm({
+      id: st.id,
+      name: st.name || `${st.firstName || ''} ${st.lastName || ''}`.trim(),
+      email: st.email || '',
+      rollNo: st.enrollmentNo || st.enrollment_no || st.rollNo || '',
+      phone: st.phone || '',
+      semester: String(st.semester || 5),
+      section: st.sectionName || st.section?.name || st.section || 'A',
+      status: st.status || 'ACTIVE'
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditStudentSubmit = async (e) => {
+    e.preventDefault();
+    if (!editForm.name.trim() || !editForm.email.trim() || !editForm.rollNo.trim()) {
+      addToast('Validation Error', 'Name, email, and enrollment number are required.', 'warning');
+      return;
+    }
+
+    setEditSubmitting(true);
+    try {
+      const payload = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim().toLowerCase(),
+        enrollmentNo: editForm.rollNo.trim().toUpperCase(),
+        enrollment_no: editForm.rollNo.trim().toUpperCase(),
+        phone: editForm.phone.trim() || undefined,
+        semester: parseInt(editForm.semester, 10) || 5,
+        section: editForm.section.trim().toUpperCase(),
+        sectionName: editForm.section.trim().toUpperCase(),
+        status: editForm.status
+      };
+
+      await studentApi.updateStudent(editForm.id, payload);
+      addToast('Student Updated', `${editForm.name} details successfully updated.`, 'success');
+      setIsEditModalOpen(false);
+      setEditingStudent(null);
+      fetchStudents();
+    } catch (err) {
+      addToast('Update Failed', err.message || 'Unable to update student.', 'error');
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
@@ -280,29 +345,54 @@ export default function HodStudents() {
                           )}
                         </span>
 
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteStudent(st.id, displayName)}
-                          disabled={isDeleting}
-                          className="btn btn-sm"
-                          style={{
-                            padding: '0.25rem 0.5rem',
-                            color: '#DC2626',
-                            backgroundColor: '#FEF2F2',
-                            border: '1px solid #FECDD3',
-                            borderRadius: 'var(--radius-md)',
-                            cursor: isDeleting ? 'not-allowed' : 'pointer',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            fontSize: '11px',
-                            fontWeight: 600
-                          }}
-                          title="Delete Student Record"
-                        >
-                          <Trash2 size={12} />
-                          <span>{isDeleting ? '...' : 'Delete'}</span>
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditStudent(st)}
+                            className="btn btn-sm"
+                            style={{
+                              padding: '0.25rem 0.5rem',
+                              color: '#2563EB',
+                              backgroundColor: '#EFF6FF',
+                              border: '1px solid #BFDBFE',
+                              borderRadius: 'var(--radius-md)',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '11px',
+                              fontWeight: 600
+                            }}
+                            title="Edit Student Details"
+                          >
+                            <Edit3 size={11} />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteStudent(st.id, displayName)}
+                            disabled={isDeleting}
+                            className="btn btn-sm"
+                            style={{
+                              padding: '0.25rem 0.5rem',
+                              color: '#DC2626',
+                              backgroundColor: '#FEF2F2',
+                              border: '1px solid #FECDD3',
+                              borderRadius: 'var(--radius-md)',
+                              cursor: isDeleting ? 'not-allowed' : 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '11px',
+                              fontWeight: 600
+                            }}
+                            title="Delete Student Record"
+                          >
+                            <Trash2 size={12} />
+                            <span>{isDeleting ? '...' : 'Delete'}</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -513,6 +603,204 @@ export default function HodStudents() {
                   disabled={submitting}
                 >
                   Enroll Student
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Student Modal for HOD (No Password Field Allowed) */}
+      {isEditModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: '1rem'
+          }}
+          onClick={() => setIsEditModalOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              border: '1px solid var(--border-subtle)',
+              maxWidth: '480px',
+              width: '100%',
+              padding: '1.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#1D4ED8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Edit3 size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Edit Student Details
+                  </h3>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Department Record Update for {editingStudent?.enrollmentNo || editingStudent?.email}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="btn-icon"
+                title="Close"
+                style={{ border: 'none', background: 'none', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditStudentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', fontSize: '12.5px' }}>
+              <div>
+                <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="e.g. Ayushi Sahu"
+                  className="input-field"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Enrollment No *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.rollNo}
+                    onChange={(e) => setEditForm({ ...editForm, rollNo: e.target.value })}
+                    placeholder="0105CS241113"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Status
+                  </label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="SUSPENDED">SUSPENDED</option>
+                    <option value="GRADUATED">GRADUATED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Official Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    placeholder="student@college.edu"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    placeholder="+91..."
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Semester
+                  </label>
+                  <select
+                    value={editForm.semester}
+                    onChange={(e) => setEditForm({ ...editForm, semester: e.target.value })}
+                    className="input-field"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                      <option key={s} value={String(s)}>Semester {s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Section
+                  </label>
+                  <select
+                    value={editForm.section}
+                    onChange={(e) => setEditForm({ ...editForm, section: e.target.value })}
+                    className="input-field"
+                  >
+                    {['A', 'B', 'C', 'D'].map((sec) => (
+                      <option key={sec} value={sec}>Section {sec}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)' }}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsEditModalOpen(false)}
+                  disabled={editSubmitting}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  loading={editSubmitting}
+                  disabled={editSubmitting}
+                >
+                  Save Changes
                 </Button>
               </div>
             </form>

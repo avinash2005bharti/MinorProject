@@ -16,7 +16,7 @@ export default function StudentTimetable() {
     setLoading(true);
     setError(null);
     try {
-      const section = currentUser?.section || 'A';
+      const section = typeof currentUser?.section === 'object' && currentUser?.section !== null ? (currentUser.section.name || 'A') : (currentUser?.section || 'A');
       const semester = currentUser?.semester || 5;
       const year = currentUser?.year || '3rd Year';
 
@@ -94,7 +94,7 @@ export default function StudentTimetable() {
               Weekly Academic Timetable
             </h1>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Section {currentUser.section || 'A'} • Semester {currentUser.semester || 5} • Relational Schedule Ledger
+              Section {typeof currentUser?.section === 'object' && currentUser?.section !== null ? (currentUser.section.name || 'A') : (currentUser?.section || 'A')} • Semester {currentUser?.semester || 5} • Relational Schedule Ledger
             </p>
           </div>
 

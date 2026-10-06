@@ -18,6 +18,7 @@ import {
 export default function StudentProfile() {
   const { currentUser, subjects, dashboardData } = useERP();
   const student = currentUser || {};
+  const sectionName = typeof student.section === 'object' && student.section !== null ? (student.section.name || 'A') : (student.section || 'A');
 
   const rollNumber = student.enrollment_no || student.rollNo || 'OIST-CSE-2023';
   const attendanceRate = student.attendance !== undefined ? student.attendance : (dashboardData?.attendanceRate || 0);
@@ -102,7 +103,7 @@ export default function StudentProfile() {
 
                   <div style={{ display: 'flex', gap: '1.25rem', marginTop: '0.65rem', fontSize: '13px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                     <span><strong>Enrollment No:</strong> <span className="tabular-nums" style={{ color: 'var(--text-primary)' }}>{rollNumber}</span></span>
-                    <span><strong>Section:</strong> <span style={{ color: 'var(--text-primary)' }}>{student.section || 'A'}</span></span>
+                    <span><strong>Section:</strong> <span style={{ color: 'var(--text-primary)' }}>{sectionName}</span></span>
                     <span><strong>Semester:</strong> <span style={{ color: 'var(--text-primary)' }}>{student.semester || 5}th Sem</span></span>
                     <span><strong>Academic Year:</strong> <span style={{ color: 'var(--primary)', fontWeight: 700 }}>{student.year || '3rd Year'}</span></span>
                   </div>
@@ -255,7 +256,7 @@ export default function StudentProfile() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <GraduationCap size={16} color="var(--primary)" />
                   <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '13px' }}>
-                    Dr. Alok Verma
+                    HOD CSE
                   </span>
                 </div>
                 <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>hod.cse@college.edu</span>

@@ -14,7 +14,10 @@ import {
   Calendar,
   Layers,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  Edit3,
+  KeyRound,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function AdminStudents() {
@@ -25,7 +28,7 @@ export default function AdminStudents() {
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
-  // Modal State & Form Fields (Matching Backend Prisma Schema)
+  // Modal State & Form Fields (Enroll)
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [name, setName] = useState('');
@@ -36,6 +39,22 @@ export default function AdminStudents() {
   const [section, setSection] = useState('A');
   const [admissionYear, setAdmissionYear] = useState('2023');
   const [status, setStatus] = useState('ACTIVE');
+
+  // Edit Modal State
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editingStudent, setEditingStudent] = useState(null);
+  const [editForm, setEditForm] = useState({
+    id: '',
+    name: '',
+    email: '',
+    rollNo: '',
+    phone: '',
+    semester: '5',
+    section: 'A',
+    status: 'ACTIVE',
+    password: ''
+  });
 
   // Sync with ERP Context
   useEffect(() => {
@@ -112,6 +131,60 @@ export default function AdminStudents() {
       addToast('Enrollment Error', err.message || 'Unable to enroll student.', 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleOpenEditStudent = (st) => {
+    setEditingStudent(st);
+    setEditForm({
+      id: st.id,
+      name: st.name || `${st.firstName || ''} ${st.lastName || ''}`.trim(),
+      email: st.email || '',
+      rollNo: st.enrollmentNo || st.enrollment_no || st.rollNo || '',
+      phone: st.phone || '',
+      semester: String(st.semester || 5),
+      section: st.sectionName || st.section?.name || st.section || 'A',
+      status: st.status || 'ACTIVE',
+      password: ''
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditStudentSubmit = async (e) => {
+    e.preventDefault();
+    if (!editForm.name.trim() || !editForm.email.trim() || !editForm.rollNo.trim()) {
+      addToast('Validation Error', 'Name, email, and enrollment number are required.', 'warning');
+      return;
+    }
+
+    setEditSubmitting(true);
+    try {
+      const payload = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim().toLowerCase(),
+        enrollmentNo: editForm.rollNo.trim().toUpperCase(),
+        enrollment_no: editForm.rollNo.trim().toUpperCase(),
+        phone: editForm.phone.trim() || undefined,
+        semester: parseInt(editForm.semester, 10) || 5,
+        section: editForm.section.trim().toUpperCase(),
+        sectionName: editForm.section.trim().toUpperCase(),
+        status: editForm.status
+      };
+
+      if (editForm.password && editForm.password.trim()) {
+        payload.password = editForm.password.trim();
+      }
+
+      await studentApi.updateStudent(editForm.id, payload);
+      addToast('Student Updated', `${editForm.name} details successfully updated in database.`, 'success');
+      setIsEditModalOpen(false);
+      setEditingStudent(null);
+      fetchStudents();
+      if (refreshAllData) refreshAllData();
+    } catch (err) {
+      addToast('Update Failed', err.message || 'Unable to update student.', 'error');
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
@@ -281,7 +354,30 @@ export default function AdminStudents() {
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditStudent(st)}
+                      className="btn btn-sm"
+                      style={{
+                        padding: '0.4rem 0.65rem',
+                        color: '#2563EB',
+                        backgroundColor: '#EFF6FF',
+                        border: '1px solid #BFDBFE',
+                        borderRadius: 'var(--radius-md)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontSize: '11px',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                      title="Edit Student Details"
+                    >
+                      <Edit3 size={13} />
+                      <span>Edit</span>
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => handleDeleteStudent(st.id, displayName)}
@@ -522,6 +618,234 @@ export default function AdminStudents() {
                 >
                   {submitting && <RefreshCw size={12} className="animate-spin" />}
                   <span>{submitting ? 'Enrolling...' : 'Enroll Student'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Student Modal (Direct PostgreSQL Database Update) */}
+      {isEditModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: '1rem'
+          }}
+          onClick={() => setIsEditModalOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              border: '1px solid var(--border-subtle)',
+              maxWidth: '480px',
+              width: '100%',
+              padding: '1.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#1D4ED8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Edit3 size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Edit Student Information
+                  </h3>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Directly modifying database record for {editingStudent?.enrollmentNo || editingStudent?.email}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="btn-icon"
+                title="Close"
+                style={{ border: 'none', background: 'none', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditStudentSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', fontSize: '12.5px' }}>
+              <div>
+                <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="e.g. Ayushi Sahu"
+                  className="input-field"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Enrollment No *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.rollNo}
+                    onChange={(e) => setEditForm({ ...editForm, rollNo: e.target.value })}
+                    placeholder="0105CS241113"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Status
+                  </label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="SUSPENDED">SUSPENDED</option>
+                    <option value="GRADUATED">GRADUATED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Official Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    placeholder="student@college.edu"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    placeholder="+91..."
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Semester
+                  </label>
+                  <select
+                    value={editForm.semester}
+                    onChange={(e) => setEditForm({ ...editForm, semester: e.target.value })}
+                    className="input-field"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                      <option key={s} value={String(s)}>Semester {s}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Section
+                  </label>
+                  <select
+                    value={editForm.section}
+                    onChange={(e) => setEditForm({ ...editForm, section: e.target.value })}
+                    className="input-field"
+                  >
+                    {['A', 'B', 'C', 'D'].map((sec) => (
+                      <option key={sec} value={sec}>Section {sec}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Admin Direct Password Update Field */}
+              <div style={{ backgroundColor: '#F8FAFC', padding: '0.75rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <KeyRound size={12} className="text-amber-600" />
+                    <span>Reset Password (Admin Direct)</span>
+                  </label>
+                  <span style={{ fontSize: '10px', color: '#64748B' }}>Optional</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Leave empty to keep existing password"
+                  value={editForm.password}
+                  onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                  className="input-field"
+                  style={{ backgroundColor: '#FFFFFF' }}
+                />
+                <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '4px' }}>
+                  Entering a password will immediately bcrypt-hash and overwrite the student's password in the database.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="btn btn-sm btn-secondary"
+                  disabled={editSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-sm btn-primary"
+                  disabled={editSubmitting}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {editSubmitting ? (
+                    <>
+                      <RefreshCw size={12} className="animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={13} />
+                      <span>Save Changes</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

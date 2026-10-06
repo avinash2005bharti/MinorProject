@@ -33,6 +33,7 @@ export default function HodClassesSections() {
   const [newSectionName, setNewSectionName] = useState('');
   const [newSectionYear, setNewSectionYear] = useState('3rd Year');
   const [newSectionSem, setNewSectionSem] = useState(5);
+  const [newSectionCapacity, setNewSectionCapacity] = useState(60);
 
   // Subject Modal
   const [isSubjectModalOpen, setIsSubjectModalOpen] = useState(false);
@@ -77,11 +78,12 @@ export default function HodClassesSections() {
         semester: parseInt(newSectionSem, 10),
         academicYear: newSectionYear,
         year: newSectionYear,
-        capacity: 60
+        capacity: parseInt(newSectionCapacity, 10) || 60
       });
-      addToast('Section Created', `Section ${newSectionName.toUpperCase()} provisioned for ${newSectionYear} (Sem ${newSectionSem}).`, 'success');
+      addToast('Section Created', `Section ${newSectionName.toUpperCase()} provisioned for ${newSectionYear} (Sem ${newSectionSem}) with capacity ${newSectionCapacity}.`, 'success');
       setIsSectionModalOpen(false);
       setNewSectionName('');
+      setNewSectionCapacity(60);
       fetchAcademicData();
     } catch (err) {
       addToast('Error Creating Section', err.message || 'Unable to create section.', 'error');
@@ -412,6 +414,23 @@ export default function HodClassesSections() {
                   className="input-field"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="form-label">Student Capacity</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="200"
+                  placeholder="e.g. 60"
+                  value={newSectionCapacity}
+                  onChange={(e) => setNewSectionCapacity(e.target.value)}
+                  className="input-field"
+                  required
+                />
+                <span style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', display: 'block' }}>
+                  Maximum student seats allocated to this section
+                </span>
               </div>
 
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>

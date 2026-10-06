@@ -173,28 +173,106 @@ exports.createFaculty = async (req, res) => {
 exports.updateFaculty = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, phone, designation, status, isTG } = req.body;
+    const requesterRole = (req.user?.role || '').toUpperCase();
+    const isHod = requesterRole === 'HOD';
+    const isAdmin = requesterRole === 'ADMIN';
+
+    const {
+      name,
+      email,
+      phone,
+      designation,
+      specialization,
+      status,
+      isTG,
+      employeeId,
+      employee_id,
+      maxPeriodsPerDay,
+      maxPeriodsPerWeek,
+      password
+    } = req.body;
+
+    // Security check: HOD cannot edit passwords
+    if (isHod && password && password.trim()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Security policy violation: HOD is not permitted to edit passwords. Password updates are strictly restricted to System Administrator.'
+      });
+    }
+
+    const existingTeacher = await prisma.teacher.findUnique({
+      where: { id },
+      include: { user: true }
+    });
+    if (!existingTeacher) {
+      return res.status(404).json({ success: false, message: 'Teacher record not found.' });
+    }
 
     const data = {};
-    if (phone !== undefined) data.phone = phone;
+    if (phone !== undefined) data.phone = phone || null;
     if (designation !== undefined) data.designation = designation;
+    if (specialization !== undefined) data.specialization = specialization;
     if (status !== undefined) data.status = status;
     if (isTG !== undefined) data.isTG = Boolean(isTG);
+    if (employeeId || employee_id) data.employeeId = (employeeId || employee_id).trim().toUpperCase();
+    if (maxPeriodsPerDay) data.maxPeriodsPerDay = parseInt(maxPeriodsPerDay, 10);
+    if (maxPeriodsPerWeek) data.maxPeriodsPerWeek = parseInt(maxPeriodsPerWeek, 10);
 
+    let fullName = name ? name.trim() : null;
     if (name) {
       const parts = name.trim().split(/\s+/);
       data.firstName = parts[0];
       data.lastName = parts.slice(1).join(' ');
     }
 
-    const updated = await prisma.teacher.update({
-      where: { id },
-      data,
-      include: {
-        department: true,
-        user: true,
-        hodAssignments: { where: { isCurrent: true } }
+    if (email && email.trim()) {
+      data.email = email.trim().toLowerCase();
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      // Update teacher table
+      const updatedTeacher = await tx.teacher.update({
+        where: { id },
+        data,
+        include: {
+          department: true,
+          user: true,
+          hodAssignments: { where: { isCurrent: true } }
+        }
+      });
+
+      // Synchronize linked User account if it exists
+      if (existingTeacher.userId) {
+        const userUpdateData = {};
+        if (fullName) userUpdateData.name = fullName;
+        if (data.email) userUpdateData.email = data.email;
+        if (status) userUpdateData.isActive = status.toUpperCase() === 'ACTIVE';
+
+        // Admin can update password
+        if (isAdmin && password && password.trim()) {
+          userUpdateData.passwordHash = await bcrypt.hash(password.trim(), 10);
+        }
+
+        // Update role if isTG changed
+        if (isTG !== undefined) {
+          const targetRoleName = isTG ? 'TG' : 'TEACHER';
+          const targetRole = await tx.role.findFirst({
+            where: { name: { equals: targetRoleName, mode: 'insensitive' } }
+          });
+          if (targetRole) {
+            userUpdateData.roleId = targetRole.id;
+          }
+        }
+
+        if (Object.keys(userUpdateData).length > 0) {
+          await tx.user.update({
+            where: { id: existingTeacher.userId },
+            data: userUpdateData
+          });
+        }
       }
+
+      return updatedTeacher;
     });
 
     return res.status(200).json({

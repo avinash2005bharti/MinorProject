@@ -21,6 +21,7 @@ import {
   Award,
   GraduationCap,
   Shield,
+  Edit3,
   X
 } from 'lucide-react';
 
@@ -47,6 +48,131 @@ export default function HodTeacherManagement() {
   const [analyzing, setAnalyzing] = useState(false);
   const [proposalData, setProposalData] = useState(null);
   const [applying, setApplying] = useState(false);
+
+  // Add Faculty Modal State & Handler
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [submittingFaculty, setSubmittingFaculty] = useState(false);
+  const [newFacultyName, setNewFacultyName] = useState('');
+  const [newFacultyEmpId, setNewFacultyEmpId] = useState('');
+  const [newFacultyEmail, setNewFacultyEmail] = useState('');
+  const [newFacultyDesignation, setNewFacultyDesignation] = useState('Assistant Professor');
+  const [newFacultyPhone, setNewFacultyPhone] = useState('');
+  const [newFacultySpecialization, setNewFacultySpecialization] = useState('Computer Science & Engineering');
+  const [newFacultyIsTg, setNewFacultyIsTg] = useState(false);
+  const [newFacultyMaxPerDay, setNewFacultyMaxPerDay] = useState(4);
+  const [newFacultyMaxPerWeek, setNewFacultyMaxPerWeek] = useState(18);
+
+  // Edit Faculty Modal State (HOD: No Password Field)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editingFaculty, setEditingFaculty] = useState(null);
+  const [editForm, setEditForm] = useState({
+    id: '',
+    name: '',
+    employeeId: '',
+    email: '',
+    designation: 'Assistant Professor',
+    specialization: 'Computer Science & Engineering',
+    phone: '',
+    isTG: false,
+    status: 'ACTIVE',
+    maxPeriodsPerDay: 4,
+    maxPeriodsPerWeek: 18
+  });
+
+  const handleAddFaculty = async (e) => {
+    e.preventDefault();
+    if (!newFacultyName.trim() || !newFacultyEmail.trim()) {
+      addToast('Validation Error', 'Name and official email are required.', 'warning');
+      return;
+    }
+
+    setSubmittingFaculty(true);
+    try {
+      await teacherApi.createFaculty({
+        name: newFacultyName.trim(),
+        employeeId: newFacultyEmpId.trim() ? newFacultyEmpId.trim().toUpperCase() : undefined,
+        email: newFacultyEmail.trim().toLowerCase(),
+        designation: newFacultyDesignation,
+        specialization: newFacultySpecialization.trim() || 'Computer Science & Engineering',
+        phone: newFacultyPhone.trim() || undefined,
+        isTG: Boolean(newFacultyIsTg),
+        maxPeriodsPerDay: parseInt(newFacultyMaxPerDay, 10) || 4,
+        maxPeriodsPerWeek: parseInt(newFacultyMaxPerWeek, 10) || 18
+      });
+
+      addToast('Faculty Registered', `${newFacultyName} (${newFacultyDesignation}) account provisioned successfully.`, 'success');
+      setIsAddModalOpen(false);
+      setNewFacultyName('');
+      setNewFacultyEmpId('');
+      setNewFacultyEmail('');
+      setNewFacultyPhone('');
+      setNewFacultySpecialization('Computer Science & Engineering');
+      setNewFacultyIsTg(false);
+      setNewFacultyMaxPerDay(4);
+      setNewFacultyMaxPerWeek(18);
+
+      fetchFaculty();
+    } catch (err) {
+      addToast('Error Adding Faculty', err.message || 'Unable to register faculty member.', 'error');
+    } finally {
+      setSubmittingFaculty(false);
+    }
+  };
+
+  const handleOpenEditFaculty = (fac) => {
+    setEditingFaculty(fac);
+    const fullName = fac.name || `${fac.firstName || ''} ${fac.lastName || ''}`.trim();
+    setEditForm({
+      id: fac.id,
+      name: fullName,
+      employeeId: fac.employeeId || fac.employee_id || '',
+      email: fac.email || '',
+      designation: fac.designation || 'Assistant Professor',
+      specialization: fac.specialization || 'Computer Science & Engineering',
+      phone: fac.phone || '',
+      isTG: Boolean(fac.isTG || fac.isTg),
+      status: fac.status || 'ACTIVE',
+      maxPeriodsPerDay: fac.max_periods_per_day || fac.maxPeriodsPerDay || 4,
+      maxPeriodsPerWeek: fac.max_periods_per_week || fac.maxPeriodsPerWeek || 18
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditFacultySubmit = async (e) => {
+    e.preventDefault();
+    if (!editForm.name.trim() || !editForm.email.trim()) {
+      addToast('Validation Error', 'Name and official email are required.', 'warning');
+      return;
+    }
+
+    setEditSubmitting(true);
+    try {
+      const payload = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim().toLowerCase(),
+        employeeId: editForm.employeeId.trim() ? editForm.employeeId.trim().toUpperCase() : undefined,
+        employee_id: editForm.employeeId.trim() ? editForm.employeeId.trim().toUpperCase() : undefined,
+        designation: editForm.designation,
+        specialization: editForm.specialization.trim() || 'Computer Science & Engineering',
+        phone: editForm.phone.trim() || undefined,
+        isTG: Boolean(editForm.isTG),
+        status: editForm.status,
+        maxPeriodsPerDay: parseInt(editForm.maxPeriodsPerDay, 10) || 4,
+        maxPeriodsPerWeek: parseInt(editForm.maxPeriodsPerWeek, 10) || 18
+      };
+
+      await teacherApi.updateFaculty(editForm.id, payload);
+      addToast('Faculty Updated', `${editForm.name} profile successfully updated.`, 'success');
+      setIsEditModalOpen(false);
+      setEditingFaculty(null);
+      fetchFaculty();
+    } catch (err) {
+      addToast('Update Failed', err.message || 'Unable to update faculty profile.', 'error');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
 
   const fetchFaculty = async () => {
     setLoading(true);
@@ -226,7 +352,7 @@ export default function HodTeacherManagement() {
     try {
       await teacherSchedulerApi.applySubstitutions({
         absence_data: proposalData,
-        approved_by: 'Dr. Alok Verma (HOD)'
+        approved_by: 'HOD CSE'
       });
 
       addToast('Substitutions Applied', 'Timetable entries updated and notifications dispatched.', 'success');
@@ -259,6 +385,15 @@ export default function HodTeacherManagement() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              onClick={() => setIsAddModalOpen(true)}
+              className="btn btn-primary text-xs py-2 px-3.5 shadow-sm flex items-center gap-1.5 font-bold"
+              id="btn-add-faculty"
+            >
+              <Plus size={15} />
+              <span>+ Add Faculty Member</span>
+            </button>
+
             <button
               onClick={() => handleOpenTgModal()}
               className="btn btn-primary text-xs py-2 px-3.5 shadow-sm flex items-center gap-1.5"
@@ -550,6 +685,16 @@ export default function HodTeacherManagement() {
                       )}
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditFaculty(fac)}
+                          className="btn btn-outline text-xs py-1.5 px-2.5 flex items-center gap-1 border-blue-200 text-blue-700 hover:bg-blue-50"
+                          title="Edit faculty member profile"
+                        >
+                          <Edit3 size={12} className="text-blue-600" />
+                          <span>Edit</span>
+                        </button>
+
                         {fac.isTG ? (
                           <>
                             <button
@@ -927,6 +1072,388 @@ export default function HodTeacherManagement() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Add Faculty Member Modal */}
+      {isAddModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 95, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(6px)', padding: '1rem' }}>
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: '20px', maxWidth: '520px', width: '100%', padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid var(--border-subtle)', boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', backgroundColor: '#EFF6FF', color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <UserCheck size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Register Faculty Member
+                  </h3>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Create new teacher account and profile in PostgreSQL
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="btn-icon"
+                title="Close"
+                style={{ border: 'none', background: 'none', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddFaculty} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', fontSize: '12.5px' }}>
+              <div>
+                <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                  Full Name <span style={{ color: '#EF4444' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newFacultyName}
+                  onChange={(e) => setNewFacultyName(e.target.value)}
+                  placeholder="e.g. Dr. Rajesh Kumar"
+                  className="input-field"
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Official Email <span style={{ color: '#EF4444' }}>*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={newFacultyEmail}
+                    onChange={(e) => setNewFacultyEmail(e.target.value)}
+                    placeholder="e.g. rajesh@college.edu"
+                    className="input-field"
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Employee ID
+                  </label>
+                  <input
+                    type="text"
+                    value={newFacultyEmpId}
+                    onChange={(e) => setNewFacultyEmpId(e.target.value)}
+                    placeholder="Auto or EMP-101"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Designation
+                  </label>
+                  <select
+                    className="input-field"
+                    value={newFacultyDesignation}
+                    onChange={(e) => setNewFacultyDesignation(e.target.value)}
+                  >
+                    <option value="Assistant Professor">Assistant Professor</option>
+                    <option value="Associate Professor">Associate Professor</option>
+                    <option value="Professor">Professor</option>
+                    <option value="Visiting Faculty">Visiting Faculty</option>
+                    <option value="Lab Instructor">Lab Instructor</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Contact Phone
+                  </label>
+                  <input
+                    type="tel"
+                    value={newFacultyPhone}
+                    onChange={(e) => setNewFacultyPhone(e.target.value)}
+                    placeholder="+91..."
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                  Specialization / Domain
+                </label>
+                <input
+                  type="text"
+                  value={newFacultySpecialization}
+                  onChange={(e) => setNewFacultySpecialization(e.target.value)}
+                  placeholder="e.g. AI & Machine Learning, Data Structures"
+                  className="input-field"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Max Periods / Day
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="8"
+                    value={newFacultyMaxPerDay}
+                    onChange={(e) => setNewFacultyMaxPerDay(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Max Periods / Week
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="35"
+                    value={newFacultyMaxPerWeek}
+                    onChange={(e) => setNewFacultyMaxPerWeek(e.target.value)}
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0' }}>
+                <input
+                  type="checkbox"
+                  id="hod-new-faculty-is-tg"
+                  checked={newFacultyIsTg}
+                  onChange={(e) => setNewFacultyIsTg(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="hod-new-faculty-is-tg" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                  Appoint as Tutor Guardian (TG) for Department
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingFaculty}
+                  className="btn btn-primary"
+                  style={{ flex: 1, fontWeight: 700 }}
+                >
+                  {submittingFaculty ? 'Registering...' : 'Register Faculty Account'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Faculty Modal for HOD (No Password Field Allowed) */}
+      {isEditModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: '1rem'
+          }}
+          onClick={() => setIsEditModalOpen(false)}
+        >
+          <div
+            className="card"
+            style={{
+              maxWidth: '500px',
+              width: '100%',
+              padding: '1.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#1D4ED8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Edit3 size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Edit Faculty Profile
+                  </h3>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Department Record Update for {editingFaculty?.employeeId || editingFaculty?.email}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="btn-icon"
+                title="Close"
+                style={{ border: 'none', background: 'none', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditFacultySubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', fontSize: '12.5px' }}>
+              <div>
+                <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="e.g. Dr. Rajesh Kumar"
+                  className="input-field"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Employee ID
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.employeeId}
+                    onChange={(e) => setEditForm({ ...editForm, employeeId: e.target.value })}
+                    placeholder="EMP-HOD-01"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Status
+                  </label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="ON_LEAVE">ON_LEAVE</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Official Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    placeholder="faculty@college.edu"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    placeholder="+91..."
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Designation
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.designation}
+                    onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })}
+                    placeholder="Professor & Head"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Specialization
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.specialization}
+                    onChange={(e) => setEditForm({ ...editForm, specialization: e.target.value })}
+                    placeholder="Computer Science"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0' }}>
+                <input
+                  type="checkbox"
+                  id="hod-edit-faculty-is-tg"
+                  checked={editForm.isTG}
+                  onChange={(e) => setEditForm({ ...editForm, isTG: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <label htmlFor="hod-edit-faculty-is-tg" style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', cursor: 'pointer' }}>
+                  Designated Tutor Guardian (TG) for Department
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="btn btn-secondary"
+                  style={{ flex: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="btn btn-primary"
+                  style={{ flex: 1, fontWeight: 700 }}
+                >
+                  {editSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -295,7 +295,7 @@ export default function TgDashboard() {
                       <TableRow key={st.id}>
                         <TableCell className="font-bold text-primary-600 font-mono">{st.enrollment_no}</TableCell>
                         <TableCell className="text-slate-900 font-semibold">{st.name}</TableCell>
-                        <TableCell className="text-slate-600">{st.section}</TableCell>
+                        <TableCell className="text-slate-600">{typeof st.section === 'object' && st.section !== null ? (st.section.name || 'A') : (st.section || 'A')}</TableCell>
                         <TableCell className="text-slate-500">{st.batch}</TableCell>
                         <TableCell>
                           <Badge variant="success" size="xs" dot>{st.status || 'Active'}</Badge>

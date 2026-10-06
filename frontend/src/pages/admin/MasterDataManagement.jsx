@@ -683,400 +683,597 @@ export default function MasterDataManagement() {
         </div>
       </div>
 
-      {/* --- BULK IMPORT MODAL WITH DRY-RUN PREVIEW --- */}
+      {/* --- BULK IMPORT MODAL WITH DRY-RUN PREVIEW (FLOATING POPUP) --- */}
       {isImportModalOpen && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
-          <div className="modal-dialog modal-lg modal-dialog-centered">
-            <div className="modal-content" style={{ borderRadius: '16px', overflow: 'hidden' }}>
-              <div className="modal-header bg-light">
-                <div className="d-flex align-items-center gap-2">
-                  <FileSpreadsheet className="text-primary" size={20} />
-                  <h5 className="modal-title fw-bold">Bulk Import {activeTab.toUpperCase()}</h5>
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1050,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(6px)',
+            padding: '1.25rem'
+          }}
+          onClick={() => setIsImportModalOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              maxWidth: '820px',
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.28)',
+              border: '1px solid #E2E8F0',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '1.25rem 1.5rem',
+                borderBottom: '1px solid #F1F5F9',
+                backgroundColor: '#F8FAFC'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#2563EB',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <FileSpreadsheet size={20} />
                 </div>
-                <button type="button" className="btn-close" onClick={() => setIsImportModalOpen(false)} />
+                <div>
+                  <h5 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                    Bulk Import {activeTab.toUpperCase()}
+                  </h5>
+                  <span style={{ fontSize: '11px', color: '#64748B' }}>
+                    Upload Excel (.xlsx) or CSV spreadsheet to validate and import records
+                  </span>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsImportModalOpen(false)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  cursor: 'pointer',
+                  color: '#94A3B8',
+                  padding: '4px'
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
 
-              <div className="modal-body p-4">
-                {/* Step 1: Upload File */}
-                <div className="mb-4 text-center p-4 border border-2 border-dashed rounded-3" style={{ backgroundColor: '#F8FAFC' }}>
-                  <UploadCloud size={40} className="text-primary mb-2" />
-                  <h6>Choose Excel (.xlsx) or CSV file to import</h6>
-                  <p className="text-muted small mb-3">Ensure your spreadsheet contains headers matching the required fields</p>
-                  <input
-                    type="file"
-                    accept=".xlsx, .xls, .csv"
-                    onChange={handleFileChange}
-                    className="form-control"
-                    style={{ maxWidth: '400px', margin: '0 auto' }}
-                  />
-                  {importFile && (
-                    <div className="mt-3">
-                      <span className="badge bg-primary me-2">Selected: {importFile.name}</span>
-                      <button
-                        onClick={handlePreviewImport}
-                        disabled={importLoading}
-                        className="btn btn-sm btn-primary"
-                        style={{ fontWeight: 600 }}
-                      >
-                        {importLoading ? 'Validating...' : 'Preview & Validate'}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Step 2: Dry Run Validation Results */}
-                {importPreview && (
-                  <div>
-                    <div className="d-flex gap-3 mb-3">
-                      <div className="card p-3 flex-fill text-center border-success bg-success-subtle">
-                        <div style={{ fontSize: '20px', fontWeight: 800 }}>{importPreview.validCount || 0}</div>
-                        <div style={{ fontSize: '12px' }}>Valid Records</div>
-                      </div>
-                      <div className="card p-3 flex-fill text-center border-danger bg-danger-subtle">
-                        <div style={{ fontSize: '20px', fontWeight: 800 }}>{importPreview.invalidCount || 0}</div>
-                        <div style={{ fontSize: '12px' }}>Duplicates / Errors</div>
-                      </div>
-                      <div className="card p-3 flex-fill text-center border-secondary bg-light">
-                        <div style={{ fontSize: '20px', fontWeight: 800 }}>{importPreview.totalRows || 0}</div>
-                        <div style={{ fontSize: '12px' }}>Total Rows Read</div>
-                      </div>
-                    </div>
-
-                    {/* Validation Errors List */}
-                    {importPreview.errors && importPreview.errors.length > 0 && (
-                      <div className="alert alert-warning mb-3" style={{ maxHeight: '160px', overflowY: 'auto' }}>
-                        <div className="fw-bold mb-1">Validation Warnings / Detected Duplicates:</div>
-                        <ul className="mb-0 ps-3 small">
-                          {importPreview.errors.map((err, i) => (
-                            <li key={i}>{typeof err === 'string' ? err : `Row ${err.row}: ${err.error}`}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Preview Table */}
-                    {importPreview.preview && importPreview.preview.length > 0 && (
-                      <div className="table-responsive border rounded" style={{ maxHeight: '200px', overflowY: 'auto' }}>
-                        <table className="table table-sm table-striped mb-0 small">
-                          <thead>
-                            <tr>
-                              {Object.keys(importPreview.preview[0] || {}).slice(0, 5).map((col) => (
-                                <th key={col}>{col}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {importPreview.preview.slice(0, 5).map((row, idx) => (
-                              <tr key={idx}>
-                                {Object.values(row).slice(0, 5).map((v, cIdx) => (
-                                  <td key={cIdx}>{String(v)}</td>
-                                ))}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
+            <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+              {/* Step 1: Upload File */}
+              <div
+                className="mb-4 text-center p-4 border border-2 border-dashed rounded-3"
+                style={{ backgroundColor: '#F8FAFC', borderColor: '#CBD5E1' }}
+              >
+                <UploadCloud size={42} style={{ color: '#2563EB', margin: '0 auto 8px auto' }} />
+                <h6 style={{ fontWeight: 700, color: '#0F172A' }}>Choose Excel (.xlsx) or CSV file to import</h6>
+                <p className="text-muted small mb-3">Ensure your spreadsheet contains headers matching the required fields</p>
+                <input
+                  type="file"
+                  accept=".xlsx, .xls, .csv"
+                  onChange={handleFileChange}
+                  className="form-control"
+                  style={{ maxWidth: '420px', margin: '0 auto' }}
+                />
+                {importFile && (
+                  <div className="mt-3">
+                    <span className="badge me-2" style={{ backgroundColor: '#2563EB', color: '#FFFFFF', padding: '6px 12px' }}>Selected: {importFile.name}</span>
+                    <button
+                      onClick={handlePreviewImport}
+                      disabled={importLoading}
+                      className="btn btn-sm btn-primary"
+                      style={{ fontWeight: 600, padding: '5px 14px' }}
+                    >
+                      {importLoading ? 'Validating...' : 'Preview & Validate'}
+                    </button>
                   </div>
                 )}
               </div>
 
-              <div className="modal-footer bg-light">
-                <button type="button" className="btn btn-secondary" onClick={() => setIsImportModalOpen(false)}>
-                  Cancel
-                </button>
+              {/* Step 2: Dry Run Validation Results */}
+              {importPreview && (
+                <div>
+                  <div className="d-flex gap-3 mb-3">
+                    <div className="card p-3 flex-fill text-center border-success bg-success-subtle">
+                      <div style={{ fontSize: '20px', fontWeight: 800 }}>{importPreview.validCount || 0}</div>
+                      <div style={{ fontSize: '12px' }}>Valid Records</div>
+                    </div>
+                    <div className="card p-3 flex-fill text-center border-danger bg-danger-subtle">
+                      <div style={{ fontSize: '20px', fontWeight: 800 }}>{importPreview.invalidCount || 0}</div>
+                      <div style={{ fontSize: '12px' }}>Duplicates / Errors</div>
+                    </div>
+                    <div className="card p-3 flex-fill text-center border-secondary bg-light">
+                      <div style={{ fontSize: '20px', fontWeight: 800 }}>{importPreview.totalRows || 0}</div>
+                      <div style={{ fontSize: '12px' }}>Total Rows Read</div>
+                    </div>
+                  </div>
+
+                  {/* Validation Errors List */}
+                  {importPreview.errors && importPreview.errors.length > 0 && (
+                    <div className="alert alert-warning mb-3" style={{ maxHeight: '160px', overflowY: 'auto' }}>
+                      <div className="fw-bold mb-1">Validation Warnings / Detected Duplicates:</div>
+                      <ul className="mb-0 ps-3 small">
+                        {importPreview.errors.map((err, i) => (
+                          <li key={i}>{typeof err === 'string' ? err : `Row ${err.row}: ${err.error}`}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Preview Table */}
+                  {importPreview.preview && importPreview.preview.length > 0 && (
+                    <div className="table-responsive border rounded" style={{ maxHeight: '200px', overflowY: 'auto' }}>
+                      <table className="table table-sm table-striped mb-0 small">
+                        <thead>
+                          <tr>
+                            {Object.keys(importPreview.preview[0] || {}).slice(0, 5).map((col) => (
+                              <th key={col}>{col}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importPreview.preview.slice(0, 5).map((row, idx) => (
+                            <tr key={idx}>
+                              {Object.values(row).slice(0, 5).map((v, cIdx) => (
+                                <td key={cIdx}>{String(v)}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: '0.75rem',
+                padding: '1rem 1.5rem',
+                borderTop: '1px solid #F1F5F9',
+                backgroundColor: '#F8FAFC'
+              }}
+            >
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setIsImportModalOpen(false)}
+                style={{ fontSize: '12px', padding: '0.45rem 1rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-success"
+                onClick={handleConfirmImport}
+                disabled={!importPreview || importLoading || !importPreview.validCount}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  padding: '0.45rem 1.25rem',
+                  backgroundColor: '#059669',
+                  borderColor: '#059669'
+                }}
+              >
+                <Check size={16} />
+                <span>Confirm & Import {importPreview?.validCount || 0} Records</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- ADD MODAL (FLOATING POPUP) --- */}
+      {isAddModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1050,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(6px)',
+            padding: '1.25rem'
+          }}
+          onClick={() => setIsAddModalOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              maxWidth: '560px',
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.28)',
+              border: '1px solid #E2E8F0',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <form onSubmit={handleAddSubmit} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '1.25rem 1.5rem',
+                  borderBottom: '1px solid #F1F5F9',
+                  backgroundColor: '#F8FAFC'
+                }}
+              >
+                <h5 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                  Add New {activeTab.slice(0, -1).toUpperCase()}
+                </h5>
                 <button
                   type="button"
-                  className="btn btn-success"
-                  onClick={handleConfirmImport}
-                  disabled={!importPreview || importLoading || !importPreview.validCount}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}
+                  onClick={() => setIsAddModalOpen(false)}
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8' }}
                 >
-                  <Check size={16} />
-                  <span>Confirm & Import {importPreview?.validCount || 0} Records</span>
+                  <X size={20} />
                 </button>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* --- ADD MODAL --- */}
-      {isAddModalOpen && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content" style={{ borderRadius: '16px' }}>
-              <form onSubmit={handleAddSubmit}>
-                <div className="modal-header bg-light">
-                  <h5 className="modal-title fw-bold">Add New {activeTab.slice(0, -1).toUpperCase()}</h5>
-                  <button type="button" className="btn-close" onClick={() => setIsAddModalOpen(false)} />
-                </div>
-                <div className="modal-body p-4">
-                  {activeTab === 'teachers' && (
-                    <div className="d-flex flex-column gap-3">
-                      <div>
-                        <label className="form-label small fw-bold">Full Name *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-control"
-                          value={formData.name || ''}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <label className="form-label small fw-bold">Employee ID *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-control"
-                          value={formData.employeeId || ''}
-                          onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <label className="form-label small fw-bold">Email Address *</label>
-                        <input
-                          type="email"
-                          required
-                          className="form-control"
-                          value={formData.email || ''}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <label className="form-label small fw-bold">Designation</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          placeholder="e.g. Assistant Professor"
-                          value={formData.designation || ''}
-                          onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <label className="form-label small fw-bold">Max Weekly Workload (Hours)</label>
+              <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
+                {activeTab === 'teachers' && (
+                  <div className="d-flex flex-column gap-3">
+                    <div>
+                      <label className="form-label small fw-bold">Full Name *</label>
+                      <input
+                        type="text"
+                        required
+                        className="form-control"
+                        value={formData.name || ''}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label small fw-bold">Employee ID *</label>
+                      <input
+                        type="text"
+                        required
+                        className="form-control"
+                        value={formData.employeeId || ''}
+                        onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label small fw-bold">Email Address *</label>
+                      <input
+                        type="email"
+                        required
+                        className="form-control"
+                        value={formData.email || ''}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label small fw-bold">Designation</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        placeholder="e.g. Assistant Professor"
+                        value={formData.designation || ''}
+                        onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label small fw-bold">Max Weekly Workload (Hours)</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={formData.maxWeeklyWorkload || 18}
+                        onChange={(e) => setFormData({ ...formData, maxWeeklyWorkload: parseInt(e.target.value, 10) })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'students' && (
+                  <div className="d-flex flex-column gap-3">
+                    <div>
+                      <label className="form-label small fw-bold">Student Name *</label>
+                      <input
+                        type="text"
+                        required
+                        className="form-control"
+                        value={formData.name || ''}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label small fw-bold">Enrollment / Roll Number *</label>
+                      <input
+                        type="text"
+                        required
+                        className="form-control"
+                        value={formData.enrollmentNo || formData.rollNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, enrollmentNo: e.target.value, rollNumber: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label small fw-bold">Email Address *</label>
+                      <input
+                        type="email"
+                        required
+                        className="form-control"
+                        value={formData.email || ''}
+                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      />
+                    </div>
+                    <div className="row g-2">
+                      <div className="col-6">
+                        <label className="form-label small fw-bold">Semester</label>
                         <input
                           type="number"
                           className="form-control"
-                          value={formData.maxWeeklyWorkload || 18}
-                          onChange={(e) => setFormData({ ...formData, maxWeeklyWorkload: parseInt(e.target.value, 10) })}
+                          value={formData.semester || 5}
+                          onChange={(e) => setFormData({ ...formData, semester: parseInt(e.target.value, 10) })}
+                        />
+                      </div>
+                      <div className="col-6">
+                        <label className="form-label small fw-bold">Section</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="A, B, or C"
+                          value={formData.section || 'A'}
+                          onChange={(e) => setFormData({ ...formData, section: e.target.value })}
                         />
                       </div>
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  {activeTab === 'students' && (
-                    <div className="d-flex flex-column gap-3">
-                      <div>
-                        <label className="form-label small fw-bold">Student Name *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-control"
-                          value={formData.name || ''}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <label className="form-label small fw-bold">Enrollment / Roll Number *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-control"
-                          value={formData.enrollmentNo || formData.rollNumber || ''}
-                          onChange={(e) => setFormData({ ...formData, enrollmentNo: e.target.value, rollNumber: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <label className="form-label small fw-bold">Email Address *</label>
-                        <input
-                          type="email"
-                          required
-                          className="form-control"
-                          value={formData.email || ''}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        />
-                      </div>
-                      <div className="row g-2">
-                        <div className="col-6">
-                          <label className="form-label small fw-bold">Semester</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            value={formData.semester || 5}
-                            onChange={(e) => setFormData({ ...formData, semester: parseInt(e.target.value, 10) })}
-                          />
-                        </div>
-                        <div className="col-6">
-                          <label className="form-label small fw-bold">Section</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            placeholder="A, B, or C"
-                            value={formData.section || 'A'}
-                            onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-                          />
-                        </div>
-                      </div>
+                {activeTab === 'subjects' && (
+                  <div className="d-flex flex-column gap-3">
+                    <div>
+                      <label className="form-label small fw-bold">Subject Name *</label>
+                      <input
+                        type="text"
+                        required
+                        className="form-control"
+                        value={formData.name || ''}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      />
                     </div>
-                  )}
-
-                  {activeTab === 'subjects' && (
-                    <div className="d-flex flex-column gap-3">
-                      <div>
-                        <label className="form-label small fw-bold">Subject Name *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-control"
-                          value={formData.name || ''}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <label className="form-label small fw-bold">Subject Code *</label>
-                        <input
-                          type="text"
-                          required
-                          className="form-control"
-                          placeholder="e.g. CS501"
-                          value={formData.code || ''}
-                          onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                        />
-                      </div>
-                      <div className="row g-2">
-                        <div className="col-6">
-                          <label className="form-label small fw-bold">Type</label>
-                          <select
-                            className="form-select"
-                            value={formData.type || 'THEORY'}
-                            onChange={(e) => setFormData({ ...formData, type: e.target.value })}
-                          >
-                            <option value="THEORY">Theory</option>
-                            <option value="PRACTICAL">Practical</option>
-                            <option value="LAB">Lab</option>
-                            <option value="TUTORIAL">Tutorial</option>
-                            <option value="ELECTIVE">Elective</option>
-                          </select>
-                        </div>
-                        <div className="col-6">
-                          <label className="form-label small fw-bold">Semester</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            value={formData.semester || 5}
-                            onChange={(e) => setFormData({ ...formData, semester: parseInt(e.target.value, 10) })}
-                          />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="form-label small fw-bold">Weekly Slots / Hours</label>
-                        <input
-                          type="number"
-                          className="form-control"
-                          value={formData.weeklySlots || 4}
-                          onChange={(e) => setFormData({ ...formData, weeklySlots: parseInt(e.target.value, 10) })}
-                        />
-                      </div>
+                    <div>
+                      <label className="form-label small fw-bold">Subject Code *</label>
+                      <input
+                        type="text"
+                        required
+                        className="form-control"
+                        placeholder="e.g. CS501"
+                        value={formData.code || ''}
+                        onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                      />
                     </div>
-                  )}
-
-                  {activeTab === 'classrooms' && (
-                    <div className="d-flex flex-column gap-3">
-                      <div>
-                        <label className="form-label small fw-bold">Room Number *</label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="e.g. CR-301 or Lab-3"
-                          className="form-control"
-                          value={formData.roomNumber || ''}
-                          onChange={(e) => setFormData({ ...formData, roomNumber: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <label className="form-label small fw-bold">Room Type</label>
+                    <div className="row g-2">
+                      <div className="col-6">
+                        <label className="form-label small fw-bold">Type</label>
                         <select
                           className="form-select"
-                          value={formData.roomType || 'CLASSROOM'}
-                          onChange={(e) => setFormData({ ...formData, roomType: e.target.value })}
+                          value={formData.type || 'THEORY'}
+                          onChange={(e) => setFormData({ ...formData, type: e.target.value })}
                         >
-                          <option value="CLASSROOM">Classroom</option>
-                          <option value="LAB">Computer Lab</option>
-                          <option value="SEMINAR_HALL">Seminar Hall</option>
+                          <option value="THEORY">Theory</option>
+                          <option value="PRACTICAL">Practical</option>
+                          <option value="LAB">Lab</option>
+                          <option value="TUTORIAL">Tutorial</option>
+                          <option value="ELECTIVE">Elective</option>
                         </select>
                       </div>
-                      <div>
-                        <label className="form-label small fw-bold">Seating Capacity</label>
+                      <div className="col-6">
+                        <label className="form-label small fw-bold">Semester</label>
                         <input
                           type="number"
                           className="form-control"
-                          value={formData.capacity || 60}
-                          onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value, 10) })}
+                          value={formData.semester || 5}
+                          onChange={(e) => setFormData({ ...formData, semester: parseInt(e.target.value, 10) })}
                         />
                       </div>
                     </div>
-                  )}
-                </div>
+                    <div>
+                      <label className="form-label small fw-bold">Weekly Slots / Hours</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={formData.weeklySlots || 4}
+                        onChange={(e) => setFormData({ ...formData, weeklySlots: parseInt(e.target.value, 10) })}
+                      />
+                    </div>
+                  </div>
+                )}
 
-                <div className="modal-footer bg-light">
-                  <button type="button" className="btn btn-secondary" onClick={() => setIsAddModalOpen(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary fw-bold">
-                    Save Record
-                  </button>
-                </div>
-              </form>
-            </div>
+                {activeTab === 'classrooms' && (
+                  <div className="d-flex flex-column gap-3">
+                    <div>
+                      <label className="form-label small fw-bold">Room Number *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. CR-301 or Lab-3"
+                        className="form-control"
+                        value={formData.roomNumber || ''}
+                        onChange={(e) => setFormData({ ...formData, roomNumber: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label small fw-bold">Room Type</label>
+                      <select
+                        className="form-select"
+                        value={formData.roomType || 'CLASSROOM'}
+                        onChange={(e) => setFormData({ ...formData, roomType: e.target.value })}
+                      >
+                        <option value="CLASSROOM">Classroom</option>
+                        <option value="LAB">Computer Lab</option>
+                        <option value="SEMINAR_HALL">Seminar Hall</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label small fw-bold">Seating Capacity</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={formData.capacity || 60}
+                        onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value, 10) })}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: '0.75rem',
+                  padding: '1rem 1.5rem',
+                  borderTop: '1px solid #F1F5F9',
+                  backgroundColor: '#F8FAFC'
+                }}
+              >
+                <button type="button" className="btn btn-secondary" onClick={() => setIsAddModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary fw-bold">
+                  Save Record
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* --- EDIT MODAL --- */}
+      {/* --- EDIT MODAL (FLOATING POPUP) --- */}
       {isEditModalOpen && selectedItem && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content" style={{ borderRadius: '16px' }}>
-              <form onSubmit={handleEditSubmit}>
-                <div className="modal-header bg-light">
-                  <h5 className="modal-title fw-bold">Edit {activeTab.slice(0, -1).toUpperCase()}</h5>
-                  <button type="button" className="btn-close" onClick={() => setIsEditModalOpen(false)} />
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 1050,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(6px)',
+            padding: '1.25rem'
+          }}
+          onClick={() => setIsEditModalOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              maxWidth: '520px',
+              width: '100%',
+              boxShadow: '0 25px 50px -12px rgba(15, 23, 42, 0.28)',
+              border: '1px solid #E2E8F0',
+              overflow: 'hidden'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <form onSubmit={handleEditSubmit}>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '1.25rem 1.5rem',
+                  borderBottom: '1px solid #F1F5F9',
+                  backgroundColor: '#F8FAFC'
+                }}
+              >
+                <h5 style={{ margin: 0, fontSize: '16px', fontWeight: 800, color: '#0F172A' }}>
+                  Edit {activeTab.slice(0, -1).toUpperCase()}
+                </h5>
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8' }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div style={{ padding: '1.5rem' }}>
+                <div>
+                  <label className="form-label small fw-bold">Name / Title</label>
+                  <input
+                    type="text"
+                    className="form-control mb-3"
+                    value={formData.name || formData.roomNumber || ''}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value, roomNumber: e.target.value })}
+                  />
                 </div>
-                <div className="modal-body p-4">
-                  <div>
-                    <label className="form-label small fw-bold">Name / Title</label>
-                    <input
-                      type="text"
-                      className="form-control mb-3"
-                      value={formData.name || formData.roomNumber || ''}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value, roomNumber: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="form-label small fw-bold">Status</label>
-                    <select
-                      className="form-select mb-3"
-                      value={formData.status || 'ACTIVE'}
-                      onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    >
-                      <option value="ACTIVE">ACTIVE</option>
-                      <option value="INACTIVE">INACTIVE</option>
-                      <option value="AVAILABLE">AVAILABLE</option>
-                    </select>
-                  </div>
+                <div>
+                  <label className="form-label small fw-bold">Status</label>
+                  <select
+                    className="form-select mb-3"
+                    value={formData.status || 'ACTIVE'}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                    <option value="AVAILABLE">AVAILABLE</option>
+                  </select>
                 </div>
-                <div className="modal-footer bg-light">
-                  <button type="button" className="btn btn-secondary" onClick={() => setIsEditModalOpen(false)}>
-                    Cancel
-                  </button>
-                  <button type="submit" className="btn btn-primary fw-bold">
-                    Update
-                  </button>
-                </div>
-              </form>
-            </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: '0.75rem',
+                  padding: '1rem 1.5rem',
+                  borderTop: '1px solid #F1F5F9',
+                  backgroundColor: '#F8FAFC'
+                }}
+              >
+                <button type="button" className="btn btn-secondary" onClick={() => setIsEditModalOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary fw-bold">
+                  Update
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

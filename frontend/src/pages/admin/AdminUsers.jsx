@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   Copy,
   Check,
+  Edit3,
   X
 } from 'lucide-react';
 
@@ -41,8 +42,29 @@ export default function AdminUsers() {
   // Modals
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [editLoading, setEditLoading] = useState(false);
   const [resetResult, setResetResult] = useState(null);
   const [copied, setCopied] = useState(false);
+
+  // Edit User Form State
+  const [editForm, setEditForm] = useState({
+    id: '',
+    name: '',
+    email: '',
+    password: '',
+    role: 'student',
+    status: 'ACTIVE',
+    phone: '',
+    enrollment_no: '',
+    roll_no: '',
+    semester: 5,
+    section: 'A',
+    employee_id: '',
+    designation: 'Assistant Professor',
+    isTG: false
+  });
 
   // Create User Form State
   const [createForm, setCreateForm] = useState({
@@ -137,6 +159,78 @@ export default function AdminUsers() {
       );
     } catch (err) {
       addToast('Status Update Failed', err.message || 'Unable to change status.', 'error');
+    }
+  };
+
+  // Handle Open Edit Modal
+  const handleOpenEdit = (user) => {
+    setEditingUser(user);
+    setEditForm({
+      id: user.id,
+      name: user.name || '',
+      email: user.email || '',
+      password: '', // blank to keep current
+      role: (user.role || 'student').toLowerCase(),
+      status: user.status || (user.isActive ? 'ACTIVE' : 'INACTIVE'),
+      phone: user.phone || user.studentProfile?.phone || user.teacherProfile?.phone || '',
+      enrollment_no: user.studentProfile?.enrollment_no || user.studentProfile?.enrollmentNo || '',
+      roll_no: user.studentProfile?.roll_no || user.studentProfile?.rollNo || '',
+      semester: user.studentProfile?.semester || user.semester || 5,
+      section: user.studentProfile?.sectionName || user.studentProfile?.section?.name || user.section || 'A',
+      employee_id: user.teacherProfile?.employee_id || user.teacherProfile?.employeeId || '',
+      designation: user.teacherProfile?.designation || 'Assistant Professor',
+      isTG: Boolean(user.teacherProfile?.isTG)
+    });
+    setIsEditModalOpen(true);
+  };
+
+  // Handle Edit Submit
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editForm.name.trim() || !editForm.email.trim()) {
+      addToast('Validation Error', 'Name and email are required.', 'warning');
+      return;
+    }
+
+    setEditLoading(true);
+    try {
+      const payload = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim().toLowerCase(),
+        role: editForm.role,
+        status: editForm.status,
+        isActive: editForm.status === 'ACTIVE',
+        phone: editForm.phone.trim() || undefined
+      };
+
+      if (editForm.password && editForm.password.trim()) {
+        payload.password = editForm.password.trim();
+      }
+
+      if (editForm.role === 'student') {
+        payload.enrollment_no = editForm.enrollment_no.trim().toUpperCase();
+        payload.enrollmentNo = editForm.enrollment_no.trim().toUpperCase();
+        payload.roll_no = editForm.roll_no.trim();
+        payload.rollNo = editForm.roll_no.trim();
+        payload.semester = Number(editForm.semester) || 5;
+        payload.section = (editForm.section || 'A').trim().toUpperCase();
+        payload.sectionName = (editForm.section || 'A').trim().toUpperCase();
+      } else if (['faculty', 'teacher', 'tg', 'hod'].includes(editForm.role)) {
+        payload.employee_id = editForm.employee_id.trim().toUpperCase();
+        payload.employeeId = editForm.employee_id.trim().toUpperCase();
+        payload.designation = editForm.designation;
+        payload.isTG = Boolean(editForm.isTG);
+      }
+
+      await adminApi.updateUser(editForm.id, payload);
+      addToast('User Updated', `${editForm.name}'s account details updated in PostgreSQL database.`, 'success');
+      setIsEditModalOpen(false);
+      setEditingUser(null);
+      fetchUsers();
+    } catch (err) {
+      addToast('Update Failed', err.message || 'Unable to update user in database.', 'error');
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -392,6 +486,17 @@ export default function AdminUsers() {
                           </td>
                           <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                              {/* Edit User Details directly in Database */}
+                              <button
+                                onClick={() => handleOpenEdit(u)}
+                                className="btn btn-outline text-xs py-1 px-2.5 flex items-center gap-1 border-blue-200 text-blue-700 hover:bg-blue-50"
+                                title="Edit user details & permissions directly in database"
+                                id={`btn-edit-user-${u.id}`}
+                              >
+                                <Edit3 size={12} className="text-blue-600" />
+                                <span>Edit</span>
+                              </button>
+
                               {/* Reset Password Button */}
                               <button
                                 onClick={() => handleResetPassword(u)}
@@ -626,6 +731,288 @@ export default function AdminUsers() {
                     <>
                       <CheckCircle2 size={14} />
                       <span>Create Account</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT USER MODAL (Admin Direct Database Editing) */}
+      {isEditModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: '1rem',
+            overflowY: 'auto'
+          }}
+          onClick={() => setIsEditModalOpen(false)}
+        >
+          <div
+            className="card"
+            style={{ maxWidth: '520px', width: '100%', padding: '1.75rem', maxHeight: '90vh', overflowY: 'auto' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', backgroundColor: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Edit3 size={19} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Edit User & RBAC Identity
+                  </h3>
+                  <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0 }}>
+                    Updating PostgreSQL record for {editingUser?.email}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="btn btn-icon text-slate-400 hover:text-slate-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              {/* Role & Status Row */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label className="form-label text-xs font-bold text-slate-700">Role & Access</label>
+                  <select
+                    value={editForm.role}
+                    onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                    className="input-field"
+                    style={{ fontSize: '13px' }}
+                    id="edit-user-role"
+                  >
+                    <option value="student">Student</option>
+                    <option value="faculty">Faculty / Teacher</option>
+                    <option value="tg">TG / Mentor</option>
+                    <option value="hod">HOD (Head of Department)</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="form-label text-xs font-bold text-slate-700">Account Status</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="input-field"
+                    style={{ fontSize: '13px' }}
+                    id="edit-user-status"
+                  >
+                    <option value="ACTIVE">ACTIVE (Enabled)</option>
+                    <option value="INACTIVE">INACTIVE (Disabled)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Name */}
+              <div>
+                <label className="form-label text-xs font-bold text-slate-700">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="input-field"
+                  style={{ fontSize: '13px' }}
+                  id="edit-user-name"
+                />
+              </div>
+
+              {/* Email & Phone */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label className="form-label text-xs font-bold text-slate-700">Official Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className="input-field"
+                    style={{ fontSize: '13px' }}
+                    id="edit-user-email"
+                  />
+                </div>
+                <div>
+                  <label className="form-label text-xs font-bold text-slate-700">Phone Number</label>
+                  <input
+                    type="text"
+                    placeholder="+91..."
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="input-field"
+                    style={{ fontSize: '13px' }}
+                    id="edit-user-phone"
+                  />
+                </div>
+              </div>
+
+              {/* Admin Direct Password Update Field */}
+              <div style={{ backgroundColor: '#F8FAFC', padding: '0.75rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label className="form-label text-xs font-bold text-slate-700" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <KeyRound size={12} className="text-amber-600" />
+                    <span>Change Password (Admin Exclusive)</span>
+                  </label>
+                  <span style={{ fontSize: '10px', color: '#64748B' }}>Optional</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Leave empty to keep existing password"
+                  value={editForm.password}
+                  onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                  className="input-field"
+                  style={{ fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                  id="edit-user-password"
+                />
+                <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '4px' }}>
+                  Entering a new password here will immediately bcrypt-hash and overwrite the password in the database.
+                </span>
+              </div>
+
+              {/* Student Fields */}
+              {editForm.role === 'student' && (
+                <div style={{ backgroundColor: '#EFF6FF', padding: '0.85rem', borderRadius: '8px', border: '1px solid #DBEAFE', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#1E40AF', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Student Academic Attributes
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+                    <div>
+                      <label className="form-label text-xs font-bold text-slate-700">Enrollment No</label>
+                      <input
+                        type="text"
+                        placeholder="0105CS241101"
+                        value={editForm.enrollment_no}
+                        onChange={(e) => setEditForm({ ...editForm, enrollment_no: e.target.value })}
+                        className="input-field"
+                        style={{ fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label text-xs font-bold text-slate-700">Roll No</label>
+                      <input
+                        type="text"
+                        placeholder="Roll No"
+                        value={editForm.roll_no}
+                        onChange={(e) => setEditForm({ ...editForm, roll_no: e.target.value })}
+                        className="input-field"
+                        style={{ fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+                    <div>
+                      <label className="form-label text-xs font-bold text-slate-700">Semester</label>
+                      <select
+                        value={editForm.semester}
+                        onChange={(e) => setEditForm({ ...editForm, semester: Number(e.target.value) })}
+                        className="input-field"
+                        style={{ fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                          <option key={s} value={s}>Semester {s}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="form-label text-xs font-bold text-slate-700">Section</label>
+                      <select
+                        value={editForm.section}
+                        onChange={(e) => setEditForm({ ...editForm, section: e.target.value })}
+                        className="input-field"
+                        style={{ fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                      >
+                        {['A', 'B', 'C', 'D'].map((sec) => (
+                          <option key={sec} value={sec}>Section {sec}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Faculty / Teacher Fields */}
+              {['faculty', 'teacher', 'tg', 'hod'].includes(editForm.role) && (
+                <div style={{ backgroundColor: '#F5F3FF', padding: '0.85rem', borderRadius: '8px', border: '1px solid #EDE9FE', display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                  <span style={{ fontSize: '11px', fontWeight: 700, color: '#6D28D9', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Faculty Academic Attributes
+                  </span>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem' }}>
+                    <div>
+                      <label className="form-label text-xs font-bold text-slate-700">Employee ID</label>
+                      <input
+                        type="text"
+                        placeholder="EMP-HOD-01"
+                        value={editForm.employee_id}
+                        onChange={(e) => setEditForm({ ...editForm, employee_id: e.target.value })}
+                        className="input-field"
+                        style={{ fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                      />
+                    </div>
+                    <div>
+                      <label className="form-label text-xs font-bold text-slate-700">Designation</label>
+                      <input
+                        type="text"
+                        placeholder="Professor & Head"
+                        value={editForm.designation}
+                        onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })}
+                        className="input-field"
+                        style={{ fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                      />
+                    </div>
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginTop: '4px' }}>
+                    <input
+                      type="checkbox"
+                      checked={editForm.isTG}
+                      onChange={(e) => setEditForm({ ...editForm, isTG: e.target.checked })}
+                      style={{ width: '16px', height: '16px' }}
+                    />
+                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>
+                      Designated Tutor Guardian (TG / Mentor)
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="btn btn-outline text-xs py-2 px-4"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="btn btn-primary text-xs py-2 px-4 flex items-center gap-1.5"
+                  id="btn-save-edit-user"
+                >
+                  {editLoading ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status" />
+                      <span>Saving in Database...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={14} />
+                      <span>Save Changes</span>
                     </>
                   )}
                 </button>

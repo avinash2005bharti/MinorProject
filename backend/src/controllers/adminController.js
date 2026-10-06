@@ -74,45 +74,87 @@ exports.getDepartmentAnalytics = async (req, res) => {
 // 2. User Management in PostgreSQL
 exports.getUsers = async (req, res) => {
   try {
-    const { role, search } = req.query;
+    const { role, search, q, status, page = 1, limit = 50 } = req.query;
+    const queryTerm = (q || search || '').trim();
     const where = {};
 
-    if (role && role !== 'all') {
-      where.role = { name: role.toUpperCase() };
+    if (role && role.toUpperCase() !== 'ALL') {
+      where.role = { name: { equals: role.toUpperCase(), mode: 'insensitive' } };
     }
 
-    if (search) {
+    if (status && status.toUpperCase() !== 'ALL') {
+      where.isActive = status.toUpperCase() === 'ACTIVE' || status.toUpperCase() === 'TRUE';
+    }
+
+    if (queryTerm) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } }
+        { name: { contains: queryTerm, mode: 'insensitive' } },
+        { email: { contains: queryTerm, mode: 'insensitive' } },
+        { studentProfile: { enrollmentNo: { contains: queryTerm, mode: 'insensitive' } } },
+        { studentProfile: { rollNo: { contains: queryTerm, mode: 'insensitive' } } },
+        { teacherProfile: { employeeId: { contains: queryTerm, mode: 'insensitive' } } }
       ];
     }
 
-    const users = await prisma.user.findMany({
-      where,
-      include: {
-        role: true,
-        department: true,
-        studentProfile: true,
-        teacherProfile: true
-      },
-      orderBy: { createdAt: 'desc' }
-    });
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 50;
+    const skip = (pageNum - 1) * limitNum;
+
+    const [totalCount, users] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        skip,
+        take: limitNum,
+        include: {
+          role: true,
+          department: true,
+          studentProfile: {
+            include: { section: true }
+          },
+          teacherProfile: true
+        },
+        orderBy: { createdAt: 'desc' }
+      })
+    ]);
 
     return res.status(200).json({
       success: true,
-      count: users.length,
+      count: totalCount,
+      totalCount,
+      page: pageNum,
+      totalPages: Math.ceil(totalCount / limitNum) || 1,
       users: users.map(u => ({
         id: u.id,
         name: u.name,
         email: u.email,
-        role: u.role?.name,
+        role: u.role?.name || 'STUDENT',
         department: u.department?.name || 'CSE',
+        departmentId: u.departmentId,
         isActive: u.isActive,
-        createdAt: u.createdAt
+        status: u.isActive ? 'ACTIVE' : 'INACTIVE',
+        createdAt: u.createdAt,
+        studentProfile: u.studentProfile ? {
+          ...u.studentProfile,
+          enrollment_no: u.studentProfile.enrollmentNo,
+          roll_no: u.studentProfile.rollNo,
+          sectionName: u.studentProfile.section?.name || 'A'
+        } : null,
+        teacherProfile: u.teacherProfile ? {
+          ...u.teacherProfile,
+          employee_id: u.teacherProfile.employeeId
+        } : null,
+        facultyProfile: u.teacherProfile ? {
+          ...u.teacherProfile,
+          employee_id: u.teacherProfile.employeeId
+        } : null,
+        phone: u.studentProfile?.phone || u.teacherProfile?.phone || '',
+        semester: u.studentProfile?.semester || 1,
+        section: u.studentProfile?.section?.name || 'A'
       }))
     });
   } catch (error) {
+    logger.error(`[Admin Controller] getUsers error: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -168,10 +210,44 @@ exports.getUserById = async (req, res) => {
     const { id } = req.params;
     const user = await prisma.user.findUnique({
       where: { id },
-      include: { role: true, department: true, studentProfile: true, teacherProfile: true }
+      include: {
+        role: true,
+        department: true,
+        studentProfile: { include: { section: true } },
+        teacherProfile: true
+      }
     });
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
-    return res.status(200).json({ success: true, user });
+
+    return res.status(200).json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role?.name || 'STUDENT',
+        department: user.department?.name || 'CSE',
+        isActive: user.isActive,
+        status: user.isActive ? 'ACTIVE' : 'INACTIVE',
+        studentProfile: user.studentProfile ? {
+          ...user.studentProfile,
+          enrollment_no: user.studentProfile.enrollmentNo,
+          roll_no: user.studentProfile.rollNo,
+          sectionName: user.studentProfile.section?.name || 'A'
+        } : null,
+        teacherProfile: user.teacherProfile ? {
+          ...user.teacherProfile,
+          employee_id: user.teacherProfile.employeeId
+        } : null,
+        facultyProfile: user.teacherProfile ? {
+          ...user.teacherProfile,
+          employee_id: user.teacherProfile.employeeId
+        } : null,
+        phone: user.studentProfile?.phone || user.teacherProfile?.phone || '',
+        semester: user.studentProfile?.semester || 1,
+        section: user.studentProfile?.section?.name || 'A'
+      }
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -180,25 +256,185 @@ exports.getUserById = async (req, res) => {
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, isActive, role } = req.body;
+    const requesterRole = (req.user?.role || '').toUpperCase();
+    const isHod = requesterRole === 'HOD';
+    const isAdmin = requesterRole === 'ADMIN';
 
-    const data = {};
-    if (name) data.name = name.trim();
-    if (isActive !== undefined) data.isActive = Boolean(isActive);
-
-    if (role) {
-      const roleRecord = await prisma.role.findFirst({ where: { name: role.toUpperCase() } });
-      if (roleRecord) data.roleId = roleRecord.id;
+    // Verify target user exists
+    const existingUser = await prisma.user.findUnique({
+      where: { id },
+      include: { role: true, studentProfile: true, teacherProfile: true }
+    });
+    if (!existingUser) {
+      return res.status(404).json({ success: false, message: 'User not found in database.' });
     }
 
-    const updated = await prisma.user.update({
-      where: { id },
-      data,
-      include: { role: true }
+    const {
+      name,
+      email,
+      password,
+      role,
+      status,
+      isActive,
+      phone,
+      mobile,
+      // student fields
+      enrollmentNo,
+      enrollment_no,
+      rollNo,
+      roll_no,
+      semester,
+      section,
+      sectionName,
+      // teacher fields
+      employeeId,
+      employee_id,
+      designation,
+      isTG
+    } = req.body;
+
+    // Security Rule: HOD CANNOT update passwords!
+    if (isHod && password && password.trim()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Security policy violation: HOD is not permitted to edit passwords. Password updates are strictly restricted to System Administrator.'
+      });
+    }
+
+    // Security Rule: HOD CANNOT elevate users to ADMIN
+    if (isHod && role && role.toUpperCase() === 'ADMIN') {
+      return res.status(403).json({
+        success: false,
+        message: 'Security policy violation: HOD cannot assign Administrator role.'
+      });
+    }
+
+    // Build User update data
+    const userData = {};
+    if (name && name.trim()) userData.name = name.trim();
+    if (email && email.trim()) {
+      const cleanEmail = email.trim().toLowerCase();
+      if (cleanEmail !== existingUser.email) {
+        const emailExists = await prisma.user.findUnique({ where: { email: cleanEmail } });
+        if (emailExists && emailExists.id !== id) {
+          return res.status(409).json({ success: false, message: 'Another user is already registered with this email address.' });
+        }
+        userData.email = cleanEmail;
+      }
+    }
+
+    // Password Update: Strictly for ADMIN
+    if (password && password.trim()) {
+      if (!isAdmin) {
+        return res.status(403).json({ success: false, message: 'Only Administrator can update user passwords directly.' });
+      }
+      userData.passwordHash = await bcrypt.hash(password.trim(), 10);
+    }
+
+    // Status Update
+    if (isActive !== undefined) {
+      userData.isActive = Boolean(isActive);
+    } else if (status) {
+      userData.isActive = status.toUpperCase() === 'ACTIVE' || status.toUpperCase() === 'TRUE';
+    }
+
+    // Role Update (Only if permitted)
+    if (role && (!isHod || role.toUpperCase() !== 'ADMIN')) {
+      const roleRecord = await prisma.role.findFirst({
+        where: { name: { equals: role.toUpperCase(), mode: 'insensitive' } }
+      });
+      if (roleRecord) {
+        userData.roleId = roleRecord.id;
+      }
+    }
+
+    // Perform Transactional Update across User and linked Profiles
+    await prisma.$transaction(async (tx) => {
+      // 1. Update User table
+      if (Object.keys(userData).length > 0) {
+        await tx.user.update({
+          where: { id },
+          data: userData
+        });
+      }
+
+      const effectiveName = userData.name || existingUser.name;
+      const effectiveEmail = userData.email || existingUser.email;
+      const effectiveStatus = userData.isActive !== undefined ? (userData.isActive ? 'ACTIVE' : 'INACTIVE') : undefined;
+      const parts = effectiveName.split(/\s+/);
+      const firstName = parts[0] || 'User';
+      const lastName = parts.slice(1).join(' ') || '';
+      const finalPhone = phone || mobile;
+
+      // 2. Update Student Profile if user is student
+      if (existingUser.studentProfile) {
+        const studentUpdate = {
+          firstName,
+          lastName,
+          email: effectiveEmail
+        };
+        if (finalPhone !== undefined) studentUpdate.phone = finalPhone;
+        if (effectiveStatus) studentUpdate.status = effectiveStatus;
+        if (semester !== undefined) studentUpdate.semester = parseInt(semester, 10);
+        const finalEnrollment = enrollmentNo || enrollment_no;
+        if (finalEnrollment) studentUpdate.enrollmentNo = finalEnrollment.trim().toUpperCase();
+        const finalRoll = rollNo || roll_no;
+        if (finalRoll !== undefined) studentUpdate.rollNo = finalRoll ? finalRoll.trim() : null;
+
+        const secTarget = sectionName || section;
+        if (secTarget) {
+          const sec = await tx.section.findFirst({ where: { name: secTarget.trim().toUpperCase() } });
+          if (sec) studentUpdate.sectionId = sec.id;
+        }
+
+        await tx.student.update({
+          where: { id: existingUser.studentProfile.id },
+          data: studentUpdate
+        });
+      }
+
+      // 3. Update Teacher Profile if user is faculty
+      if (existingUser.teacherProfile) {
+        const teacherUpdate = {
+          firstName,
+          lastName,
+          email: effectiveEmail
+        };
+        if (finalPhone !== undefined) teacherUpdate.phone = finalPhone;
+        if (effectiveStatus) teacherUpdate.status = effectiveStatus;
+        const finalEmpId = employeeId || employee_id;
+        if (finalEmpId) teacherUpdate.employeeId = finalEmpId.trim().toUpperCase();
+        if (designation) teacherUpdate.designation = designation.trim();
+        if (isTG !== undefined) teacherUpdate.isTG = Boolean(isTG);
+
+        await tx.teacher.update({
+          where: { id: existingUser.teacherProfile.id },
+          data: teacherUpdate
+        });
+      }
     });
 
-    return res.status(200).json({ success: true, message: 'User updated.', user: updated });
+    const refreshedUser = await prisma.user.findUnique({
+      where: { id },
+      include: { role: true, department: true, studentProfile: { include: { section: true } }, teacherProfile: true }
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'User information updated successfully in database.',
+      user: {
+        id: refreshedUser.id,
+        name: refreshedUser.name,
+        email: refreshedUser.email,
+        role: refreshedUser.role?.name,
+        isActive: refreshedUser.isActive,
+        status: refreshedUser.isActive ? 'ACTIVE' : 'INACTIVE',
+        studentProfile: refreshedUser.studentProfile,
+        teacherProfile: refreshedUser.teacherProfile
+      }
+    });
   } catch (error) {
+    logger.error(`[Admin Controller] updateUser error: ${error.message}`);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

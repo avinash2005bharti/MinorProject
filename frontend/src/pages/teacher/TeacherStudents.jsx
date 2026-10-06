@@ -80,31 +80,32 @@ export default function TeacherStudents() {
                 ? null
                 : Number(st.attendance);
               const hasAttendance = att !== null && Number.isFinite(att);
+              const secName = typeof st.section === 'object' && st.section !== null ? (st.section.name || 'A') : (st.section || 'Unassigned');
 
-              return (
-                <div key={st.id} className="card flex flex-col justify-between gap-3">
-                  <div>
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-800 font-extrabold flex items-center justify-center text-sm">
-                          {(st.name || 'S').split(' ').map((n) => n[0]).join('').slice(0, 2)}
-                        </div>
-                        <div>
-                          <h4 className="text-sm font-bold text-slate-900">{st.name}</h4>
-                          <span className="text-[11px] font-mono text-slate-500">{roll}</span>
-                        </div>
-                      </div>
+                      return (
+                        <div key={st.id} className="card flex flex-col justify-between gap-3">
+                          <div>
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-10 h-10 rounded-2xl bg-blue-100 text-blue-800 font-extrabold flex items-center justify-center text-sm">
+                                  {(st.name || 'S').split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                                </div>
+                                <div>
+                                  <h4 className="text-sm font-bold text-slate-900">{st.name}</h4>
+                                  <span className="text-[11px] font-mono text-slate-500">{roll}</span>
+                                </div>
+                              </div>
 
-                      <span className={`badge ${!hasAttendance ? 'badge-slate' : att >= 75 ? 'badge-emerald' : 'badge-rose'} text-xs`}>
-                        {hasAttendance ? `${att}% Att` : 'N/A Att'}
-                      </span>
-                    </div>
+                              <span className={`badge ${!hasAttendance ? 'badge-slate' : att >= 75 ? 'badge-emerald' : 'badge-rose'} text-xs`}>
+                                {hasAttendance ? `${att}% Att` : 'N/A Att'}
+                              </span>
+                            </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100 text-xs">
-                      <div>
-                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Section</span>
-                        <span className="text-sm font-bold text-slate-800">{st.section || 'Unassigned'}{st.semester ? ` (Sem ${st.semester})` : ''}</span>
-                      </div>
+                            <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-100 text-xs">
+                              <div>
+                                <span className="text-slate-400 block text-[10px] uppercase font-bold">Section</span>
+                                <span className="text-sm font-bold text-slate-800">{secName}{st.semester ? ` (Sem ${st.semester})` : ''}</span>
+                              </div>
                       <div>
                         <span className="text-slate-400 block text-[10px] uppercase font-bold">Status</span>
                         <span className={`text-xs font-semibold ${!hasAttendance ? 'text-slate-500' : att >= 75 ? 'text-emerald-700' : 'text-rose-700'}`}>

@@ -224,7 +224,7 @@ const requireRole = (...allowedRoles) => {
 
     const userRole = (req.user.role || '').toUpperCase();
     const userRoleName = (req.user.roleName || '').toUpperCase();
-    const normalizedAllowed = allowedRoles.map(r => r.toUpperCase());
+    const normalizedAllowed = allowedRoles.flat().map(r => String(r).toUpperCase());
 
     // Interoperability between FACULTY and TEACHER aliases
     if (normalizedAllowed.includes('FACULTY') && !normalizedAllowed.includes('TEACHER')) {

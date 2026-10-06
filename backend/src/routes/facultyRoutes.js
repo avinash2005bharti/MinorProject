@@ -23,9 +23,9 @@ router.get('/export', verifyToken, checkRole('admin', 'hod'), masterDataControll
 // 3. Core Faculty CRUD - Cached 30s
 router.get('/', optionalAuth, cacheService.middleware(30), facultyController.getFaculty);
 router.get('/:id', optionalAuth, facultyController.getFacultyById);
-router.post('/', verifyToken, checkRole('admin'), facultyController.createFaculty);
+router.post('/', verifyToken, checkRole('admin', 'hod'), facultyController.createFaculty);
 router.put('/:id', verifyToken, checkRole('admin', 'hod'), facultyController.updateFaculty);
-router.delete('/:id', verifyToken, checkRole('admin'), facultyController.deleteFaculty);
+router.delete('/:id', verifyToken, checkRole('admin', 'hod'), facultyController.deleteFaculty);
 
 // 4. Leave & Availability Actions (SEC-04)
 router.post('/:id/leave-toggle', verifyToken, leaveController.toggleTeacherLeave);

@@ -34,8 +34,8 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
     (currentUser?.designation || '').toLowerCase().includes('(tg)')
   );
 
-  const displayName = (!currentUser?.name || currentUser?.name.toLowerCase() === 'hod')
-    ? (currentRole === 'hod' ? 'Dr. Alok Verma' : 'Authorized User')
+  const displayName = (!currentUser?.name || currentUser?.name.toLowerCase() === 'hod' || currentUser?.name.includes('Alok Verma'))
+    ? (currentRole === 'hod' ? 'HOD CSE' : 'Authorized User')
     : currentUser.name;
 
   const getNavLinks = () => {

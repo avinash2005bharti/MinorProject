@@ -8,11 +8,11 @@ router.get('/analytics', verifyToken, checkRole('admin'), adminController.getDep
 router.get('/faculty-workload', verifyToken, checkRole('admin'), adminController.getFacultyWorkload);
 
 // User Accounts & Identity Management
-router.get('/users', verifyToken, checkRole('admin'), adminController.getUsers);
-router.post('/users', verifyToken, checkRole('admin'), adminController.createUser);
-router.get('/users/:id', verifyToken, checkRole('admin'), adminController.getUserById);
-router.put('/users/:id', verifyToken, checkRole('admin'), adminController.updateUser);
-router.patch('/users/:id/status', verifyToken, checkRole('admin'), adminController.updateUserStatus);
+router.get('/users', verifyToken, checkRole('admin', 'hod'), adminController.getUsers);
+router.post('/users', verifyToken, checkRole('admin', 'hod'), adminController.createUser);
+router.get('/users/:id', verifyToken, checkRole('admin', 'hod'), adminController.getUserById);
+router.put('/users/:id', verifyToken, checkRole('admin', 'hod'), adminController.updateUser);
+router.patch('/users/:id/status', verifyToken, checkRole('admin', 'hod'), adminController.updateUserStatus);
 router.post('/users/:id/reset-password', verifyToken, checkRole('admin'), adminController.resetUserPassword);
 
 // HOD Designation Management

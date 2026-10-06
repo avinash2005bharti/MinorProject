@@ -60,6 +60,7 @@ export default function StudentDashboard() {
   }, []);
 
   const student = dashboard?.student || currentUser || {};
+  const studentSection = typeof student.section === 'object' && student.section !== null ? (student.section.name || 'A') : (student.section || 'A');
   const attendance = dashboard?.attendance;
   const attendancePct = attendance?.percentage !== undefined ? attendance.percentage : 0;
   const todayClasses = dashboard?.todayTimetable || [];
@@ -81,7 +82,7 @@ export default function StudentDashboard() {
             <p className="text-xs text-slate-500 flex items-center gap-2 mt-0.5 flex-wrap">
               <span>CSE Department</span>
               <span>•</span>
-              <span className="text-blue-600 font-semibold">Section {student.section || 'A'}</span>
+              <span className="text-blue-600 font-semibold">Section {studentSection}</span>
               <span>•</span>
               <span className="tabular-nums font-medium">{student.rollNo || student.enrollment_no || 'Enrolled'}</span>
               <span>•</span>
@@ -200,7 +201,7 @@ export default function StudentDashboard() {
                     <Calendar size={18} />
                   </div>
                   <h3 className="text-sm font-bold text-slate-900">
-                    Today's Scheduled Classes (Section {student.section || 'A'})
+                    Today's Scheduled Classes (Section {studentSection})
                   </h3>
                 </div>
                 <Link to="/student/timetable" className="text-xs text-blue-600 font-semibold hover:underline">

@@ -131,7 +131,15 @@ function RoleRouteGuard({ role, children }) {
 
   let isMatch = false;
 
-  if (role === currentRole) {
+  if (Array.isArray(role)) {
+    isMatch = role.some((r) => {
+      if (r === currentRole) return true;
+      if (r === 'teacher') return currentRole === 'teacher' || currentRole === 'faculty' || (currentRole === 'tg' && isAppointedTg);
+      if (r === 'hod') return currentRole === 'hod';
+      if (r === 'tg') return isAppointedTg;
+      return false;
+    });
+  } else if (role === currentRole) {
     // If route requires TG, ensure teacher is actually appointed as TG
     if (role === 'tg') {
       isMatch = isAppointedTg;
@@ -216,6 +224,7 @@ export default function App() {
 
           {/* HOD Routes */}
           <Route path="hod" element={<RoleRouteGuard role="hod"><HodDashboard /></RoleRouteGuard>} />
+          <Route path="hod/dashboard" element={<RoleRouteGuard role="hod"><HodDashboard /></RoleRouteGuard>} />
           <Route path="hod/teachers" element={<RoleRouteGuard role="hod"><HodTeacherManagement /></RoleRouteGuard>} />
           <Route path="hod/classes" element={<RoleRouteGuard role="hod"><HodClassesSections /></RoleRouteGuard>} />
           <Route path="hod/students" element={<RoleRouteGuard role="hod"><HodStudents /></RoleRouteGuard>} />
@@ -228,6 +237,8 @@ export default function App() {
           <Route path="hod/notices" element={<RoleRouteGuard role="hod"><HodNotices /></RoleRouteGuard>} />
           <Route path="hod/reports" element={<RoleRouteGuard role="hod"><HodReports /></RoleRouteGuard>} />
           <Route path="hod/master-data" element={<RoleRouteGuard role="hod"><MasterDataManagement /></RoleRouteGuard>} />
+          <Route path="hod/lectures" element={<RoleRouteGuard role="hod"><TeacherLectures /></RoleRouteGuard>} />
+          <Route path="lectures" element={<RoleRouteGuard role={['hod', 'teacher', 'faculty']}><TeacherLectures /></RoleRouteGuard>} />
 
           {/* Teacher Routes */}
           <Route path="teacher" element={<RoleRouteGuard role="teacher"><TeacherDashboard /></RoleRouteGuard>} />

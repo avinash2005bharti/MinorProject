@@ -135,7 +135,7 @@ export default function TgMyStudents() {
                         )}
                       </div>
                       <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        Enrollment: {roll} • Semester: {st.semester || 5} • Section: {st.section || 'A'}
+                        Enrollment: {roll} • Semester: {st.semester || 5} • Section: {typeof st.section === 'object' && st.section !== null ? (st.section.name || 'A') : (st.section || 'A')}
                       </span>
                     </div>
                   </div>

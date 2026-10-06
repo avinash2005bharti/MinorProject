@@ -394,8 +394,8 @@ export default function AIWorkspace() {
     (c.title || c.conversationId).toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const displayName = (!currentUser?.name || currentUser?.name.toLowerCase() === 'hod')
-    ? (currentRole === 'hod' ? 'Dr. Alok Verma' : 'Authorized User')
+  const displayName = (!currentUser?.name || currentUser?.name.toLowerCase() === 'hod' || currentUser?.name.includes('Alok Verma'))
+    ? (currentRole === 'hod' ? 'HOD CSE' : 'Authorized User')
     : currentUser.name;
 
   return (

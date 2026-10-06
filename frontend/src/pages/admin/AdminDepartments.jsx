@@ -34,6 +34,7 @@ export default function AdminDepartments() {
   const [isAddSectionOpen, setIsAddSectionOpen] = useState(false);
   const [newSectionName, setNewSectionName] = useState('');
   const [newSectionBatch, setNewSectionBatch] = useState('2023-2027');
+  const [newSectionCapacity, setNewSectionCapacity] = useState(60);
 
   const [isAddSubjectOpen, setIsAddSubjectOpen] = useState(false);
   const [newSubjectCode, setNewSubjectCode] = useState('');
@@ -93,11 +94,12 @@ export default function AdminDepartments() {
         semester: Number(selectedSemester),
         academic_year: newSectionBatch.trim() || '2026-27',
         academicYear: newSectionBatch.trim() || '2026-27',
-        capacity: 60
+        capacity: parseInt(newSectionCapacity, 10) || 60
       });
-      addToast('Section Created', `Section ${newSectionName.toUpperCase()} added to Semester ${selectedSemester}.`, 'success');
+      addToast('Section Created', `Section ${newSectionName.toUpperCase()} added to Semester ${selectedSemester} with capacity ${newSectionCapacity}.`, 'success');
       setIsAddSectionOpen(false);
       setNewSectionName('');
+      setNewSectionCapacity(60);
       fetchAcademicData();
     } catch (err) {
       addToast('Error', err.message || 'Failed to create section.', 'error');
@@ -465,6 +467,20 @@ export default function AdminDepartments() {
                   value={newSectionBatch}
                   onChange={(e) => setNewSectionBatch(e.target.value)}
                   className="input-field"
+                />
+              </div>
+
+              <div>
+                <label className="form-label">Student Capacity</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="200"
+                  placeholder="e.g. 60"
+                  value={newSectionCapacity}
+                  onChange={(e) => setNewSectionCapacity(e.target.value)}
+                  className="input-field"
+                  required
                 />
               </div>
 

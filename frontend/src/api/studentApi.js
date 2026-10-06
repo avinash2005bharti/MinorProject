@@ -32,5 +32,9 @@ export const studentApi = {
 
   deleteStudent(id) {
     return apiClient.delete(`/students/${id}`);
+  },
+
+  moveToNextSemester(data) {
+    return apiClient.post('/students/move-next-semester', data);
   }
 };

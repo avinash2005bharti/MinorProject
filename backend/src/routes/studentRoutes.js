@@ -17,6 +17,7 @@ router.get('/export', masterDataController.exportStudents);
 // Core Student CRUD (Cached 30s)
 router.get('/', optionalAuth, cacheService.middleware(30), studentController.getStudents);
 router.get('/:id', optionalAuth, studentController.getStudentById);
+router.post('/move-next-semester', verifyToken, checkRole('admin', 'hod'), studentController.moveToNextSemester);
 router.post('/', verifyToken, checkRole('admin', 'faculty', 'hod'), studentController.createStudent);
 router.put('/:id', verifyToken, checkRole('admin', 'faculty', 'hod'), studentController.updateStudent);
 router.delete('/:id', verifyToken, checkRole('admin', 'hod'), studentController.deleteStudent);

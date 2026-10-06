@@ -25,9 +25,10 @@ export default function StudentAssignments() {
       studentSubmissionsMap[s.assignmentId] = s;
     });
 
+  const userSec = typeof currentUser?.section === 'object' && currentUser?.section !== null ? (currentUser.section.name || 'A') : (currentUser?.section || 'A');
   const studentAssignments = assignments.filter((a) => {
     // Show assignments for user's section
-    return !a.section || a.section === currentUser.section;
+    return !a.section || a.section === userSec;
   });
 
   const filteredAssignments = studentAssignments.filter((a) => {
@@ -46,7 +47,7 @@ export default function StudentAssignments() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Coursework & Assignments</h1>
-              <span className="badge badge-indigo">Section {currentUser.section}</span>
+              <span className="badge badge-indigo">Section {userSec}</span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
               Submit programming assignments, lab archives & view faculty grading

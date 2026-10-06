@@ -14,7 +14,10 @@ import {
   Trash2,
   ShieldCheck,
   RefreshCw,
-  Clock
+  Clock,
+  Edit3,
+  KeyRound,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function AdminTeachers() {
@@ -25,7 +28,7 @@ export default function AdminTeachers() {
   const [deletingId, setDeletingId] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
 
-  // Add Faculty Modal State & Fields (Matching Backend Schema)
+  // Add Faculty Modal State & Fields
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [name, setName] = useState('');
@@ -37,6 +40,25 @@ export default function AdminTeachers() {
   const [isTG, setIsTG] = useState(false);
   const [maxPeriodsPerDay, setMaxPeriodsPerDay] = useState(4);
   const [maxPeriodsPerWeek, setMaxPeriodsPerWeek] = useState(18);
+
+  // Edit Faculty Modal State & Fields
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editingFaculty, setEditingFaculty] = useState(null);
+  const [editForm, setEditForm] = useState({
+    id: '',
+    name: '',
+    employeeId: '',
+    email: '',
+    designation: 'Assistant Professor',
+    specialization: 'Computer Science & Engineering',
+    phone: '',
+    isTG: false,
+    status: 'ACTIVE',
+    password: '',
+    maxPeriodsPerDay: 4,
+    maxPeriodsPerWeek: 18
+  });
 
   useEffect(() => {
     if (ctxTeachers && ctxTeachers.length > 0) {
@@ -105,6 +127,66 @@ export default function AdminTeachers() {
       addToast('Error Adding Faculty', err.message || 'Unable to register faculty member.', 'error');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleOpenEditFaculty = (f) => {
+    setEditingFaculty(f);
+    const fullName = f.name || `${f.firstName || ''} ${f.lastName || ''}`.trim();
+    setEditForm({
+      id: f.id,
+      name: fullName,
+      employeeId: f.employeeId || f.employee_id || '',
+      email: f.email || '',
+      designation: f.designation || 'Assistant Professor',
+      specialization: f.specialization || 'Computer Science & Engineering',
+      phone: f.phone || '',
+      isTG: Boolean(f.isTG || f.isTg),
+      status: f.status || 'ACTIVE',
+      password: '',
+      maxPeriodsPerDay: f.max_periods_per_day || f.maxPeriodsPerDay || 4,
+      maxPeriodsPerWeek: f.max_periods_per_week || f.maxPeriodsPerWeek || 18
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditFacultySubmit = async (e) => {
+    e.preventDefault();
+    if (!editForm.name.trim() || !editForm.email.trim()) {
+      addToast('Validation Error', 'Name and official email are required.', 'warning');
+      return;
+    }
+
+    setEditSubmitting(true);
+    try {
+      const payload = {
+        name: editForm.name.trim(),
+        email: editForm.email.trim().toLowerCase(),
+        employeeId: editForm.employeeId.trim() ? editForm.employeeId.trim().toUpperCase() : undefined,
+        employee_id: editForm.employeeId.trim() ? editForm.employeeId.trim().toUpperCase() : undefined,
+        designation: editForm.designation,
+        specialization: editForm.specialization.trim() || 'Computer Science & Engineering',
+        phone: editForm.phone.trim() || undefined,
+        isTG: Boolean(editForm.isTG),
+        status: editForm.status,
+        maxPeriodsPerDay: parseInt(editForm.maxPeriodsPerDay, 10) || 4,
+        maxPeriodsPerWeek: parseInt(editForm.maxPeriodsPerWeek, 10) || 18
+      };
+
+      if (editForm.password && editForm.password.trim()) {
+        payload.password = editForm.password.trim();
+      }
+
+      await teacherApi.updateFaculty(editForm.id, payload);
+      addToast('Faculty Updated', `${editForm.name} profile successfully updated in database.`, 'success');
+      setIsEditModalOpen(false);
+      setEditingFaculty(null);
+      fetchFaculty();
+      if (refreshAllData) refreshAllData();
+    } catch (err) {
+      addToast('Update Failed', err.message || 'Unable to update faculty profile.', 'error');
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
@@ -326,10 +408,34 @@ export default function AdminTeachers() {
                       Workload: {t.max_periods_per_day || t.maxPeriodsPerDay || 4} slots/day • {t.max_periods_per_week || t.maxPeriodsPerWeek || 18} hrs/wk
                     </span>
 
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteFaculty(t.id, displayName)}
-                      disabled={isDeleting}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEditFaculty(t)}
+                        className="btn btn-sm"
+                        style={{
+                          padding: '0.35rem 0.65rem',
+                          color: '#2563EB',
+                          backgroundColor: '#EFF6FF',
+                          border: '1px solid #BFDBFE',
+                          borderRadius: 'var(--radius-md)',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '11px',
+                          fontWeight: 600
+                        }}
+                        title="Edit Faculty Member"
+                      >
+                        <Edit3 size={12} />
+                        <span>Edit</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFaculty(t.id, displayName)}
+                        disabled={isDeleting}
                       className="btn btn-sm"
                       style={{
                         padding: '0.35rem 0.65rem',
@@ -351,7 +457,8 @@ export default function AdminTeachers() {
                     </button>
                   </div>
                 </div>
-              );
+              </div>
+            );
             })}
           </div>
         )}
@@ -568,6 +675,242 @@ export default function AdminTeachers() {
                 >
                   {submitting && <RefreshCw size={12} className="animate-spin" />}
                   <span>{submitting ? 'Registering...' : 'Save Faculty'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Faculty Modal (Direct PostgreSQL Database Update) */}
+      {isEditModalOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.55)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 100,
+            padding: '1rem'
+          }}
+          onClick={() => setIsEditModalOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: '20px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.25)',
+              border: '1px solid var(--border-subtle)',
+              maxWidth: '500px',
+              width: '100%',
+              padding: '1.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '10px',
+                    backgroundColor: '#EFF6FF',
+                    color: '#1D4ED8',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                >
+                  <Edit3 size={18} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+                    Edit Faculty Details
+                  </h3>
+                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                    Modifying PostgreSQL record for {editingFaculty?.employeeId || editingFaculty?.email}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                className="btn-icon"
+                title="Close"
+                style={{ border: 'none', background: 'none', cursor: 'pointer' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditFacultySubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', fontSize: '12.5px' }}>
+              <div>
+                <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  placeholder="e.g. Dr. HOD CSE"
+                  className="input-field"
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Employee ID
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.employeeId}
+                    onChange={(e) => setEditForm({ ...editForm, employeeId: e.target.value })}
+                    placeholder="EMP-HOD-01"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Status
+                  </label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="input-field"
+                  >
+                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="ON_LEAVE">ON_LEAVE</option>
+                    <option value="INACTIVE">INACTIVE</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Official Email *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    placeholder="faculty@college.edu"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    placeholder="+91..."
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Designation
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.designation}
+                    onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })}
+                    placeholder="Professor & Head"
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', display: 'block', marginBottom: '4px' }}>
+                    Specialization
+                  </label>
+                  <input
+                    type="text"
+                    value={editForm.specialization}
+                    onChange={(e) => setEditForm({ ...editForm, specialization: e.target.value })}
+                    placeholder="Computer Science"
+                    className="input-field"
+                  />
+                </div>
+              </div>
+
+              {/* TG Checkbox */}
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', padding: '0.5rem', backgroundColor: '#F8FAFC', borderRadius: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={editForm.isTG}
+                  onChange={(e) => setEditForm({ ...editForm, isTG: e.target.checked })}
+                  style={{ width: '16px', height: '16px' }}
+                />
+                <span style={{ fontSize: '12px', fontWeight: 600, color: '#475569' }}>
+                  Designated Tutor Guardian (TG / Mentor)
+                </span>
+              </label>
+
+              {/* Admin Direct Password Update Field */}
+              <div style={{ backgroundColor: '#F8FAFC', padding: '0.75rem', borderRadius: '8px', border: '1px solid #E2E8F0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <label style={{ fontWeight: 700, color: 'var(--text-primary)', margin: 0, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <KeyRound size={12} className="text-amber-600" />
+                    <span>Reset Password (Admin Direct)</span>
+                  </label>
+                  <span style={{ fontSize: '10px', color: '#64748B' }}>Optional</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Leave empty to keep existing password"
+                  value={editForm.password}
+                  onChange={(e) => setEditForm({ ...editForm, password: e.target.value })}
+                  className="input-field"
+                  style={{ backgroundColor: '#FFFFFF' }}
+                />
+                <span style={{ fontSize: '11px', color: '#64748B', display: 'block', marginTop: '4px' }}>
+                  Entering a password will immediately bcrypt-hash and overwrite the faculty account password in the database.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.5rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-subtle)' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="btn btn-sm btn-secondary"
+                  disabled={editSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-sm btn-primary"
+                  disabled={editSubmitting}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {editSubmitting ? (
+                    <>
+                      <RefreshCw size={12} className="animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={13} />
+                      <span>Save Changes</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

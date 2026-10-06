@@ -125,9 +125,28 @@ exports.getAllRequests = async (req, res) => {
           }
         };
       }
-    } else if (studentId) {
-      // HOD or Admin filtering by specific student
-      studentFilter = { studentId };
+    } else if (req.query.studentId) {
+      studentFilter = { studentId: req.query.studentId };
+    }
+
+    const { semester, section } = req.query;
+
+    const extraStudentCriteria = {};
+    if (semester && semester !== 'ALL') {
+      extraStudentCriteria.semester = parseInt(semester, 10);
+    }
+    if (section && section !== 'ALL') {
+      extraStudentCriteria.section = { name: section.toUpperCase() };
+    }
+
+    if (Object.keys(extraStudentCriteria).length > 0) {
+      studentFilter = {
+        ...studentFilter,
+        student: {
+          ...(studentFilter.student || {}),
+          ...extraStudentCriteria
+        }
+      };
     }
 
     const [considerations, corrections, leaves] = await Promise.all([
@@ -378,17 +397,51 @@ exports.submitAttendanceConsideration = async (req, res) => {
       }
     });
 
-    // Notify TG
+    // Image 3 Workflow: Check if TG is available
+    const assignedTg = request.student?.tutorGuardian;
+    let isTgAvailable = false;
+    if (assignedTg && assignedTg.status === 'ACTIVE' && assignedTg.availability_status !== 'On Leave') {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+      const tgLeave = await prisma.leaveApplication.findFirst({
+        where: {
+          applicantType: 'TEACHER',
+          teacherId: assignedTg.id,
+          status: { in: ['APPROVED', 'PENDING'] },
+          startDate: { lte: todayEnd },
+          endDate: { gte: todayStart }
+        }
+      });
+      if (!tgLeave) {
+        isTgAvailable = true;
+      }
+    }
+
     const studentName = `${request.student?.firstName || 'Student'} ${request.student?.lastName || ''}`.trim();
-    const tgUserId = request.student?.tutorGuardian?.userId;
-    if (tgUserId) {
+    if (isTgAvailable && assignedTg?.userId) {
       await sendNotification({
-        userId: tgUserId,
+        userId: assignedTg.userId,
         recipientRole: 'TG',
         title: `New request from ${studentName}`,
         message: `${studentName} lodged an On-Duty consideration request (${category}).`,
         type: 'INFO',
         linkUrl: '/tg/requests'
+      });
+    } else {
+      // TG unavailable -> direct to HOD
+      await prisma.attendanceConsiderationRequest.update({
+        where: { id: request.id },
+        data: {
+          tgRemarks: assignedTg ? 'TG currently on leave. Routed directly to HOD.' : 'No designated TG assigned. Routed directly to HOD.'
+        }
+      });
+
+      await sendNotification({
+        recipientRole: 'HOD',
+        title: `Direct OD Request: ${studentName}`,
+        message: `${studentName} lodged an On-Duty consideration request (${category}). Mentor unavailable / on leave — forwarded directly to HOD.`,
+        type: 'WARNING',
+        linkUrl: '/hod/requests'
       });
     }
 
@@ -1149,18 +1202,54 @@ exports.applyLeave = async (req, res) => {
       }
     });
 
-    // Notify TG (Test 9 fix)
+    // Image 3 Workflow: Check if TG is available for student leave
     const studentName = `${leave.student?.firstName || 'Student'} ${leave.student?.lastName || ''}`.trim();
-    const tgUserId = leave.student?.tutorGuardian?.userId;
-    if (tgUserId) {
-      await sendNotification({
-        userId: tgUserId,
-        recipientRole: 'TG',
-        title: `New request from ${studentName}`,
-        message: `${studentName} applied for ${leaveType} leave (${totalDays} day(s)).`,
-        type: 'INFO',
-        linkUrl: '/tg/requests'
-      });
+    if (applicantType === 'STUDENT') {
+      const assignedTg = leave.student?.tutorGuardian;
+      let isTgAvailable = false;
+      if (assignedTg && assignedTg.status === 'ACTIVE' && assignedTg.availability_status !== 'On Leave') {
+        const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+        const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+        const tgLeave = await prisma.leaveApplication.findFirst({
+          where: {
+            applicantType: 'TEACHER',
+            teacherId: assignedTg.id,
+            status: { in: ['APPROVED', 'PENDING'] },
+            startDate: { lte: todayEnd },
+            endDate: { gte: todayStart }
+          }
+        });
+        if (!tgLeave) {
+          isTgAvailable = true;
+        }
+      }
+
+      if (isTgAvailable && assignedTg?.userId) {
+        await sendNotification({
+          userId: assignedTg.userId,
+          recipientRole: 'TG',
+          title: `New request from ${studentName}`,
+          message: `${studentName} applied for ${leaveType} leave (${totalDays} day(s)).`,
+          type: 'INFO',
+          linkUrl: '/tg/requests'
+        });
+      } else {
+        // TG unavailable -> direct to HOD
+        await prisma.leaveApplication.update({
+          where: { id: leave.id },
+          data: {
+            tgRemarks: assignedTg ? 'TG currently on leave. Routed directly to HOD.' : 'No designated TG assigned. Routed directly to HOD.'
+          }
+        });
+
+        await sendNotification({
+          recipientRole: 'HOD',
+          title: `Direct Student Leave: ${studentName}`,
+          message: `${studentName} applied for ${leaveType} leave (${totalDays} day(s)). Mentor unavailable / on leave — forwarded directly to HOD.`,
+          type: 'WARNING',
+          linkUrl: '/hod/requests'
+        });
+      }
     }
 
     return res.status(201).json({
