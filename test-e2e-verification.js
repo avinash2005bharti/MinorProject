@@ -1,7 +1,7 @@
 // Automated End-to-End Verification Script
 // Tests all real backend endpoints and flows with PostgreSQL database
 
-const BASE_URL = 'http://localhost:5000/api';
+const BASE_URL = process.env.API_URL || (process.env.BACKEND_URL ? `${process.env.BACKEND_URL.replace(/\/$/, '')}/api` : 'http://localhost:5000/api');
 
 async function testAll() {
   console.log('====================================================');

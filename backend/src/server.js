@@ -20,26 +20,53 @@ const routes = require('./routes/index');
 const app = express();
 const server = http.createServer(app);
 
-// Initialize Whitelisted Origins (SEC-08)
+// Initialize Whitelisted Origins (SEC-08 & Localhost Development Support)
+const defaultLocalOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost:5000',
+  'http://127.0.0.1:5000',
+  'http://localhost:8000',
+  'http://127.0.0.1:8000'
+];
+const productionFrontend = 'https://oistcse.onrender.com';
+
 const parseCorsOrigins = () => {
-  const envOrigins = process.env.FRONTEND_URL || process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || process.env.CLIENT_URL;
-  if (!envOrigins) {
-    if (process.env.NODE_ENV === 'production') {
-      console.error('[FATAL CONFIG] CORS_ORIGINS environment variable is required in production.');
-      process.exit(1);
-    }
-    return ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000'];
-  }
-  return envOrigins.split(',').map((s) => s.trim()).filter(Boolean);
+  const envOrigins = [
+    process.env.FRONTEND_URL,
+    process.env.CORS_ORIGINS,
+    process.env.CORS_ORIGIN,
+    process.env.CLIENT_URL
+  ].filter(Boolean).join(',');
+
+  const configured = envOrigins
+    ? envOrigins.split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  return Array.from(new Set([
+    productionFrontend,
+    ...configured,
+    ...defaultLocalOrigins
+  ]));
 };
 
 const allowedOrigins = parseCorsOrigins();
+
+const isLocalhostOrigin = (origin) => {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+};
 
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow non-browser requests with no origin (curl, server-to-server, mobile native)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || allowedOrigins.includes('*')) {
+    if (
+      allowedOrigins.includes(origin) ||
+      allowedOrigins.includes('*') ||
+      isLocalhostOrigin(origin)
+    ) {
       return callback(null, true);
     }
     return callback(new Error(`CORS policy does not allow access from origin: ${origin}`));
@@ -49,7 +76,17 @@ const corsOptions = {
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins.length === 1 && allowedOrigins[0] === '*' ? '*' : allowedOrigins,
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        allowedOrigins.includes('*') ||
+        isLocalhostOrigin(origin)
+      ) {
+        return callback(null, true);
+      }
+      return callback(new Error(`CORS policy does not allow socket origin: ${origin}`));
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
     credentials: true
   }

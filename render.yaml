@@ -1,4 +1,8 @@
 # OIST CSE: React static site -> Node.js API -> FastAPI AI service.
+# Deployment Links:
+# Backend:    https://oistcse-server.onrender.com
+# AI-Service: https://oistcseai.onrender.com
+# Frontend:   https://oistcse.onrender.com
 # PostgreSQL is provisioned on Render. MongoDB and Qdrant are external
 # managed services; provide their connection details in the Render Dashboard.
 
@@ -17,7 +21,7 @@ envVarGroups:
 
 services:
   - type: web
-    name: oistcse-backend
+    name: oistcse-server
     runtime: node
     rootDir: backend
     plan: starter
@@ -43,15 +47,17 @@ services:
       - key: ADMIN_REGISTRATION_SECRET
         generateValue: true
       - key: PYTHON_AI_SERVICE_URL
-        value: http://oistcse-ai:10000
+        value: https://oistcseai.onrender.com
       - key: AI_SERVICE_URL
-        value: http://oistcse-ai:10000
+        value: https://oistcseai.onrender.com
+      - key: FASTAPI_URL
+        value: https://oistcseai.onrender.com
       - key: BACKEND_URL
-        value: https://oistcse-backend.onrender.com
+        value: https://oistcse-server.onrender.com
       - key: FRONTEND_URL
         value: https://oistcse.onrender.com
       - key: CORS_ORIGINS
-        value: https://oistcse.onrender.com
+        value: https://oistcse.onrender.com,http://localhost:5173,http://localhost:3000
       - key: UPLOAD_PATH
         value: /var/data/uploads
     disk:
@@ -59,8 +65,8 @@ services:
       mountPath: /var/data
       sizeGB: 1
 
-  - type: pserv
-    name: oistcse-ai
+  - type: web
+    name: oistcseai
     runtime: python
     rootDir: ai-service
     plan: starter
@@ -85,9 +91,13 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: NODE_BACKEND_URL
-        value: http://oistcse-backend:10000
+        value: https://oistcse-server.onrender.com
       - key: BACKEND_URL
-        value: http://oistcse-backend:10000
+        value: https://oistcse-server.onrender.com
+      - key: AI_SERVICE_URL
+        value: https://oistcseai.onrender.com
+      - key: FRONTEND_URL
+        value: https://oistcse.onrender.com
       - key: PYTHONUNBUFFERED
         value: "1"
 
@@ -99,7 +109,15 @@ services:
     staticPublishPath: dist
     envVars:
       - key: VITE_BACKEND_URL
-        value: https://oistcse-backend.onrender.com
+        value: https://oistcse-server.onrender.com
+      - key: VITE_API_BASE_URL
+        value: https://oistcse-server.onrender.com/api
+      - key: VITE_API_URL
+        value: https://oistcse-server.onrender.com
+      - key: VITE_SOCKET_URL
+        value: https://oistcse-server.onrender.com
+      - key: VITE_AI_SERVICE_URL
+        value: https://oistcseai.onrender.com
     routes:
       - type: rewrite
         source: /*

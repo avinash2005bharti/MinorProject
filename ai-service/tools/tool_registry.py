@@ -23,7 +23,9 @@ load_dotenv()
 
 from memory.mongo_memory import mongo_memory
 
-NODE_BACKEND_URL = os.getenv("BACKEND_URL") or os.getenv("NODE_BACKEND_URL", "http://localhost:5000")
+NODE_BACKEND_URL = os.getenv("BACKEND_URL") or os.getenv("NODE_BACKEND_URL") or (
+    "https://oistcse-server.onrender.com" if (os.getenv("RENDER") or os.getenv("ENVIRONMENT") == "production") else "http://localhost:5000"
+)
 INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET", "")
 
 

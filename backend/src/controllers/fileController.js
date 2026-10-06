@@ -100,7 +100,7 @@ exports.uploadFile = async (req, res) => {
     });
 
     // 3. Trigger async processing via FastAPI
-    const backendHost = process.env.BACKEND_URL || 'http://localhost:5000';
+    const backendHost = process.env.BACKEND_URL || (process.env.NODE_ENV === 'production' ? 'https://oistcse-server.onrender.com' : 'http://localhost:5000');
     const absoluteFileUrl = storageUrl.startsWith('http') ? storageUrl : `${backendHost}${storageUrl}`;
 
     try {
