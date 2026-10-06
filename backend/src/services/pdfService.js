@@ -11,7 +11,7 @@ const pdfService = {
    * Generates a professional 2D visual grid timetable PDF buffer using PDFKit.
    * Matches the UI grid layout with Time/Period column, Day columns, Break rows, and Cell details.
    */
-  async exportTimetablePDF(section = 'A', semester = 5, year = '3rd Year', customSlots = null, customConfig = null) {
+  async exportTimetablePDF(section = 'A', semester = 5, year = '3rd Year', customSlots = null, customConfig = null, departmentId = null) {
     return new Promise(async (resolve, reject) => {
       try {
         const cleanSection = section.replace('CSE-', '').toUpperCase();
@@ -28,6 +28,7 @@ const pdfService = {
           const timetableRecord = await prisma.timetable.findFirst({
             where: {
               semester: semNum,
+              ...(departmentId ? { departmentId } : {}),
               ...(cleanSection ? { section: { name: cleanSection } } : {})
             },
             orderBy: { version: 'desc' },

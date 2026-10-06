@@ -113,7 +113,9 @@ exports.uploadFile = async (req, res) => {
         user_id: userId,
         conversation_id: conversationId,
         department_id: departmentId,
-        role: req.user.role || 'student'
+        department_code: req.user.departmentCode || '',
+        role: req.user.role,
+        user: req.user
       };
 
       // ARCH-02: Only pass local_path if explicitly enabled in local dev
@@ -125,7 +127,7 @@ exports.uploadFile = async (req, res) => {
         timeout: 5000,
         headers: {
           'Content-Type': 'application/json',
-          'X-Microservice-Secret': process.env.INTERNAL_API_SECRET || 'dev_internal_microservice_secret_key_123'
+          'x-internal-secret': process.env.INTERNAL_API_SECRET || ''
         }
       }).catch(err => {
         logger.warn(`[FileController] Async processing trigger warning: ${err.message}`);

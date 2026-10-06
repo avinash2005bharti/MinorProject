@@ -194,23 +194,106 @@ class GeminiEmbeddingProvider(BaseEmbeddingProvider):
         except Exception as e:
             logger.warning(f"[Gemini Batch Embedding] Failed: {e}")
 
-        return [self.embed_text(t) for t in texts]
+
+class SentenceTransformerProvider(BaseEmbeddingProvider):
+    """
+    Sentence Transformers Local Embedding Provider.
+    Supports high-quality dense vector representations (e.g. all-mpnet-base-v2, bge-m3).
+    Includes lazy loading and graceful fallback if library or weights are unavailable.
+    """
+    def __init__(self, dimension: int = VECTOR_DIMENSION):
+        self.dimension = dimension
+        self.model_name = os.getenv("SENTENCE_TRANSFORMER_MODEL") or os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-mpnet-base-v2")
+        self._model = None
+        self._fallback = LocalDenseEmbeddingProvider(dimension)
+        self._load_attempted = False
+
+    def _get_model(self):
+        if not self._load_attempted:
+            self._load_attempted = True
+            try:
+                from sentence_transformers import SentenceTransformer
+                logger.info(f"[Embedding Provider] Loading SentenceTransformer: {self.model_name}...")
+                self._model = SentenceTransformer(self.model_name)
+                dim_func = getattr(self._model, "get_embedding_dimension", None) or getattr(self._model, "get_sentence_embedding_dimension", None)
+                dim = dim_func() if dim_func else None
+                if dim:
+                    self.dimension = dim
+                logger.info(f"[Embedding Provider] SentenceTransformer '{self.model_name}' loaded successfully (dim={self.dimension}).")
+            except Exception as e:
+                logger.warning(f"[Embedding Provider] Could not load SentenceTransformer '{self.model_name}': {e}. Using deterministic local fallback.")
+                self._model = None
+        return self._model
+
+    def is_available(self) -> bool:
+        return self._get_model() is not None
+
+    def embed_text(self, text: str) -> List[float]:
+        if not text or not text.strip():
+            return [0.0] * self.dimension
+
+        model = self._get_model()
+        if model is None:
+            return self._fallback.embed_text(text)
+
+        try:
+            vec = model.encode(text.strip(), normalize_embeddings=True, show_progress_bar=False)
+            return vec.tolist()
+        except Exception as e:
+            logger.warning(f"[SentenceTransformer] embed_text failed: {e}. Falling back.")
+            return self._fallback.embed_text(text)
+
+    def embed_batch(self, texts: List[str]) -> List[List[float]]:
+        if not texts:
+            return []
+
+        model = self._get_model()
+        if model is None:
+            return self._fallback.embed_batch(texts)
+
+        try:
+            clean_texts = [t.strip() if t and t.strip() else " " for t in texts]
+            vecs = model.encode(clean_texts, normalize_embeddings=True, show_progress_bar=False, batch_size=32)
+            return vecs.tolist()
+        except Exception as e:
+            logger.warning(f"[SentenceTransformer] embed_batch failed: {e}. Falling back.")
+            return self._fallback.embed_batch(texts)
 
 
 class EmbeddingFactory:
     @staticmethod
     def get_provider() -> BaseEmbeddingProvider:
-        requested = (os.getenv("EMBEDDING_PROVIDER") or "gemini").lower().strip()
+        requested = (os.getenv("EMBEDDING_PROVIDER") or "").lower().strip()
         gemini_key = os.getenv("GEMINI_API_KEY", "")
+        openai_key = os.getenv("OPENAI_API_KEY", "")
 
-        # Default to Gemini if requested or if GEMINI_API_KEY is present
-        if requested == "gemini" or gemini_key:
+        # 1. Explicit provider requests
+        if requested in ("sentence_transformers", "sentence-transformers", "local_transformer"):
+            return SentenceTransformerProvider()
+        elif requested == "gemini" and gemini_key:
+            gp = GeminiEmbeddingProvider()
+            if gp.api_key:
+                return gp
+        elif requested == "openai" and openai_key:
+            op = OpenAIEmbeddingProvider()
+            if op.client:
+                return op
+        elif requested == "local":
+            return LocalDenseEmbeddingProvider()
+
+        # 2. Priority default: try SentenceTransformerProvider, then Gemini, then local
+        try:
+            import sentence_transformers
+            return SentenceTransformerProvider()
+        except ImportError:
+            pass
+
+        if gemini_key and gemini_key != "your_gemini_api_key_here":
             gp = GeminiEmbeddingProvider()
             if gp.api_key:
                 return gp
 
-        openai_key = os.getenv("OPENAI_API_KEY", "")
-        if requested == "openai" and openai_key:
+        if openai_key and openai_key != "your_openai_api_key_here":
             op = OpenAIEmbeddingProvider()
             if op.client:
                 return op
@@ -219,3 +302,4 @@ class EmbeddingFactory:
 
 
 embedding_provider = EmbeddingFactory.get_provider()
+

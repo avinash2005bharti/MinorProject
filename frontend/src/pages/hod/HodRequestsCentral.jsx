@@ -18,6 +18,26 @@ import {
   Sparkles
 } from 'lucide-react';
 
+const getApprovedPeriodDetails = (request) => {
+  if (request.type !== 'attendance_consideration') {
+    return { count: '—', timing: '—' };
+  }
+
+  const periods = Array.isArray(request.selectedPeriods)
+    ? request.selectedPeriods
+    : Array.isArray(request.periods)
+      ? request.periods
+      : [];
+  const count = request.approvedPeriodsCount ?? request.periodsCount ?? (periods.length || '—');
+  const timing = request.periodsTiming || (periods.length
+    ? periods.map((period) => (
+      typeof period === 'object' ? period?.time || period?.label || period?.id || '' : period
+    )).filter(Boolean).join(', ')
+    : '—');
+
+  return { count, timing };
+};
+
 export default function HodRequestsCentral() {
   const {
     attendanceRequests,
@@ -78,17 +98,22 @@ export default function HodRequestsCentral() {
       addToast?.('No Records', 'There are no approved requests to export.', 'warning');
       return;
     }
-    const headers = ['Request ID', 'Student / Faculty', 'Roll / Enrollment', 'Request Category', 'Dates / Duration', 'Reason / Subject', 'Status', 'Date Approved'];
-    const rows = list.map((r) => [
-      `"${r.id || ''}"`,
-      `"${r.studentName || r.applicantName || 'Student'}"`,
-      `"${r.rollNo || r.enrollmentNo || '—'}"`,
-      `"${r.type === 'attendance_consideration' ? 'Attendance Consideration' : r.type === 'leave_request' ? `Student Leave (${r.leaveType || 'General'})` : 'Attendance Dispute Query'}"`,
-      `"${r.dateRangeLabel || r.dates || r.date || r.startDate || '—'}"`,
-      `"${(r.reason || r.title || '').replace(/"/g, '""')}"`,
-      `"APPROVED BY HOD"`,
-      `"${new Date(r.updatedAt || r.createdAt || Date.now()).toLocaleDateString()}"`
-    ]);
+    const headers = ['Request ID', 'Student / Faculty', 'Roll / Enrollment', 'Request Category', 'Dates / Duration', 'Periods Approved', 'Time Interval', 'Reason / Subject', 'Status', 'Date Approved'];
+    const rows = list.map((r) => {
+      const { count, timing } = getApprovedPeriodDetails(r);
+      return [
+        `"${r.id || ''}"`,
+        `"${r.studentName || r.applicantName || 'Student'}"`,
+        `"${r.rollNo || r.enrollmentNo || '—'}"`,
+        `"${r.type === 'attendance_consideration' ? 'Attendance Consideration' : r.type === 'leave_request' ? `Student Leave (${r.leaveType || 'General'})` : 'Attendance Dispute Query'}"`,
+        `"${r.dateRangeLabel || r.dates || r.date || r.startDate || '—'}"`,
+        `"${count}"`,
+        `"${String(timing).replace(/"/g, '""')}"`,
+        `"${(r.reason || r.title || '').replace(/"/g, '""')}"`,
+        `"APPROVED BY HOD"`,
+        `"${new Date(r.updatedAt || r.createdAt || Date.now()).toLocaleDateString()}"`
+      ];
+    });
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -107,7 +132,9 @@ export default function HodRequestsCentral() {
       addToast?.('No Records', 'There are no approved requests to export.', 'warning');
       return;
     }
-    const tableRows = list.map((r, i) => `
+    const tableRows = list.map((r, i) => {
+      const { count, timing } = getApprovedPeriodDetails(r);
+      return `
       <tr>
         <td style="text-align: center;">${i + 1}</td>
         <td>#${r.id || ''}</td>
@@ -115,11 +142,14 @@ export default function HodRequestsCentral() {
         <td>${r.rollNo || r.enrollmentNo || '—'}</td>
         <td>${r.type === 'attendance_consideration' ? 'Attendance Consideration' : r.type === 'leave_request' ? `Student Leave (${r.leaveType || 'General'})` : 'Attendance Dispute'}</td>
         <td>${r.dateRangeLabel || r.dates || r.date || r.startDate || '—'}</td>
+        <td>${count}</td>
+        <td>${timing}</td>
         <td>${r.reason || r.title || ''}</td>
         <td style="color: #047857; font-weight: bold; text-align: center;">APPROVED</td>
         <td>${new Date(r.updatedAt || r.createdAt || Date.now()).toLocaleDateString()}</td>
       </tr>
-    `).join('');
+    `;
+    }).join('');
 
     const excelTemplate = `
       <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
@@ -145,6 +175,8 @@ export default function HodRequestsCentral() {
               <th>Roll / Enrollment</th>
               <th>Category</th>
               <th>Period / Dates</th>
+              <th>Periods Approved</th>
+              <th>Time Interval</th>
               <th>Reason / Particulars</th>
               <th>Status</th>
               <th>Date Sanctioned</th>
@@ -221,17 +253,22 @@ export default function HodRequestsCentral() {
               </tr>
             </thead>
             <tbody>
-              ${list.map((r, i) => `
+              ${list.map((r, i) => {
+                const { count, timing } = getApprovedPeriodDetails(r);
+                return `
                 <tr>
                   <td>${i + 1}</td>
                   <td><strong>${r.studentName || r.applicantName || 'Student'}</strong></td>
                   <td>${r.rollNo || r.enrollmentNo || '—'}</td>
                   <td>${r.type === 'attendance_consideration' ? 'Attendance Consideration' : r.type === 'leave_request' ? `Leave (${r.leaveType || 'General'})` : 'Dispute Correction'}</td>
                   <td>${r.dateRangeLabel || r.dates || r.date || r.startDate || '—'}</td>
+                  <td>${count}</td>
+                  <td>${timing}</td>
                   <td>${r.reason || r.title || ''}</td>
                   <td class="status">APPROVED</td>
                 </tr>
-              `).join('')}
+              `;
+              }).join('')}
             </tbody>
           </table>
           <div class="footer">

@@ -1,79 +1,81 @@
 from typing import List, Dict, Any, Optional
 from loguru import logger
 from memory.mongo_memory import mongo_memory
+from memory.langchain_memory import langchain_memory, MongoChatMessageHistory, LangChainShortTermMemory, LangChainLongTermMemory
 from rag.qdrant_manager import qdrant_manager
-from llm.groq_client import groq_client
+from llm.provider import llm_provider
 
 class MemoryAgent:
     """
-    Three-Tier Memory Agent:
-    1. Short-Term Memory (STM): MongoDB active session context, task parameters, constraints, pending approvals.
-    2. Long-Term Memory (LTM): Qdrant erp_long_term_memory semantic facts & preferences.
+    Three-Tier LangChain-Powered Memory Agent:
+    1. Short-Term Memory (STM): LangChain MongoChatMessageHistory + MongoDB active session context & task state.
+    2. Long-Term Memory (LTM): Qdrant erp_long_term_memory semantic facts & MongoDB user profile memories.
     3. Document RAG: Qdrant erp_documents institutional policies & guidelines.
     """
     def __init__(self):
         self.mongo = mongo_memory
+        self.memory = mongo_memory  # Alias for backward compatibility with agents expecting .memory
         self.qdrant = qdrant_manager
-        self.llm = groq_client
+        self.llm = llm_provider
+        self.lc = langchain_memory
 
-    def load_context(self, user_id: str, conversation_id: str, department: str = "CSE") -> Dict[str, Any]:
+    def load_context(self, user_id: str, conversation_id: str, department: str) -> Dict[str, Any]:
         """
-        Loads short-term working session memory from MongoDB and semantic long-term memory from Qdrant.
+        Loads short-term working session memory from MongoDB and semantic long-term memory from Qdrant
+        using LangChain primitives.
         """
-        # 1. STM from MongoDB
+        # Load comprehensive context from LangChain Memory Coordinator
+        lc_ctx = self.lc.get_full_context(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            department=department
+        )
+
         stm = self.mongo.get_stm(session_id=conversation_id, conversation_id=conversation_id)
         conv = self.mongo.get_conversation(conversation_id)
 
         messages = []
-        summary = ""
+        summary = lc_ctx.get("session_summary", "")
         if conv:
             messages = conv.get("messages", [])[-6:]
-            summary = conv.get("sessionSummary", "")
-
-        # 2. LTM from Qdrant
-        ltm_records = self.qdrant.retrieve_ltm(
-            user_id=user_id,
-            query="department timetable preferences and scheduling constraints",
-            department=department,
-            top_k=4
-        )
-        mongo_facts = self.mongo.get_user_long_term_memory(user_id)
-
-        all_facts = [r.get("fact") for r in ltm_records if r.get("fact")]
-        for f in mongo_facts:
-            if f not in all_facts:
-                all_facts.append(f)
+            if not summary:
+                summary = conv.get("sessionSummary", "")
 
         return {
             "stm": stm,
-            "long_term_facts": all_facts,
+            "long_term_facts": lc_ctx.get("ltm_facts", []),
             "recent_messages": messages,
             "session_summary": summary,
-            "recent_constraints": stm.get("recentConstraints", []),
-            "task_context": stm.get("taskContext", {})
+            "recent_constraints": lc_ctx.get("recent_constraints", []),
+            "task_context": lc_ctx.get("task_context", {}),
+            # LangChain-native context
+            "langchain_stm": lc_ctx.get("stm"),
+            "langchain_messages": lc_ctx.get("stm_messages", []),
+            "langchain_history_text": lc_ctx.get("stm_history_text", ""),
+            "langchain_ltm_documents": lc_ctx.get("ltm_documents", []),
+            "user_profile": lc_ctx.get("user_profile", {}),
+            "system_prompt_snippet": lc_ctx.get("system_prompt_snippet", "")
         }
 
     def summarize_conversation(self, conversation_id: str, messages: List[Dict[str, Any]]) -> str:
         """
         Summarizes conversation thread to compact context.
         """
-        if not messages:
-            return ""
+        return self.lc.summarize_session(conversation_id)
 
-        dialogue = "\n".join([f"{m.get('sender', 'user')}: {m.get('content', '')}" for m in messages])
-        prompt = [
-            {"role": "system", "content": "You are the CSE Department Memory Agent. Summarize the key academic intents, questions, and decisions from the conversation in 2-3 concise bullet points."},
-            {"role": "user", "content": dialogue}
-        ]
-
-        try:
-            res = self.llm.generate(prompt, max_tokens=150)
-            summary = res.get("content", "Conversation about CSE schedule and assignments.")
-            logger.info(f"[Memory Agent] Summarized conversation {conversation_id}")
-            return summary
-        except Exception as e:
-            logger.warning(f"[Memory Agent] Summarization failed: {e}")
-            return "Academic conversation regarding class timetable and assignments."
+    def extract_new_facts(self, prompt: str, answer: str = "") -> List[str]:
+        """
+        Rule and heuristic fact extractor for student/faculty assistant agents.
+        """
+        p_lower = prompt.lower()
+        extracted = []
+        if any(w in p_lower for w in ["prefer", "preference", "i prefer"]):
+            extracted.append(f"Preference: {prompt.strip()[:100]}")
+        if any(w in p_lower for w in ["interested in", "my interest", "curious about"]):
+            extracted.append(f"Academic Interest: {prompt.strip()[:100]}")
+        if any(w in p_lower for w in ["section a", "section b", "3rd year", "4th year", "sem 5", "sem 6"]):
+            extracted.append(f"Academic Placement: {prompt.strip()[:80]}")
+        return extracted
 
     def extract_and_store_memory(
         self,
@@ -81,34 +83,24 @@ class MemoryAgent:
         role: str,
         user_prompt: str,
         assistant_response: str,
-        department: str = "CSE"
+        department: str
     ) -> List[str]:
         """
         Evaluates whether user prompt contains high-value semantic preferences
         worthy of persistent long-term storage in Qdrant LTM and MongoDB.
         """
-        prompt_lower = user_prompt.lower()
-        extracted = []
+        return self.lc.ltm.extract_and_store(
+            user_id=user_id,
+            role=role,
+            user_prompt=user_prompt,
+            assistant_response=assistant_response,
+            department=department
+        )
 
-        # Check for scheduling preferences
-        if "prefer" in prompt_lower or "keep friday" in prompt_lower or "light" in prompt_lower:
-            extracted.append(f"Scheduling preference noted: {user_prompt.strip()[:100]}")
-        elif "no class before" in prompt_lower or "morning" in prompt_lower or "afternoon" in prompt_lower:
-            extracted.append(f"Time slot constraint preference: {user_prompt.strip()[:100]}")
-        elif "consecutive" in prompt_lower or "lab" in prompt_lower:
-            extracted.append(f"Laboratory slot structuring rule: {user_prompt.strip()[:100]}")
-
-        # Persist worthy memories
-        for fact in extracted:
-            self.qdrant.store_ltm(
-                user_id=user_id,
-                role=role,
-                fact=fact,
-                category="scheduling_preference",
-                department=department
-            )
-            self.mongo.update_user_long_term_memory(user_id=user_id, new_facts=[fact])
-
-        return extracted
+    def get_langchain_retriever(self, user_id: str, department: str, top_k: int = 4):
+        """
+        Returns a LangChain-compatible retriever for semantic LTM search.
+        """
+        return self.lc.ltm.as_retriever(user_id=user_id, department=department, top_k=top_k)
 
 memory_agent = MemoryAgent()

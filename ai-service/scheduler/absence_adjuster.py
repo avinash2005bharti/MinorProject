@@ -19,9 +19,9 @@ class TeacherAbsenceAdjuster:
     def analyze_and_propose(
         self,
         teacher_query: str,
+        department: str,
         date_str: Optional[str] = None,
-        day_name: Optional[str] = None,
-        department: str = "CSE"
+        day_name: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Calculates affected classes and ranks feasible substitutes deterministically.
@@ -58,10 +58,14 @@ class TeacherAbsenceAdjuster:
         logger.info(f"[Absence Adjuster] Analyzing absence for {absent_name} on {target_day} ({target_date})")
 
         # 3. Retrieve affected classes from PostgreSQL timetable
-        affected_slots = self.sql.get_affected_classes_for_absence(absent_name, target_day)
+        affected_slots = self.sql.get_affected_classes_for_absence(
+            absent_name,
+            target_day,
+            department=department
+        )
         if not affected_slots:
             # Try searching by day only for this teacher
-            schedule = self.sql.get_teacher_schedule(absent_name, day=target_day)
+            schedule = self.sql.get_teacher_schedule(absent_name, day=target_day, department=department)
             affected_slots = schedule
 
         if not affected_slots:
@@ -102,7 +106,11 @@ class TeacherAbsenceAdjuster:
                 t_id = teacher["id"]
 
                 # Hard Filter 1: Check if teacher is already teaching in this slot
-                t_schedule_today = self.sql.get_teacher_schedule(t_name, day=target_day)
+                t_schedule_today = self.sql.get_teacher_schedule(
+                    t_name,
+                    day=target_day,
+                    department=department
+                )
                 is_busy = any(s.get("start_time") == slot_time for s in t_schedule_today)
                 if is_busy:
                     continue # Hard conflict: cannot be in two places at once!
@@ -210,16 +218,43 @@ class TeacherAbsenceAdjuster:
     def execute_approved_substitutions(
         self,
         absence_data: Dict[str, Any],
-        approved_by: str = "Dr. Alok Verma (HOD)"
+        approved_by: str,
+        department: str
     ) -> Dict[str, Any]:
         """
         Transactionally applies approved substitutions to PostgreSQL database,
         creating substitution records, updating timetable entries, and recording audit logs.
         """
-        absent_id = absence_data.get("teacher_id", 1)
-        absent_name = absence_data.get("absent_teacher", "Faculty")
-        date_str = absence_data.get("date", datetime.now().strftime("%Y-%m-%d"))
-        proposals = absence_data.get("proposals", [])
+        absent_id = absence_data.get("teacher_id")
+        absent_name = absence_data.get("absent_teacher")
+        date_str = absence_data.get("date")
+        proposals = absence_data.get("proposals")
+        if not absent_id or not absent_name or not date_str or not isinstance(proposals, list) or not proposals:
+            return {"success": False, "error": "The substitution proposal is incomplete or contains no approved changes."}
+        for proposal in proposals:
+            slot_id = proposal.get("timetable_entry_id")
+            substitute_id = proposal.get("substitute_id")
+            if (
+                not slot_id
+                or not substitute_id
+                or not proposal.get("proposed_substitute")
+                or not proposal.get("day")
+                or not proposal.get("start_time")
+                or not proposal.get("end_time")
+                or not proposal.get("subject")
+                or not self.sql.substitution_is_in_department(
+                    timetable_slot_id=str(slot_id),
+                    original_teacher_id=str(absent_id),
+                    original_teacher_name=str(absent_name),
+                    substitute_teacher_id=str(substitute_id),
+                    substitute_teacher_name=str(proposal.get("proposed_substitute") or ""),
+                    department=department
+                )
+            ):
+                return {
+                    "success": False,
+                    "error": "A proposed substitution does not match the authenticated department, original teacher, and scheduled slot."
+                }
 
         # 1. Record absence in PostgreSQL
         absence_id = self.sql.create_absence_record(
@@ -228,6 +263,8 @@ class TeacherAbsenceAdjuster:
             date_str=date_str,
             reason="Approved HOD Absence Adjustment"
         )
+        if not absence_id:
+            return {"success": False, "error": "The absence record could not be saved; no substitutions were applied."}
 
         applied_count = 0
         details = []
@@ -269,13 +306,16 @@ class TeacherAbsenceAdjuster:
         logger.info(f"[Absence Adjuster] Transactionally applied {applied_count} substitutions for {absent_name}.")
 
         return {
-            "success": True,
+            "success": applied_count == len(proposals),
             "absence_id": absence_id,
             "applied_count": applied_count,
             "approved_by": approved_by,
             "modifications": details,
-            "message": f"Successfully updated timetable records. {applied_count} classes reassigned from {absent_name}."
+            "message": (
+                f"Successfully updated timetable records. {applied_count} classes reassigned from {absent_name}."
+                if applied_count == len(proposals)
+                else f"Only {applied_count} of {len(proposals)} substitutions were applied."
+            )
         }
 
 absence_adjuster = TeacherAbsenceAdjuster()
-

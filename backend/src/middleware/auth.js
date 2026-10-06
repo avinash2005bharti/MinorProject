@@ -4,6 +4,7 @@
 // ============================================================================
 
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { prisma } = require('../config/postgres');
 const { getPermissionsForRole, PERMISSIONS } = require('../config/permissions');
 const { logger } = require('../services/loggerService');
@@ -45,11 +46,11 @@ const resolveAuthUser = async (userId) => {
 
   if (!user) return null;
 
-  const baseRole = (user.role?.name || 'STUDENT').toUpperCase();
+  const baseRole = String(user.role?.name || '').toUpperCase();
   const isHod = (user.teacherProfile?.hodAssignments && user.teacherProfile.hodAssignments.length > 0) || baseRole === 'HOD';
   const isTg = Boolean(user.teacherProfile?.isTG) || baseRole === 'TG';
 
-  let effectiveRole = baseRole;
+  let effectiveRole = ['FACULTY', 'PROFESSOR'].includes(baseRole) ? 'TEACHER' : baseRole;
   if (isHod) effectiveRole = 'HOD';
   else if (isTg && baseRole !== 'ADMIN') effectiveRole = 'TG';
 
@@ -60,8 +61,8 @@ const resolveAuthUser = async (userId) => {
     role: effectiveRole,
     roleName: baseRole,
     departmentId: user.departmentId,
-    departmentCode: user.department?.code || 'CSE',
-    departmentName: user.department?.name || 'Computer Science & Engineering',
+    departmentCode: user.department?.code || null,
+    departmentName: user.department?.name || null,
     studentId: user.studentProfile?.id || null,
     teacherId: user.teacherProfile?.id || null,
     isTG: isTg,
@@ -104,6 +105,41 @@ const verifyToken = async (req, res, next) => {
       token = req.headers.authorization.split(' ')[1];
     } else if (req.cookies && req.cookies.token) {
       token = req.cookies.token;
+    }
+
+    // Microservice Internal Secret Support (FastAPI AI Microservice ↔ Node Backend)
+    const internalSecret = req.headers['x-internal-secret'];
+    const expectedSecret = process.env.INTERNAL_API_SECRET;
+    if (internalSecret !== undefined) {
+      const supplied = Buffer.from(String(internalSecret));
+      const expected = Buffer.from(String(expectedSecret || ''));
+      if (!expected.length || supplied.length !== expected.length || !crypto.timingSafeEqual(supplied, expected)) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid internal service authentication.',
+          code: 'INVALID_INTERNAL_AUTH'
+        });
+      }
+
+      const internalUserId = req.headers['x-user-id'];
+      if (!internalUserId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Internal service requests must identify the authenticated user.',
+          code: 'AUTH_REQUIRED'
+        });
+      }
+
+      const authUser = await resolveAuthUser(internalUserId);
+      if (!authUser || !authUser.isActive) {
+        return res.status(401).json({
+          success: false,
+          message: 'The internal request user is not an active CampusFlow account.',
+          code: 'USER_NOT_FOUND'
+        });
+      }
+      req.user = authUser;
+      return next();
     }
 
     if (!token) {

@@ -1,10 +1,152 @@
 const axios = require('axios');
-const { v4: uuidv4 } = require('crypto');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { Conversation, UserMemory, ShortTermMemory, AgentLog } = require('../models/mongo/aiMemoryModels');
 const { aiLogger, logger } = require('../services/loggerService');
-const { executeAgentActionByIntent, erpAgentTools } = require('../services/erpAgentTools');
+const { ToolExecutionLog } = require('../models/mongo/aiMemoryModels');
+const { erpAgentTools } = require('../services/erpAgentTools');
+const { envConfig } = require('../config/env');
 
 const PYTHON_AI_SERVICE_URL = process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || '';
+const JWT_SECRET = process.env.JWT_SECRET || envConfig.jwtSecret;
+const CONFIRMATION_TOOLS = new Set(['deactivateTeacher', 'deactivateStudent', 'deleteSubject', 'bulkMarkAttendance']);
+const usedConfirmationIds = new Map();
+const TOOL_ACCESS = {
+  getTeachers: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'] },
+  getTeacher: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'] },
+  createTeacher: { roles: ['HOD', 'ADMIN'], permissions: ['FACULTY_MANAGE'] },
+  updateTeacher: { roles: ['HOD', 'ADMIN'], permissions: ['FACULTY_MANAGE'] },
+  deactivateTeacher: { roles: ['HOD', 'ADMIN'], permissions: ['FACULTY_MANAGE'] },
+  searchTeachers: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'] },
+  getTeacherWorkload: { roles: ['TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['FACULTY_MANAGE'] },
+  getTeacherAvailability: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['TIMETABLE_VIEW'] },
+  markTeacherLeave: { roles: ['HOD', 'ADMIN'], permissions: ['LEAVE_APPROVE_HOD'] },
+  getStudents: { roles: ['TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['STUDENT_LIST_VIEW'] },
+  getStudent: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['STUDENT_PROFILE_READ', 'STUDENT_LIST_VIEW'] },
+  createStudent: { roles: ['HOD', 'ADMIN'], permissions: ['USER_CREATE'] },
+  deactivateStudent: { roles: ['HOD', 'ADMIN'], permissions: ['USER_DELETE'] },
+  getStudentAttendance: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['ATTENDANCE_READ_SELF', 'ATTENDANCE_VIEW_ALL', 'ATTENDANCE_MARK', 'ATTENDANCE_OVERRIDE'] },
+  getSubjects: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['TIMETABLE_VIEW', 'SUBJECT_MANAGE'] },
+  createSubject: { roles: ['HOD', 'ADMIN'], permissions: ['SUBJECT_MANAGE'] },
+  deleteSubject: { roles: ['HOD', 'ADMIN'], permissions: ['SUBJECT_MANAGE'] },
+  getTimetable: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['TIMETABLE_VIEW'] },
+  generateTimetable: { roles: ['HOD', 'ADMIN'], permissions: ['TIMETABLE_GENERATE'] },
+  exportTimetableExcel: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['TIMETABLE_VIEW'] },
+  exportTimetablePDF: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['TIMETABLE_VIEW'] },
+  getTeachersOnLeave: { roles: ['TG', 'HOD', 'ADMIN'], permissions: ['FACULTY_MANAGE', 'LEAVE_REVIEW_TG', 'LEAVE_APPROVE_HOD'] },
+  approveLeave: { roles: ['HOD', 'ADMIN'], permissions: ['LEAVE_APPROVE_HOD'] },
+  getRooms: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['TIMETABLE_VIEW'] },
+  checkRoomAvailability: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['TIMETABLE_VIEW'] },
+  generateWorkloadReport: { roles: ['HOD', 'ADMIN'], permissions: ['REPORT_GENERATE'] },
+  generateAttendanceReport: { roles: ['HOD', 'ADMIN'], permissions: ['REPORT_GENERATE'] },
+  markAttendance: { roles: ['TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['ATTENDANCE_MARK'] },
+  bulkMarkAttendance: { roles: ['TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['ATTENDANCE_MARK'] },
+  applyLeave: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['LEAVE_APPLY'] },
+  rejectLeave: { roles: ['TG', 'HOD', 'ADMIN'], permissions: ['LEAVE_REVIEW_TG', 'LEAVE_APPROVE_HOD'] },
+  submitAttendanceQuery: { roles: ['STUDENT'], permissions: ['ATTENDANCE_QUERY_SUBMIT'] },
+  reviewAttendanceQuery: { roles: ['TG', 'HOD', 'ADMIN'], permissions: ['ATTENDANCE_QUERY_REVIEW', 'ATTENDANCE_QUERY_APPROVE'] },
+  getStudentSchedule: { roles: ['STUDENT', 'TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['TIMETABLE_VIEW'] },
+  getTeacherSchedule: { roles: ['TEACHER', 'TG', 'HOD', 'ADMIN'], permissions: ['TIMETABLE_VIEW'] },
+  getMentees: { roles: ['TG', 'HOD', 'ADMIN'], permissions: ['MENTEE_MONITOR', 'ATTENDANCE_VIEW_ALL'] },
+  appointTg: { roles: ['HOD', 'ADMIN'] },
+  createClassroom: { roles: ['HOD', 'ADMIN'], permissions: ['SUBJECT_MANAGE'] },
+  getDepartmentAnalytics: { roles: ['HOD', 'ADMIN'], permissions: ['REPORT_VIEW'] },
+  getUsers: { roles: ['ADMIN'], permissions: ['USER_READ'] }
+};
+
+function authorizeToolExecution(toolName, user) {
+  const policy = TOOL_ACCESS[toolName];
+  const role = String(user?.role || '').toUpperCase();
+  if (!policy || !user?.id || !policy.roles.includes(role)) {
+    return { allowed: false, message: `Access denied for tool '${toolName}'.` };
+  }
+
+  const permissions = Array.isArray(user.permissions) ? user.permissions : [];
+  if (policy.permissions?.length && !policy.permissions.some(permission => permissions.includes(permission))) {
+    return { allowed: false, message: `Missing permission for tool '${toolName}'.` };
+  }
+
+  return { allowed: true };
+}
+
+function signToolConfirmation(pendingAction, userId) {
+  if (!pendingAction?.tool || !CONFIRMATION_TOOLS.has(pendingAction.tool)) return null;
+  return jwt.sign({
+    userId: String(userId),
+    tool: pendingAction.tool,
+    args: pendingAction.args || {},
+    agentId: pendingAction.agentId || null,
+    conversationId: pendingAction.conversationId || null
+  }, JWT_SECRET, { expiresIn: '5m', jwtid: crypto.randomBytes(16).toString('hex') });
+}
+
+async function recordToolAudit({ user, toolName, args, result, agentId, conversationId }) {
+  try {
+    await ToolExecutionLog.create({
+      userId: String(user.id),
+      role: user.role,
+      agentId: agentId || null,
+      conversationId: conversationId || null,
+      toolName,
+      parameters: args,
+      result,
+      success: result?.success === true,
+      resourceId: result?.data?.id || result?.data?.leaveId || result?.data?.studentId || result?.data?.teacherId || null,
+      timestamp: new Date()
+    });
+  } catch (auditError) {
+    logger.error(`[AI Tool Audit] Failed to persist ${toolName} audit for user ${user.id}: ${auditError.message}`);
+  }
+}
+
+async function executeConfirmedTool(payload, user) {
+  const token = payload?.confirmationToken;
+  if (!token) return { executed: false, error: 'A signed confirmation token is required.' };
+
+  let claims;
+  try {
+    claims = jwt.verify(token, JWT_SECRET);
+  } catch {
+    return { executed: false, error: 'The confirmation is invalid or expired. Please request the action again.' };
+  }
+
+  if (String(claims.userId) !== String(user?.id)) {
+    return { executed: false, error: 'Access denied: this confirmation belongs to another user.' };
+  }
+  if (!CONFIRMATION_TOOLS.has(claims.tool) || typeof erpAgentTools[claims.tool] !== 'function') {
+    return { executed: false, error: 'The confirmed operation is not an allowed destructive tool.' };
+  }
+  const authorization = authorizeToolExecution(claims.tool, user);
+  if (!authorization.allowed) return { executed: false, error: authorization.message };
+  for (const [id, expiresAt] of usedConfirmationIds.entries()) {
+    if (expiresAt <= Date.now()) usedConfirmationIds.delete(id);
+  }
+  if (usedConfirmationIds.has(claims.jti)) {
+    return { executed: false, error: 'This confirmation has already been used.' };
+  }
+  usedConfirmationIds.set(claims.jti, claims.exp * 1000);
+
+  const result = await erpAgentTools[claims.tool](
+    { ...(claims.args || {}), confirmed: true },
+    { user }
+  );
+  await recordToolAudit({
+    user,
+    toolName: claims.tool,
+    args: claims.args || {},
+    result,
+    agentId: claims.agentId,
+    conversationId: claims.conversationId
+  });
+  return {
+    executed: result.success === true,
+    tool: claims.tool,
+    steps: result.steps || [],
+    error: result.success ? undefined : result.error || 'The backend operation was not successful.',
+    data: result.data
+  };
+}
 
 // 1. Central Multi-Agent Chat Orchestrator (Node ↔ Python)
 exports.chat = async (req, res) => {
@@ -20,12 +162,12 @@ exports.chat = async (req, res) => {
       return res.status(400).json({ success: false, message: 'A prompt or message string is required.' });
     }
 
-    if (!req.user || !req.user.id) {
+    if (!req.user || !req.user.id || !req.user.role || !Array.isArray(req.user.permissions)) {
       return res.status(401).json({ success: false, message: 'Authentication required to access AI Assistant.' });
     }
 
     const userId = String(req.user.id);
-    const userRole = String(req.user.role || 'STUDENT').toLowerCase();
+    const userRole = String(req.user.role).toLowerCase();
 
     aiLogger.info(`[AI Chat] Received query from User #${userId} (${userRole}) [Agent: ${targetAgent}]: "${promptText.slice(0, 60)}..."`);
 
@@ -40,37 +182,37 @@ exports.chat = async (req, res) => {
       aiLogger.warn(`[AI Chat] Error fetching conversation context: ${lookupErr.message}`);
     }
 
-    // Check if user confirmed an action or requested a direct ERP tool operation
+    const confirmedActionPayload = req.body.confirmed_action || req.body.confirmedAction;
     let directAction = null;
-    try {
-      directAction = await executeAgentActionByIntent(
-        promptText,
-        req.user,
-        req.body.confirmed_action || req.body.confirmedAction,
-        { fileId, attachment }
-      );
-    } catch (actErr) {
-      aiLogger.warn(`[AI Chat] Direct action check warning: ${actErr.message}`);
-    }
+    let aiResponseData;
 
-    if (directAction) {
+    if (confirmedActionPayload) {
+      directAction = await executeConfirmedTool(confirmedActionPayload, req.user);
       aiResponseData = {
-        answer: directAction.answer || directAction.error,
-        detected_intent: directAction.tool ? directAction.tool.toUpperCase() : 'ACTION_EXECUTION',
+        success: directAction.executed,
+        answer: directAction.executed
+          ? `The confirmed operation \`${directAction.tool}\` returned success from the CampusFlow backend.`
+          : `The confirmed operation was not completed. ${directAction.error || ''}`.trim(),
+        detected_intent: 'CONFIRMED_TOOL_EXECUTION',
         agent_used: determineAgentForRole(userRole),
         actions_taken: directAction.executed ? [directAction.tool] : [],
         tool_calls: directAction.tool ? [{
           tool: directAction.tool,
           steps: directAction.steps || [],
-          success: directAction.executed !== false,
-          error: directAction.error
+          success: directAction.executed,
+          error: directAction.error,
+          result: directAction.data
         }] : [],
-        requires_confirmation: Boolean(directAction.requires_confirmation),
-        confirmation_action: directAction.confirmation_action || null,
-        generated_files: directAction.generated_files || []
+        steps: directAction.steps || []
       };
     } else {
-      // 1. Call Python FastAPI AI Service
+      if (!INTERNAL_API_SECRET) {
+        return res.status(503).json({
+          success: false,
+          code: 'AI_GATEWAY_NOT_CONFIGURED',
+          message: 'The authenticated AI agent gateway is not configured. No tool operation was attempted.'
+        });
+      }
       try {
         const pyResponse = await axios.post(`${PYTHON_AI_SERVICE_URL}/ai/chat`, {
           user_id: userId,
@@ -78,30 +220,38 @@ exports.chat = async (req, res) => {
           prompt: promptText,
           message: promptText,
           conversation_id: conversationId,
-          conversationId: conversationId,
+          conversationId,
           agent: targetAgent,
-          context_history: contextHistory
+          context_history: contextHistory,
+          user: req.user,
+          file_id: fileId,
+          attachment
         }, {
-          timeout: 15000,
-          headers: { 'Content-Type': 'application/json' }
+          timeout: 25000,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-secret': INTERNAL_API_SECRET
+          }
         });
-
         aiResponseData = pyResponse.data;
       } catch (pyErr) {
-        aiLogger.info(`[AI Chat] FastAPI call deferred (${pyErr.message}), executing local handler`);
-        try {
-          aiResponseData = await executeLocalCSEAgentFallback(promptText, userId, userRole, req.user, targetAgent);
-        } catch (fbErr) {
-          aiResponseData = {
-            answer: 'I am here to help you navigate CSE departmental services, classes, and academic records. How may I assist you today?',
-            detected_intent: 'GENERAL_QUERY',
-            agent_used: 'ERPAssistantAgent'
-          };
-        }
+        aiLogger.error(`[AI Chat] Agent runtime request failed: ${pyErr.message}`);
+        return res.status(503).json({
+          success: false,
+          code: 'AI_RUNTIME_UNAVAILABLE',
+          message: 'The CampusFlow agent runtime is unavailable. No fallback or simulated operation was executed.'
+        });
       }
     }
 
-    const answer = aiResponseData?.answer || aiResponseData?.response || 'I am ready to help with CSE department academic tasks.';
+    const answer = aiResponseData?.answer || aiResponseData?.response;
+    if (!answer) {
+      return res.status(502).json({
+        success: false,
+        code: 'AI_RESPONSE_MISSING',
+        message: 'The agent runtime returned no response. No operation success is being reported.'
+      });
+    }
     const detected_intent = aiResponseData?.detected_intent || 'GENERAL_QUERY';
     const agent_used = aiResponseData?.agent_used || 'ERPAssistantAgent';
     const actions_taken = aiResponseData?.actions_taken || [];
@@ -118,7 +268,17 @@ exports.chat = async (req, res) => {
     const steps = directAction?.steps || aiResponseData?.steps || (tool_calls[0]?.steps) || [];
     const requires_confirmation = Boolean(directAction?.requires_confirmation || aiResponseData?.requires_confirmation);
     const confirmation_prompt = directAction?.requires_confirmation ? (directAction.answer || directAction.confirmation_message) : (aiResponseData?.confirmation_prompt || null);
-    const action_to_confirm = directAction?.confirmation_action || aiResponseData?.action_to_confirm || null;
+    const pendingConfirmation = aiResponseData?.action_to_confirm || null;
+    const action_to_confirm = pendingConfirmation
+      ? {
+          ...pendingConfirmation,
+          confirmationToken: signToolConfirmation({
+            ...pendingConfirmation,
+            agentId: agent_used,
+            conversationId
+          }, userId)
+        }
+      : null;
     const deliverable = (generated_files && generated_files.length > 0)
       ? { filename: generated_files[0].name, url: generated_files[0].url }
       : (aiResponseData?.deliverable || null);
@@ -161,14 +321,14 @@ exports.chat = async (req, res) => {
         input: { prompt: promptText, conversationId, agent: targetAgent },
         output: { answerSnippet: (answer || '').slice(0, 100), actionsCount: actions_taken.length },
         executionTimeMs: executionDuration,
-        status: 'SUCCESS'
+        status: aiResponseData?.success === true ? 'SUCCESS' : 'FAILED'
       });
     } catch (logErr) {
       aiLogger.warn(`[AI Chat] Non-critical warning logging agent execution: ${logErr.message}`);
     }
 
     return res.status(200).json({
-      success: true,
+      success: aiResponseData?.success === true,
       conversation_id: conversationId,
       answer,
       response: answer,
@@ -207,11 +367,9 @@ exports.getConversations = async (req, res) => {
     const userId = String(req.user.id);
 
     if (req.app?.locals?.mongoAvailable === false) {
-      return res.status(200).json({
-        success: true,
-        count: 0,
-        conversations: [],
-        degraded: true,
+      return res.status(503).json({
+        success: false,
+        code: 'MEMORY_UNAVAILABLE',
         message: 'Conversational memory storage is temporarily unavailable.'
       });
     }
@@ -223,7 +381,11 @@ exports.getConversations = async (req, res) => {
 
     return res.status(200).json({ success: true, count: conversations.length, conversations });
   } catch (error) {
-    return res.status(200).json({ success: true, count: 0, conversations: [], degraded: true });
+    return res.status(503).json({
+      success: false,
+      code: 'MEMORY_UNAVAILABLE',
+      message: 'Conversational memory storage could not be queried.'
+    });
   }
 };
 
@@ -247,7 +409,7 @@ exports.getConversationById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Conversation not found.' });
     }
 
-    if (conversation.userId && conversation.userId !== String(req.user.id) && req.user.role !== 'ADMIN') {
+    if (String(conversation.userId || '') !== String(req.user.id) && req.user.role !== 'ADMIN') {
       return res.status(403).json({ success: false, message: 'Forbidden: Access to another user\'s conversation is denied.' });
     }
 
@@ -264,10 +426,10 @@ exports.getUserMemory = async (req, res) => {
     const userId = String(req.user.id);
 
     if (req.app?.locals?.mongoAvailable === false) {
-      return res.status(200).json({
-        success: true,
-        memory: { userId, longTermFacts: [], academicInterests: [] },
-        degraded: true
+      return res.status(503).json({
+        success: false,
+        code: 'MEMORY_UNAVAILABLE',
+        message: 'User memory storage is temporarily unavailable.'
       });
     }
 
@@ -277,10 +439,10 @@ exports.getUserMemory = async (req, res) => {
       memory: memory || { userId, longTermFacts: [], academicInterests: [] }
     });
   } catch (error) {
-    return res.status(200).json({
-      success: true,
-      memory: { userId: String(req.user?.id), longTermFacts: [], academicInterests: [] },
-      degraded: true
+    return res.status(503).json({
+      success: false,
+      code: 'MEMORY_UNAVAILABLE',
+      message: 'User memory storage could not be queried.'
     });
   }
 };
@@ -326,6 +488,9 @@ exports.getSuggestions = async (req, res) => {
 // 6. RAG Hybrid Search Proxy
 exports.ragSearch = async (req, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ success: false, message: 'Authentication required.' });
+    }
     const { query, category, top_k } = req.body;
     if (!query) return res.status(400).json({ success: false, message: 'Search query required.' });
 
@@ -333,22 +498,21 @@ exports.ragSearch = async (req, res) => {
       const response = await axios.post(`${PYTHON_AI_SERVICE_URL}/ai/rag/search`, {
         query,
         collection: category || 'Notes',
-        top_k: top_k || 5
-      }, { timeout: 10000 });
+        top_k: top_k || 5,
+        user_id: String(req.user.id),
+        role: req.user.role,
+        user: req.user
+      }, {
+        timeout: 10000,
+        headers: { 'x-internal-secret': INTERNAL_API_SECRET }
+      });
 
       return res.status(200).json(response.data);
-    } catch {
-      return res.status(200).json({
-        success: true,
-        query,
-        results: [
-          {
-            title: `CSE Department Curriculum Index for "${query}"`,
-            snippet: `Relevant content matching your query '${query}' within CSE Department academic repositories.`,
-            collection: category || 'Notes',
-            score: 0.92
-          }
-        ]
+    } catch (error) {
+      aiLogger.error(`[AI RAG Search] Retrieval failed: ${error.message}`);
+      return res.status(502).json({
+        success: false,
+        message: 'The institutional knowledge search is currently unavailable.'
       });
     }
   } catch (err) {
@@ -385,10 +549,10 @@ exports.deleteConversation = async (req, res) => {
   }
 };
 
-// 8. Streaming Chat Endpoint (SSE Proxy to Python or Local Simulated Tokens)
+// 8. Streaming Chat Endpoint (SSE adapter for the authenticated agent runtime)
 exports.chatStream = async (req, res) => {
   try {
-    if (!req.user || !req.user.id) {
+    if (!req.user || !req.user.id || !req.user.role || !Array.isArray(req.user.permissions)) {
       return res.status(401).json({ success: false, message: 'Authentication required.' });
     }
 
@@ -398,37 +562,57 @@ exports.chatStream = async (req, res) => {
     }
 
     const userId = String(req.user.id);
-    const userRole = String(req.user.role || 'STUDENT').toLowerCase();
+    const userRole = String(req.user.role).toLowerCase();
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-
-    // Try Python streaming service
+    if (!INTERNAL_API_SECRET) {
+      return res.status(503).json({ success: false, code: 'AI_GATEWAY_NOT_CONFIGURED' });
+    }
     try {
-      const response = await axios({
-        method: 'POST',
-        url: `${PYTHON_AI_SERVICE_URL}/ai/chat/stream`,
-        data: {
+      const response = await axios.post(`${PYTHON_AI_SERVICE_URL}/ai/chat`, {
           prompt: promptText,
           message: promptText,
           role: userRole,
-          user_id: userId
-        },
-        responseType: 'stream',
-        timeout: 25000
-      });
+          user_id: userId,
+          user: req.user,
+          conversation_id: req.body.conversation_id || req.body.conversationId || `conv-${Date.now()}`,
+          context_history: [],
+          file_id: req.body.file_id || req.body.fileId || null
+        }, {
+          timeout: 25000,
+          headers: {
+            'Content-Type': 'application/json',
+            'x-internal-secret': INTERNAL_API_SECRET
+          }
+        });
 
-      response.data.pipe(res);
-    } catch {
-      // Local simulated token stream
-      const tokens = `Grounded Response: Connected to CSE Department knowledge base. Processing request for: "${promptText}". All constraint verification passed.`.split(' ');
-      for (const t of tokens) {
-        res.write(`data: ${t} \n\n`);
-        await new Promise(r => setTimeout(r, 40));
+      if (!response.data?.answer) {
+        return res.status(502).json({ success: false, code: 'AI_RESPONSE_MISSING' });
       }
+
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.write(`data: ${JSON.stringify({ type: 'status', message: 'Request processing completed.' })}\n\n`);
+      for (const call of response.data.tool_calls || []) {
+        res.write(`data: ${JSON.stringify({
+          type: 'tool_result',
+          tool: call.tool,
+          success: call.success === true
+        })}\n\n`);
+      }
+      res.write(`data: ${JSON.stringify({ type: 'final', answer: response.data.answer })}\n\n`);
       res.write('data: [DONE]\n\n');
-      res.end();
+      return res.end();
+    } catch (streamError) {
+      logger.error(`[AI Chat Stream] Agent runtime request failed: ${streamError.message}`);
+      if (!res.headersSent) {
+        return res.status(503).json({
+          success: false,
+          code: 'AI_RUNTIME_UNAVAILABLE',
+          message: 'The CampusFlow agent runtime is unavailable. No simulated stream was emitted.'
+        });
+      }
+      return res.end();
     }
   } catch (error) {
     if (!res.headersSent) {
@@ -455,222 +639,11 @@ function determineAgentForRole(role) {
   }
 }
 
-// Helper: Automatic conversation summarization trigger
-async function triggerConversationSummarization(conv, userId) {
-  try {
-    const textToSummarize = conv.messages.map(m => `${m.sender}: ${m.content}`).join('\n');
-    conv.sessionSummary = `Summary of ${conv.messageCount} interactions: Topics discussed include timetable, assignments, and CSE course concepts.`;
-    await conv.save();
-    aiLogger.info(`[Memory Agent] Conversation #${conv.conversationId} summarized successfully.`);
-  } catch (err) {
-    aiLogger.warn(`[Memory Agent] Auto-summarization error: ${err.message}`);
-  }
-}
-
-// Intelligent CSE Department Local Agent Fallback
-async function executeLocalCSEAgentFallback(prompt, userId, role, userObj, targetAgent) {
-  const lower = prompt.toLowerCase();
-  const toolCalls = [];
-  const citations = [];
-
-  // 1. Teacher Absence & Substitution Fallback
-  if (lower.includes('absent') || lower.includes('adjust his classes') || lower.includes('adjust her classes') || lower.includes('adjust all his classes') || lower.includes('substitute')) {
-    const teacherName = lower.includes('sharma') ? 'Dr. Sunita Sharma' : (lower.includes('mehta') ? 'Prof. Rahul Mehta' : 'Dr. Sunita Sharma');
-    const slots = await Timetable.findAll({
-      where: { faculty: teacherName, day: 'Monday' }
-    });
-
-    const proposals = slots.map(s => ({
-      timetable_entry_id: s.id,
-      class_info: `${s.year} Sem ${s.semester} Sec ${s.section}`,
-      subject: s.subject,
-      room: s.room,
-      time: `${s.start_time} - ${s.end_time}`,
-      day: s.day,
-      status: 'Feasible',
-      proposed_substitute: 'Prof. Priya Singh',
-      substitute_id: 4,
-      reason: 'Free at this time; Assistant Professor (Computer Networks); current load: 2 classes.'
-    }));
-
-    let answer = `### ⚠️ Teacher Absence Reported: **${teacherName}**\n\n`;
-    answer += `**Date:** Today (Monday) | **Affected Classes Found:** ${proposals.length}\n\n`;
-    proposals.forEach((p, idx) => {
-      answer += `${idx}. **${p.class_info} — ${p.subject} (${p.time})**\n`;
-      answer += `   - **Room:** ${p.room}\n`;
-      answer += `   - **Proposed Substitute:** **${p.proposed_substitute}**\n`;
-      answer += `   - *Rationale:* ${p.reason}\n\n`;
-    });
-    answer += `---\n**Do you approve these substitution adjustments?**\n*(Reply **'Approve'** to apply these changes to the official schedule.)*`;
-
-    return {
-      answer,
-      detected_intent: 'ABSENCE_ADJUSTMENT',
-      agent_used: 'TimetableAgent',
-      actions_taken: ['query_mysql_timetable', 'check_faculty_availability'],
-      proposed_actions: proposals,
-      approval_requirement: { requires_approval: true, action: 'APPLY_ABSENCE_SUBSTITUTIONS' },
-      affected_classes: proposals
-    };
-  }
-
-  // 2. Approval Confirmation Fallback
-  if (lower.includes('approve') || lower.includes('publish') || lower.includes('confirm')) {
-    return {
-      answer: `### ✅ Substitution / Timetable Action Approved!\n\nThe official MySQL records have been transactionally updated and audit logged under HOD authorization. Notifications sent to teachers and students.`,
-      detected_intent: 'APPROVAL_CONFIRMATION',
-      agent_used: 'TimetableAgent',
-      actions_taken: ['apply_approved_changes', 'audit_logged'],
-      approval_requirement: { requires_approval: false }
-    };
-  }
-
-  // 3. Timetable Generation Fallback
-  if (lower.includes('generate') || (lower.includes('timetable') && (lower.includes('cse') || lower.includes('create') || lower.includes('sem')))) {
-    const slots = await Timetable.findAll({
-      where: { semester: 5, section: 'A' }
-    });
-
-    let answer = `### 📅 Master Timetable Draft Generated (v2)\n\n`;
-    answer += `**Department:** Computer Science & Engineering | **Class:** 3rd Year Sem 5 Sec A\n`;
-    answer += `**Optimization Score:** 94% | **Hard Constraints Satisfied:** 100% | **Collisions:** 0\n\n`;
-    answer += `#### 📋 Schedule Grid Overview:\n`;
-    slots.slice(0, 6).forEach(s => {
-      answer += `- **${s.day}** \`${s.start_time} - ${s.end_time}\`: **${s.subject}** (${s.faculty}) — ${s.room}\n`;
-    });
-    answer += `\n---\n#### 📥 Official Documents Ready:\n`;
-    answer += `- 📊 **Excel Spreadsheet:** [/api/timetable/export/excel?section=A&semester=5](/api/timetable/export/excel?section=A&semester=5)\n`;
-    answer += `- 📄 **Printable PDF:** [/api/timetable/export/pdf?section=A&semester=5](/api/timetable/export/pdf?section=A&semester=5)\n\n`;
-    answer += `**Would you like to approve and publish this timetable?** *(Reply 'Publish')*`;
-
-    return {
-      answer,
-      detected_intent: 'GENERATE_TIMETABLE',
-      agent_used: 'TimetableAgent',
-      actions_taken: ['fetch_mysql_truth', 'run_optimizer', 'create_draft_v2'],
-      proposed_actions: [{ action: 'PUBLISH_TIMETABLE', version: 2 }],
-      approval_requirement: { requires_approval: true, action: 'PUBLISH_TIMETABLE' },
-      timetable_data: slots
-    };
-  }
-
-  // 4. Query Timetable
-  if (lower.includes('class') || lower.includes('timetable') || lower.includes('kal') || lower.includes('schedule') || lower.includes('lecture')) {
-    let studentYear = '3rd Year';
-    let studentSem = 5;
-    let studentSec = 'A';
-
-    if (userObj && userObj.studentProfile) {
-      studentYear = userObj.studentProfile.year;
-      studentSem = userObj.studentProfile.semester;
-      studentSec = userObj.studentProfile.section;
-    }
-
-    const timetableSlots = await Timetable.findAll({
-      where: { year: studentYear, semester: studentSem, section: studentSec },
-      limit: 4
-    });
-
-    toolCalls.push({
-      tool: 'query_timetable',
-      args: { year: studentYear, semester: studentSem, section: studentSec },
-      output: { count: timetableSlots.length, slots: timetableSlots.map(s => `${s.day} ${s.start_time}: ${s.subject} (${s.faculty})`) }
-    });
-
-    const pendingAssignments = await Assignment.findAll({
-      where: { subject_id: [1, 2, 3] },
-      limit: 2
-    });
-
-    toolCalls.push({
-      tool: 'get_pending_assignments',
-      args: { studentId: userId },
-      output: { pending: pendingAssignments.map(a => `${a.title} (Deadline: ${new Date(a.deadline).toLocaleDateString()})`) }
-    });
-
-    citations.push({
-      collectionName: 'Timetable',
-      title: `${studentYear} Sem ${studentSem} Section ${studentSec} Official Schedule`,
-      snippet: timetableSlots.length ? `${timetableSlots[0].subject} at ${timetableSlots[0].start_time} in ${timetableSlots[0].room}` : 'Class at 09:30 AM',
-      score: 0.95
-    });
-
-    let answer = `Here is your schedule and pending academic tasks for **${studentYear} (Semester ${studentSem}, Section ${studentSec})**:\n\n`;
-    answer += `### 📅 Classes Scheduled:\n`;
-    if (timetableSlots.length > 0) {
-      timetableSlots.forEach(s => {
-        answer += `- **${s.start_time} - ${s.end_time}**: ${s.subject} by ${s.faculty} (${s.room})\n`;
-      });
-    } else {
-      answer += `- **09:30 AM - 10:30 AM**: Database Management Systems (CS501) - Lab 1\n- **10:30 AM - 11:30 AM**: Computer Networks (CS502) - Room 204\n`;
-    }
-
-    answer += `\n### 📝 Pending Assignments:\n`;
-    if (pendingAssignments.length > 0) {
-      pendingAssignments.forEach(a => {
-        answer += `- **${a.title}**: Due on **${new Date(a.deadline).toLocaleDateString()}**\n`;
-      });
-    } else {
-      answer += `- No pending overdue assignments for this week.\n`;
-    }
-
-    return {
-      answer,
-      citations,
-      tool_calls: toolCalls,
-      memory_update: { facts: ["Student actively tracks daily CSE class timetable and assignments"] }
-    };
-  }
-
-  // Attendance Query
-  if (lower.includes('attendance') || lower.includes('haazri') || lower.includes('percentage')) {
-    let studentId = userObj && userObj.studentProfile ? userObj.studentProfile.id : 1;
-    const records = await Attendance.findAll({ where: { student_id: studentId } });
-    const total = records.length || 20;
-    const present = records.filter(r => r.status === 'Present').length || 17;
-    const pct = Math.round((present / total) * 100);
-
-    toolCalls.push({
-      tool: 'check_attendance',
-      args: { studentId },
-      output: { totalLectures: total, attended: present, percentage: pct }
-    });
-
-    citations.push({
-      collectionName: 'Attendance_Registry',
-      title: 'CSE Department Biometric / Live Attendance Record',
-      snippet: `Current recorded attendance: ${pct}% across ${total} total theory & lab sessions.`,
-      score: 0.98
-    });
-
-    return {
-      answer: `Your recorded attendance in the Computer Science Engineering Department is **${pct}%** (${present}/${total} sessions attended).\n\n${pct >= 75 ? '✅ Your attendance is above the mandatory 75% departmental requirement.' : '⚠️ Warning: Your attendance has fallen below the 75% threshold. Please meet your HOD or TG.'}`,
-      citations,
-      tool_calls: toolCalls,
-      memory_update: { facts: [`Student attendance verified at ${pct}%`] }
-    };
-  }
-
-  // General CSE Department response
-  return {
-    answer: `Greetings from the **CSE Department AI Assistant**.\n\nI am connected to the department's MySQL records, MongoDB memory context, and Qdrant RAG vector base.\n\nYou can ask me about:\n- Today's and tomorrow's lectures and timetable for your Section\n- Pending assignments and lab manual submissions\n- Subject attendance percentages and shortage alerts\n- Faculty designations, cabins, and office hours\n- CSE syllabus, lecture notes, and past examination papers`,
-    citations: [
-      {
-        collectionName: 'Syllabus',
-        title: 'CSE Department Academic Handbook',
-        snippet: 'Computer Science & Engineering Department curricula, regulations, and schedules.',
-        score: 0.88
-      }
-    ],
-    tool_calls: [],
-    memory_update: null
-  };
-}
 
 // 9. Execute Specific ERP Tool Endpoint (Universal Tool Layer)
 exports.executeTool = async (req, res) => {
   try {
-    const { tool, args = {}, confirmed = false } = req.body;
+    const { tool, args = {}, confirmed = false, confirmationToken } = req.body;
     if (!tool || !erpAgentTools[tool]) {
       return res.status(404).json({
         success: false,
@@ -678,7 +651,46 @@ exports.executeTool = async (req, res) => {
       });
     }
 
-    const result = await erpAgentTools[tool]({ ...args, confirmed }, { user: req.user });
+    const authorization = authorizeToolExecution(tool, req.user);
+    if (!authorization.allowed) {
+      return res.status(403).json({
+        success: false,
+        code: 'TOOL_AUTHORIZATION_DENIED',
+        message: authorization.message
+      });
+    }
+
+    if (CONFIRMATION_TOOLS.has(tool)) {
+      if (!confirmationToken) {
+        return res.status(409).json({
+          success: false,
+          code: 'CONFIRMATION_REQUIRED',
+          message: 'Destructive tools require a signed, user-bound confirmation token.'
+        });
+      }
+      const confirmedResult = await executeConfirmedTool({ confirmationToken }, req.user);
+      return res.status(confirmedResult.executed ? 200 : 403).json({
+        success: confirmedResult.executed,
+        error: confirmedResult.error,
+        tool: confirmedResult.tool,
+        steps: confirmedResult.steps,
+        data: confirmedResult.data
+      });
+    }
+
+    const result = await erpAgentTools[tool]({ ...args, confirmed: false }, {
+      user: req.user,
+      agentId: req.body.agentId,
+      conversationId: req.body.conversationId
+    });
+    await recordToolAudit({
+      user: req.user,
+      toolName: tool,
+      args,
+      result,
+      agentId: req.body.agentId,
+      conversationId: req.body.conversationId
+    });
     return res.status(200).json(result);
   } catch (err) {
     aiLogger.error(`[AI executeTool] Error: ${err.message}`);
@@ -746,5 +758,3 @@ exports.getObservability = async (req, res) => {
     return res.status(500).json({ success: false, error: err.message });
   }
 };
-
-

@@ -135,12 +135,12 @@ class QdrantRAGManager:
         role: str,
         fact: str,
         category: str = "preference",
-        department: str = "CSE"
+        department: Optional[str] = None
     ) -> bool:
         """
         Persists a high-value semantic long-term memory into erp_long_term_memory.
         """
-        if not fact or not fact.strip():
+        if not fact or not fact.strip() or not department:
             return False
 
         try:
@@ -171,7 +171,7 @@ class QdrantRAGManager:
         self,
         user_id: str,
         query: str,
-        department: str = "CSE",
+        department: Optional[str] = None,
         top_k: int = 3
     ) -> List[Dict[str, Any]]:
         """
@@ -180,9 +180,10 @@ class QdrantRAGManager:
         query_vector = embedder.embed_text(query)
 
         conditions = [
-            FieldCondition(key="department", match=MatchValue(value=department))
+            FieldCondition(key="user_id", match=MatchValue(value=str(user_id)))
         ]
-        # Also allow general department memories or user-specific
+        if department:
+            conditions.append(FieldCondition(key="department", match=MatchValue(value=department)))
         qdrant_filter = Filter(must=conditions)
 
         try:
@@ -239,16 +240,19 @@ class QdrantRAGManager:
             content = chunk.get("content", "")
             if not content.strip():
                 continue
-            vector = embedder.embed_text(content)
             meta = chunk.get("metadata", {})
+            if not meta.get("department"):
+                logger.warning(f"[Qdrant RAG] Skipping unscoped document chunk in '{target_col}'.")
+                continue
+            vector = embedder.embed_text(content)
             point_id = abs(hash(f"{target_col}_{meta.get('title', '')}_{i}_{datetime.utcnow().timestamp()}")) % (10**10)
 
             # Enriched metadata adhering to Section 4 & 21
             payload_meta = {
                 "document_id": meta.get("document_id") or meta.get("note_id") or f"doc_{point_id}",
                 "filename": meta.get("filename") or meta.get("file_name", "unnamed_document"),
-                "department": meta.get("department", "CSE"),
-                "uploaded_by": meta.get("uploaded_by", "Faculty/Admin"),
+                "department": meta.get("department"),
+                "uploaded_by": meta.get("uploaded_by"),
                 "document_type": meta.get("document_type") or meta.get("category", "Academic Notes"),
                 "access_level": meta.get("access_level", "student"), # 'public', 'student', 'faculty', 'hod', 'admin'
                 "created_at": meta.get("created_at") or datetime.utcnow().isoformat(),
@@ -281,7 +285,7 @@ class QdrantRAGManager:
     def search_rag(
         self,
         query: str,
-        department: str = "CSE",
+        department: str = "",
         category: Optional[str] = None,
         user_role: str = "student",
         top_k: int = 4
@@ -290,6 +294,8 @@ class QdrantRAGManager:
         Hybrid semantic retrieval with strict departmental isolation and access-control security (Section 4 & 21).
         Students cannot retrieve HOD-only or faculty-confidential documents.
         """
+        if not department:
+            return []
         query_vector = embedder.embed_text(query)
 
         conditions = []
@@ -363,10 +369,12 @@ class QdrantRAGManager:
         top_k: int = 5,
         filter_metadata: Optional[Dict[str, Any]] = None
     ) -> List[Dict[str, Any]]:
-        dept = filter_metadata.get("department", "CSE") if filter_metadata else "CSE"
+        dept = filter_metadata.get("department") if filter_metadata else None
+        if not dept:
+            return []
         return self.search_rag(query=query, department=dept, top_k=top_k)
 
-    def multi_collection_search(self, query: str, top_k: int = 4) -> List[Dict[str, Any]]:
-        return self.search_rag(query=query, department="CSE", top_k=top_k)
+    def multi_collection_search(self, query: str, department: str, top_k: int = 4) -> List[Dict[str, Any]]:
+        return self.search_rag(query=query, department=department, top_k=top_k)
 
 qdrant_manager = QdrantRAGManager()

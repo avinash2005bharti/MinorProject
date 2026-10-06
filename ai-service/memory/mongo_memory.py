@@ -1,8 +1,12 @@
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
 from loguru import logger
 from pymongo import MongoClient
+from dotenv import load_dotenv
+
+# Ensure environment variables are loaded regardless of import origin
+load_dotenv()
 
 class MongoMemoryManager:
     """
@@ -26,7 +30,7 @@ class MongoMemoryManager:
             try:
                 self.db = self.client.get_default_database()
             except Exception:
-                self.db = self.client.get_database("cse_erp")
+                self.db = self.client.get_database("erp_cse")
 
             # Trigger server check
             self.client.admin.command('ping')
@@ -62,29 +66,57 @@ class MongoMemoryManager:
         citations: List[Dict[str, Any]] = None,
         tool_calls: List[Dict[str, Any]] = None
     ):
+        now = datetime.utcnow()
+        expire_date = now + timedelta(days=1)
         msg = {
             "sender": sender,
             "content": content,
             "citations": citations or [],
             "toolCalls": tool_calls or [],
-            "timestamp": datetime.utcnow()
+            "timestamp": now
         }
 
         if self.db is not None:
             try:
+                # 1. Update full conversations thread
                 self.db.conversations.update_one(
                     {"conversationId": conversation_id},
                     {
                         "$setOnInsert": {
                             "conversationId": conversation_id,
-                            "userId": user_id,
+                            "userId": str(user_id),
                             "role": role,
                             "title": content[:40] + "...",
-                            "createdAt": datetime.utcnow()
+                            "createdAt": now
                         },
                         "$push": {"messages": msg},
                         "$inc": {"messageCount": 1},
-                        "$set": {"updatedAt": datetime.utcnow()}
+                        "$set": {"updatedAt": now}
+                    },
+                    upsert=True
+                )
+
+                # 2. Sync to short_term_memory (STM) contextWindow (last 10 items) and extend expireAt (24h)
+                context_role = "user" if sender.lower() == "user" else "assistant"
+                self.db.short_term_memory.update_one(
+                    {"sessionId": conversation_id},
+                    {
+                        "$setOnInsert": {
+                            "sessionId": conversation_id,
+                            "conversationId": conversation_id,
+                            "userId": str(user_id),
+                            "createdAt": now
+                        },
+                        "$push": {
+                            "contextWindow": {
+                                "$each": [{"role": context_role, "text": content, "timestamp": now}],
+                                "$slice": -10
+                            }
+                        },
+                        "$set": {
+                            "updatedAt": now,
+                            "expireAt": expire_date
+                        }
                     },
                     upsert=True
                 )
@@ -104,6 +136,21 @@ class MongoMemoryManager:
             }
         cache[conversation_id]["messages"].append(msg)
         cache[conversation_id]["messageCount"] += 1
+
+        stm_cache = getattr(self, "_local_cache", {}).setdefault("short_term_memory", {})
+        stm_entry = stm_cache.setdefault(conversation_id, {
+            "sessionId": conversation_id,
+            "conversationId": conversation_id,
+            "userId": str(user_id),
+            "contextWindow": []
+        })
+        stm_entry.setdefault("contextWindow", []).append({
+            "role": "user" if sender == "user" else "assistant",
+            "text": content,
+            "timestamp": now
+        })
+        if len(stm_entry["contextWindow"]) > 10:
+            stm_entry["contextWindow"] = stm_entry["contextWindow"][-10:]
 
     def get_user_long_term_memory(self, user_id: str) -> List[str]:
         if self.db is not None:
@@ -235,12 +282,15 @@ class MongoMemoryManager:
         Persists active short-term working memory state, task context, and constraints.
         """
         cid = conversation_id or session_id
+        now = datetime.utcnow()
+        expire_date = now + timedelta(days=1)
         doc_updates = {
             "$set": {
                 "sessionId": session_id,
                 "conversationId": cid,
                 "userId": str(user_id),
-                "updatedAt": datetime.utcnow(),
+                "updatedAt": now,
+                "expireAt": expire_date,
                 **updates
             }
         }
@@ -291,5 +341,40 @@ class MongoMemoryManager:
             user_id=user_id,
             updates={"pendingApprovalAction": None}
         )
+
+    def get_user_profile(self, user_id: str) -> Dict[str, Any]:
+        """
+        Retrieves user memory profile (strengths, interests, long-term facts, summary).
+        """
+        if self.db is not None:
+            try:
+                doc = self.db.users_memory.find_one({"userId": str(user_id)})
+                if doc:
+                    doc["_id"] = str(doc.get("_id", ""))
+                    return doc
+            except Exception as e:
+                logger.warning(f"[MongoMemory] Error getting user profile: {e}")
+        return getattr(self, "_local_cache", {}).get("users_memory", {}).get(str(user_id), {})
+
+    def update_user_profile(self, user_id: str, profile_data: Dict[str, Any]):
+        """
+        Updates profile facts or attributes in users_memory.
+        """
+        if not profile_data:
+            return
+        if self.db is not None:
+            try:
+                self.db.users_memory.update_one(
+                    {"userId": str(user_id)},
+                    {"$set": {**profile_data, "updatedAt": datetime.utcnow()}},
+                    upsert=True
+                )
+                return
+            except Exception as e:
+                logger.error(f"[MongoMemory] Error updating user profile: {e}")
+
+        cache = getattr(self, "_local_cache", {}).setdefault("users_memory", {})
+        existing = cache.setdefault(str(user_id), {})
+        existing.update(profile_data)
 
 mongo_memory = MongoMemoryManager()

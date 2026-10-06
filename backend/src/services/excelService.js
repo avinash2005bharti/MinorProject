@@ -8,7 +8,7 @@ const { prisma } = require('../config/postgres');
 
 const excelService = {
   // 1. Export section timetable in EXACT 2D Grid matching UI
-  async exportTimetableExcel(section = 'A', semester = 5, academicYear = '2026-27', customSlots = null, customConfig = null) {
+  async exportTimetableExcel(section = 'A', semester = 5, academicYear = '2026-27', customSlots = null, customConfig = null, departmentId = null) {
     const cleanSection = section.replace('CSE-', '').toUpperCase();
     const semNum = parseInt(semester, 10) || 5;
 
@@ -22,6 +22,7 @@ const excelService = {
       const timetableRecord = await prisma.timetable.findFirst({
         where: {
           semester: semNum,
+          ...(departmentId ? { departmentId } : {}),
           ...(cleanSection ? { section: { name: cleanSection } } : {})
         },
         orderBy: { version: 'desc' },

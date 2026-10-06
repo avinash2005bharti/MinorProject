@@ -1,106 +1,103 @@
-# ==============================================================================
-# CampusFlow / CSE Department ERP - Render Blueprint Configuration
-# ==============================================================================
-# Infrastructure definition for deploying the complete College ERP to Render:
-# 1. Managed Render PostgreSQL Database (Relational ERP source of truth)
-# 2. Node.js Express API Gateway (Backend with automated schema migration)
-# 3. Python FastAPI Microservice (AI Timetable Agent, LLM reasoning, RAG)
-# 4. React Vite Frontend (Static site for browser clients)
-# ==============================================================================
+# CampusFlow: React static site -> Node.js API -> FastAPI AI service.
+# PostgreSQL is provisioned on Render. MongoDB and Qdrant are external
+# managed services; provide their connection details in the Render Dashboard.
 
 databases:
   - name: cse-erp-postgres
     databaseName: cse_erp
     user: cse_user
-    plan: starter # Render managed PostgreSQL
-    ipAllowList: [] # Accessible by Render services; configure external IP access in Render dashboard if needed
+    plan: basic-1gb
+    ipAllowList: []
+
+envVarGroups:
+  - name: campusflow-internal
+    envVars:
+      - key: INTERNAL_API_SECRET
+        generateValue: true
 
 services:
-  # ----------------------------------------------------------------------------
-  # 1. Node.js Express Backend Web Service
-  # ----------------------------------------------------------------------------
   - type: web
     name: cse-erp-backend
-    env: node
+    runtime: node
     rootDir: backend
     plan: starter
-    buildCommand: npm install
+    buildCommand: npm ci && npx prisma generate --schema=src/models/postgres/schema.prisma
     startCommand: npm run migrate && npm start
-    healthCheckPath: /health
+    healthCheckPath: /api/health
+    envVarGroups:
+      - campusflow-internal
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
-        value: 5000
+        value: "10000"
+      - key: USE_POSTGRES
+        value: "true"
       - key: DATABASE_URL
         fromDatabase:
           name: cse-erp-postgres
           property: connectionString
-      - key: PGSSL
-        value: "true"
-      - key: USE_POSTGRES
-        value: "true"
       - key: MONGODB_URI
-        sync: false # Set via Render Dashboard (e.g. MongoDB Atlas URI)
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_REFRESH_SECRET
         generateValue: true
+      - key: ADMIN_REGISTRATION_SECRET
+        generateValue: true
       - key: PYTHON_AI_SERVICE_URL
-        fromService:
-          type: web
-          name: cse-erp-ai-service
-          property: host
-      - key: CORS_ORIGIN
-        value: "*"
-      - key: BREVO_API_KEY
-        sync: false
-      - key: BREVO_SENDER_EMAIL
-        sync: false
+        value: http://cse-erp-ai-service:10000
+      - key: BACKEND_URL
+        value: https://cse-erp-backend.onrender.com
+      - key: CORS_ORIGINS
+        value: https://cse-erp-frontend.onrender.com
+      - key: UPLOAD_PATH
+        value: /opt/render/project/src/backend/uploads
+    disk:
+      name: campusflow-uploads
+      mountPath: /opt/render/project/src/backend/uploads
+      sizeGB: 1
 
-  # ----------------------------------------------------------------------------
-  # 2. Python FastAPI AI Microservice Web Service
-  # ----------------------------------------------------------------------------
-  - type: web
+  - type: pserv
     name: cse-erp-ai-service
-    env: python
+    runtime: python
     rootDir: ai-service
     plan: starter
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    envVarGroups:
+      - campusflow-internal
     envVars:
+      - key: PORT
+        value: "10000"
       - key: DATABASE_URL
         fromDatabase:
           name: cse-erp-postgres
           property: connectionString
-      - key: PGSSL
-        value: "true"
       - key: MONGODB_URI
-        sync: false # Set via Render Dashboard (e.g. MongoDB Atlas URI)
-      - key: GROQ_API_KEY
-        sync: false # Set via Render Dashboard
+        sync: false
       - key: QDRANT_URL
-        sync: false # Set via Render Dashboard
+        sync: false
       - key: QDRANT_API_KEY
-        sync: false # Set via Render Dashboard
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: NODE_BACKEND_URL
+        value: http://cse-erp-backend:10000
+      - key: PYTHONUNBUFFERED
+        value: "1"
 
-  # ----------------------------------------------------------------------------
-  # 3. React Vite Frontend Static Site
-  # ----------------------------------------------------------------------------
   - type: web
     name: cse-erp-frontend
-    env: static
+    runtime: static
     rootDir: frontend
-    buildCommand: npm install && npm run build
+    buildCommand: npm ci && npm run build
     staticPublishPath: dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://cse-erp-backend.onrender.com
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
-    envVars:
-      - key: VITE_API_URL
-        fromService:
-          type: web
-          name: cse-erp-backend
-          property: host

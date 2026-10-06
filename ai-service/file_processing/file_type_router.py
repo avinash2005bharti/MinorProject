@@ -96,6 +96,7 @@ class FileTypeRouter:
         user_id: str = "",
         conversation_id: str = "",
         department_id: str = "",
+        department_code: str = "",
         role: str = "student",
         local_path: str = None
     ) -> Dict[str, Any]:
@@ -238,8 +239,8 @@ class FileTypeRouter:
                                 "filename": filename,
                                 "file_type": detected_type,
                                 "user_id": user_id,
-                                "department_id": department_id or "CSE",
-                                "department": "CSE",
+                                "department_id": department_id,
+                                "department": department_code,
                                 "visibility": chunk.get("visibility", "private"),
                                 "page": chunk.get("page"),
                                 "slide": chunk.get("slide") or chunk.get("slide_number"),

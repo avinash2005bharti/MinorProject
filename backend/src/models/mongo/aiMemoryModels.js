@@ -109,10 +109,15 @@ const UserMemory = mongoose.models.UserMemory || mongoose.model('UserMemory', us
 const toolExecutionLogSchema = new mongoose.Schema(
   {
     userId: { type: String, index: true },
+    role: String,
+    agentId: String,
+    conversationId: { type: String, index: true },
     agentName: String,
     toolName: String,
     parameters: mongoose.Schema.Types.Mixed,
     result: mongoose.Schema.Types.Mixed,
+    resourceId: String,
+    success: Boolean,
     executionTimeMs: Number,
     timestamp: { type: Date, default: Date.now }
   },

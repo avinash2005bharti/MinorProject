@@ -1,7 +1,9 @@
 import os
+import hmac
+import json
 from datetime import datetime
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from loguru import logger
@@ -10,12 +12,6 @@ from dotenv import load_dotenv
 # Load Environment Variables
 load_dotenv()
 
-from agents.student_assistant import student_assistant
-from agents.faculty_assistant import faculty_assistant
-from agents.admin_assistant import admin_assistant
-from agents.rag_agent import rag_agent
-from agents.memory_agent import memory_agent
-from agents.timetable_agent import timetable_agent
 from agents.orchestrator import central_orchestrator
 from scheduler.optimizer import scheduler_optimizer
 from scheduler.absence_adjuster import absence_adjuster
@@ -24,9 +20,34 @@ from tools.file_generator import timetable_file_generator
 from rag.document_processor import document_processor
 from rag.qdrant_manager import qdrant_manager
 from memory.mongo_memory import mongo_memory
+from memory.langchain_memory import langchain_memory
 from llm.provider import llm_provider
 from file_processing.file_type_router import file_type_router
 from file_processing.imagekit_client import imagekit_client
+
+INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET", "")
+
+
+def _verified_agent_user(req: "AuthenticatedAgentRequest", internal_secret: Optional[str]) -> Dict[str, Any]:
+    if not INTERNAL_API_SECRET or not internal_secret or not hmac.compare_digest(INTERNAL_API_SECRET, internal_secret):
+        raise HTTPException(status_code=401, detail="Authenticated Node.js gateway required.")
+
+    identity = req.user
+    if not isinstance(identity, dict):
+        raise HTTPException(status_code=401, detail="Verified user context is required.")
+
+    user_id = str(identity.get("id") or identity.get("userId") or "")
+    role = str(identity.get("role") or "")
+    permissions = identity.get("permissions")
+    if (
+        not user_id
+        or user_id != str(req.user_id or "")
+        or not role
+        or not isinstance(permissions, list)
+        or role.upper() != str(req.role or "").upper()
+    ):
+        raise HTTPException(status_code=403, detail="Authenticated identity context is incomplete or inconsistent.")
+    return identity
 
 
 app = FastAPI(
@@ -45,18 +66,26 @@ app.add_middleware(
 )
 
 # ----------------- Request Models -----------------
-class ChatRequest(BaseModel):
-    user_id: Optional[str] = Field(default="user_default", description="ID of student, faculty, hod, or admin")
-    role: Optional[str] = Field(default="student", description="Role: student | faculty | hod | admin")
+class AuthenticatedAgentRequest(BaseModel):
+    user_id: Optional[str] = None
+    role: Optional[str] = None
+    user: Optional[Dict[str, Any]] = None
+
+
+class ChatRequest(AuthenticatedAgentRequest):
+    user_id: Optional[str] = Field(default=None, description="ID of the authenticated user")
+    role: Optional[str] = Field(default=None, description="Authenticated user role")
     prompt: Optional[str] = Field(default=None, description="User query text")
     message: Optional[str] = Field(default=None, description="Alternative field for user query text")
     conversation_id: Optional[str] = Field(default=None, description="Unique conversation thread ID")
     conversationId: Optional[str] = Field(default=None, description="Alternative field for conversation ID")
     agent: Optional[str] = Field(default=None, description="Specific targeted agent (e.g. 'timetable')")
     context_history: Optional[List[Dict[str, str]]] = Field(default=None, description="Recent conversation turns")
+    file_id: Optional[str] = Field(default=None, description="Uploaded file identifier")
+    attachment: Optional[Dict[str, Any]] = Field(default=None, description="Attached file metadata")
 
-class GenerateTimetableRequest(BaseModel):
-    department: str = Field(default="CSE")
+class GenerateTimetableRequest(AuthenticatedAgentRequest):
+    department: Optional[str] = Field(default=None)
     year: str = Field(default="3rd Year")
     semester: int = Field(default=5)
     section: str = Field(default="A")
@@ -69,27 +98,28 @@ class GenerateTimetableRequest(BaseModel):
     start_time: Optional[str] = Field(default="09:00 AM")
     period_duration_minutes: Optional[int] = Field(default=50)
     periods_per_day: Optional[int] = Field(default=7)
-    created_by: str = Field(default="AI Timetable Engine")
+    created_by: Optional[str] = None
 
-class AnalyzeAbsenceRequest(BaseModel):
+class AnalyzeAbsenceRequest(AuthenticatedAgentRequest):
     teacher_name: str = Field(..., description="Name or partial name of absent teacher")
     date: Optional[str] = Field(default=None, description="Date in YYYY-MM-DD format")
     day: Optional[str] = Field(default=None, description="Day name, e.g. Monday")
-    department: str = Field(default="CSE")
+    department: Optional[str] = None
 
-class ApplySubstitutionRequest(BaseModel):
+class ApplySubstitutionRequest(AuthenticatedAgentRequest):
     absence_data: Dict[str, Any] = Field(..., description="Substitution proposal payload generated by /analyze")
-    approved_by: str = Field(default="Dr. Alok Verma (HOD)")
+    department: Optional[str] = None
+    confirmed: bool = False
 
-class ExportTimetableRequest(BaseModel):
-    department: str = Field(default="CSE")
+class ExportTimetableRequest(AuthenticatedAgentRequest):
+    department: Optional[str] = None
     year: str = Field(default="3rd Year")
     semester: int = Field(default=5)
     section: str = Field(default="A")
     academic_year: str = Field(default="2026-27")
     version: int = Field(default=1)
 
-class IndexDocumentRequest(BaseModel):
+class IndexDocumentRequest(AuthenticatedAgentRequest):
     noteId: Optional[int] = None
     filePath: str = Field(..., description="Absolute path to the uploaded document on disk")
     fileName: Optional[str] = None
@@ -99,22 +129,21 @@ class IndexDocumentRequest(BaseModel):
     year: Optional[str] = None
     semester: Optional[int] = None
 
-class RAGSearchRequest(BaseModel):
+class RAGSearchRequest(AuthenticatedAgentRequest):
     query: str = Field(..., description="Semantic search query")
-    department: str = Field(default="CSE")
+    department: Optional[str] = None
     collection: Optional[str] = Field(default=None)
     top_k: int = Field(default=4)
 
-class FileProcessRequest(BaseModel):
+class FileProcessRequest(AuthenticatedAgentRequest):
     file_id: str = Field(..., description="MongoDB FileDocument ID")
     file_url: str = Field(..., description="ImageKit URL or local URL")
     filename: str = Field(..., description="Original filename")
     mime_type: str = Field(default="", description="MIME type")
     file_type: str = Field(default="", description="Detected file type")
-    user_id: str = Field(default="", description="User ID")
     conversation_id: Optional[str] = Field(default=None)
     department_id: Optional[str] = Field(default=None)
-    role: str = Field(default="student")
+    department_code: Optional[str] = Field(default=None)
     local_path: Optional[str] = Field(default=None, description="Local path to file if available")
 
 # ----------------- Routes -----------------
@@ -127,10 +156,10 @@ def root():
         "status": "Online",
         "docs": "/docs",
         "vector_engine": "Qdrant Cloud / Embedded (768 Dimensions)",
-        "long_term_memory": "Qdrant (erp_long_term_memory)",
+        "short_term_memory": "LangChain STM (MongoChatMessageHistory + LangChainShortTermMemory)",
+        "long_term_memory": "LangChain LTM (Qdrant erp_long_term_memory + MongoDB users_memory + LangChainLTMRetriever)",
         "document_rag": "Qdrant (erp_documents)",
         "scheduling_engine": "Deterministic Constraint Optimization Engine (CSP)",
-        "memory": "MongoDB Short-Term Memory (STM)",
         "academic_source_of_truth": "PostgreSQL"
     }
 
@@ -150,6 +179,7 @@ def health_check():
         "qdrant_status": "Ready",
         "qdrant_collections": ["erp_long_term_memory", "erp_documents", "Notes", "Circulars"],
         "mongo_status": "Ready" if mongo_memory.client else "Cache Mode",
+        "langchain_memory_status": "Ready",
         "postgresql_status": f"Ready ({db_type})" if pg_active else "Unavailable",
         "database": "postgresql",
         "llm_provider": llm_provider.__class__.__name__,
@@ -164,8 +194,76 @@ def health_check():
             "AcademicInformationAgent",
             "RAGAgent",
             "ReportingAgent",
-            "FileGenerationAgent"
+            "FileGenerationAgent",
+            "MemoryAgent"
         ]
+    }
+
+@app.get("/ai/memory/user/{user_id}")
+def get_user_memory_api(
+    user_id: str,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret"),
+    authenticated_user_id: Optional[str] = Header(default=None, alias="x-user-id"),
+    authenticated_department: Optional[str] = Header(default=None, alias="x-user-department")
+):
+    """
+    Retrieves a user's complete LangChain Long-Term Memory (LTM) and profile facts.
+    """
+    if not INTERNAL_API_SECRET or not internal_secret or not hmac.compare_digest(INTERNAL_API_SECRET, internal_secret):
+        raise HTTPException(status_code=401, detail="Authenticated Node.js gateway required.")
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access to another user's memory is denied.")
+    if not authenticated_department:
+        raise HTTPException(status_code=403, detail="A verified department scope is required.")
+    profile = langchain_memory.ltm.get_user_profile(user_id)
+    mongo_facts = langchain_memory.ltm.get_user_facts(user_id)
+    ltm_docs = langchain_memory.ltm.retrieve_relevant_facts(
+        query="academic interests, preferences, and performance constraints",
+        user_id=user_id,
+        department=authenticated_department,
+        top_k=10
+    )
+    semantic_facts = [d.page_content for d in ltm_docs]
+    all_facts = list(dict.fromkeys(semantic_facts + mongo_facts))
+
+    return {
+        "user_id": user_id,
+        "department": authenticated_department,
+        "profile": profile,
+        "long_term_facts": all_facts,
+        "semantic_documents_count": len(ltm_docs)
+    }
+
+@app.get("/ai/memory/session/{session_id}")
+def get_session_memory_api(
+    session_id: str,
+    user_id: str,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret"),
+    authenticated_user_id: Optional[str] = Header(default=None, alias="x-user-id")
+):
+    """
+    Retrieves the active LangChain Short-Term Memory (STM) state for a conversation session.
+    """
+    if not INTERNAL_API_SECRET or not internal_secret or not hmac.compare_digest(INTERNAL_API_SECRET, internal_secret):
+        raise HTTPException(status_code=401, detail="Authenticated Node.js gateway required.")
+    if authenticated_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Access to another user's session is denied.")
+    stm = langchain_memory.get_stm(session_id=session_id, user_id=user_id)
+    messages = stm.get_messages(limit=20)
+    task_context = stm.get_task_context()
+    recent_constraints = stm.get_recent_constraints()
+    pending_approval = stm.get_pending_approval()
+    summary = stm.get_session_summary()
+
+    return {
+        "session_id": session_id,
+        "user_id": user_id,
+        "message_count": len(messages),
+        "history_preview": stm.get_history_as_string(limit=6),
+        "task_context": task_context,
+        "recent_constraints": recent_constraints,
+        "pending_approval": pending_approval,
+        "session_summary": summary
     }
 
 @app.get("/health/db")
@@ -203,13 +301,15 @@ def health_ai():
     }
 
 @app.post("/ai/chat")
-async def chat_endpoint(req: ChatRequest):
+def chat_endpoint(req: ChatRequest, internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret")):
     """
     Central Multi-Agent Chat Entrypoint.
     Executes CentralAgentOrchestrator pipeline (Intent Detection -> Selective Agent Selection -> Tool Execution).
     """
     try:
-        user_role = (req.role or "student").lower()
+        verified_user = _verified_agent_user(req, internal_secret)
+        user_id = str(verified_user["id"])
+        user_role = str(verified_user["role"]).lower()
         query_text = (req.prompt or req.message or "").strip()
         conv_id = req.conversation_id or req.conversationId or f"conv_{int(datetime.utcnow().timestamp())}"
         target_agent = (req.agent or "").lower()
@@ -220,66 +320,88 @@ async def chat_endpoint(req: ChatRequest):
         # Save user message to MongoDB STM
         mongo_memory.save_message(
             conversation_id=conv_id,
-            user_id=req.user_id,
+            user_id=user_id,
             role=user_role,
             sender="user",
             content=query_text
         )
 
-        # Execute selective agent orchestration
+        # Execute autonomous agent orchestration
         result = central_orchestrator.orchestrate(
             prompt=query_text,
-            user_id=req.user_id,
+            user_id=user_id,
             role=user_role,
             conversation_id=conv_id,
             target_agent=target_agent,
-            context_history=req.context_history
+            context_history=req.context_history,
+            user_context=verified_user,
+            file_id=req.file_id or (req.attachment.get("id") if req.attachment else None)
         )
 
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[Chat Endpoint Error]: {e}")
         raise HTTPException(status_code=500, detail=f"AI Agent execution error: {str(e)}")
 
 @app.post("/ai/chat/stream")
-async def chat_stream_endpoint(req: ChatRequest):
-    """
-    Streaming Chat Endpoint utilizing the active LLM Provider's stream generator.
-    """
+def chat_stream_endpoint(req: ChatRequest, internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret")):
+    """SSE adapter for the same authenticated operational runtime used by /ai/chat."""
     from fastapi.responses import StreamingResponse
 
-    user_role = (req.role or "student").lower()
-    query_text = (req.prompt or req.message or "").strip()
+    result = chat_endpoint(req, internal_secret)
 
-    if not query_text:
-        raise HTTPException(status_code=400, detail="A message or prompt text is required.")
-
-    messages = [{"role": "system", "content": f"You are the CSE Department ERP Assistant for a {user_role}."},
-                {"role": "user", "content": query_text}]
-
-    def token_stream():
-        for token in llm_provider.generate_stream(messages):
-            yield f"data: {token}\n\n"
+    def event_stream():
+        for call in result.get("tool_calls", []):
+            yield "data: " + json.dumps({
+                "type": "tool_result",
+                "tool": call.get("tool"),
+                "success": call.get("success") is True
+            }) + "\n\n"
+        final_event = {
+            "type": "final",
+            "success": result.get("success") is True,
+            "answer": result.get("answer", ""),
+            "agent_used": result.get("agent_used"),
+            "actions_taken": result.get("actions_taken", []),
+            "requires_confirmation": result.get("requires_confirmation", False),
+            "confirmation_prompt": result.get("confirmation_prompt")
+        }
+        yield "data: " + json.dumps(final_event, default=str) + "\n\n"
         yield "data: [DONE]\n\n"
 
-    return StreamingResponse(token_stream(), media_type="text/event-stream")
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 # ----------------- Dedicated Timetable & Scheduler API -----------------
 
 @app.post("/ai/timetable/generate")
-async def generate_timetable_api(req: GenerateTimetableRequest):
+async def generate_timetable_api(
+    req: GenerateTimetableRequest,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret")
+):
     """
     Deterministic Timetable Generator Endpoint:
     Queries authoritative PostgreSQL tables -> executes CSP constraint optimizer -> saves new version in PostgreSQL -> outputs XLSX & PDF.
     """
+    verified_user = _verified_agent_user(req, internal_secret)
+    role = str(verified_user.get("role") or "").upper()
+    if role not in {"HOD", "ADMIN"}:
+        raise HTTPException(status_code=403, detail="Only an HOD or administrator may generate a timetable.")
+    department = req.department or verified_user.get("departmentCode")
+    if not department:
+        raise HTTPException(status_code=400, detail="A department is required to generate a timetable.")
+    if role == "HOD" and str(department).casefold() != str(verified_user.get("departmentCode") or "").casefold():
+        raise HTTPException(status_code=403, detail="An HOD may only generate timetables for their department.")
+
     try:
-        subjects = postgres_tools.get_all_subjects(semester=req.semester, department=req.department)
-        faculty_list = postgres_tools.get_all_faculty(department=req.department)
-        rooms = postgres_tools.get_all_rooms(department=req.department)
+        subjects = postgres_tools.get_all_subjects(semester=req.semester, department=department)
+        faculty_list = postgres_tools.get_all_faculty(department=department)
+        rooms = postgres_tools.get_all_rooms(department=department)
 
         opt_res = scheduler_optimizer.generate_timetable(
-            department=req.department,
+            department=department,
             year=req.year,
             semester=req.semester,
             section=req.section,
@@ -297,77 +419,139 @@ async def generate_timetable_api(req: GenerateTimetableRequest):
 
         slots = opt_res.get("timetable_slots", [])
         metrics = opt_res.get("metrics", {})
+        conflicts = opt_res.get("conflicts", [])
+        if conflicts:
+            raise HTTPException(
+                status_code=422,
+                detail={"message": "The optimizer found timetable conflicts; no timetable was saved.", "conflicts": conflicts}
+            )
+        if not slots:
+            raise HTTPException(status_code=422, detail="The optimizer returned no timetable slots; nothing was saved.")
 
         # Save to PostgreSQL
         master_id = postgres_tools.save_new_timetable_version(
-            department=req.department,
+            department=department,
             year=req.year,
             semester=req.semester,
             section=req.section,
             academic_year=req.academic_year,
             slots=slots,
             stats=metrics,
-            created_by=req.created_by
+            created_by=verified_user.get("name") or verified_user["id"]
         )
+        if not master_id:
+            raise HTTPException(status_code=500, detail="The timetable transaction could not be committed.")
 
-        master_row = postgres_tools.get_timetable_master(req.semester, req.section, req.academic_year)
+        master_row = postgres_tools.get_timetable_master(
+            req.semester,
+            req.section,
+            department,
+            req.academic_year
+        )
+        if not master_row or str(master_row.get("id")) != str(master_id):
+            raise HTTPException(status_code=500, detail="The saved timetable version could not be verified.")
         version_num = master_row.get("version", 1) if master_row else 1
+        saved_slots = postgres_tools.get_timetable(
+            semester=req.semester,
+            section=req.section,
+            department=department,
+            academic_year=req.academic_year,
+            version=version_num
+        )
+        if (
+            len(saved_slots) != len(slots)
+            or not postgres_tools.timetable_version_matches(master_id, slots)
+        ):
+            raise HTTPException(status_code=500, detail="The saved timetable did not match the generated result.")
 
         excel_info = timetable_file_generator.generate_excel(
-            req.department, req.year, req.semester, req.section, req.academic_year, version_num, slots, metrics
+            department, req.year, req.semester, req.section, req.academic_year, version_num, saved_slots, metrics
         )
         pdf_info = timetable_file_generator.generate_pdf(
-            req.department, req.year, req.semester, req.section, req.academic_year, version_num, slots, metrics
+            department, req.year, req.semester, req.section, req.academic_year, version_num, saved_slots, metrics
         )
 
         return {
             "success": True,
             "master_id": master_id,
             "version": version_num,
-            "department": req.department,
+            "department": department,
             "year": req.year,
             "semester": req.semester,
             "section": req.section,
-            "slots_count": len(slots),
+            "slots_count": len(saved_slots),
             "metrics": metrics,
-            "conflicts": opt_res.get("conflicts", []),
+            "conflicts": conflicts,
             "files": {
                 "excel": excel_info,
                 "pdf": pdf_info
             },
-            "slots": slots
+            "slots": saved_slots
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[Generate Timetable API Error]: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ai/teacher-scheduler/analyze")
-async def analyze_absence_api(req: AnalyzeAbsenceRequest):
+async def analyze_absence_api(
+    req: AnalyzeAbsenceRequest,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret")
+):
     """
     Teacher Absence & Substitution Analysis Endpoint:
     Finds affected classes for absent faculty and ranks feasible substitutes deterministically.
     """
+    verified_user = _verified_agent_user(req, internal_secret)
+    role = str(verified_user.get("role") or "").upper()
+    department = req.department or verified_user.get("departmentCode")
+    if not req.confirmed:
+        raise HTTPException(status_code=409, detail="Explicit confirmation is required before applying substitutions.")
+    if role not in {"HOD", "ADMIN"}:
+        raise HTTPException(status_code=403, detail="Only an HOD or administrator may analyze department substitutions.")
+    if not department:
+        raise HTTPException(status_code=400, detail="A department scope is required.")
+    if role == "HOD" and str(department).casefold() != str(verified_user.get("departmentCode") or "").casefold():
+        raise HTTPException(status_code=403, detail="An HOD may only analyze substitutions for their department.")
     try:
         res = absence_adjuster.analyze_and_propose(
             teacher_query=req.teacher_name,
             date_str=req.date,
             day_name=req.day,
-            department=req.department
+            department=department
         )
+        if isinstance(res, dict):
+            res["department"] = department
         return res
     except Exception as e:
         logger.error(f"[Analyze Absence API Error]: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ai/teacher-scheduler/apply")
-async def apply_substitutions_api(req: ApplySubstitutionRequest):
+async def apply_substitutions_api(
+    req: ApplySubstitutionRequest,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret")
+):
     """
     Applies approved substitution proposals transactionally into PostgreSQL.
     """
+    verified_user = _verified_agent_user(req, internal_secret)
+    role = str(verified_user.get("role") or "").upper()
+    department = req.department or verified_user.get("departmentCode")
+    if role not in {"HOD", "ADMIN"}:
+        raise HTTPException(status_code=403, detail="Only an HOD or administrator may apply substitution changes.")
+    if not department:
+        raise HTTPException(status_code=400, detail="A department scope is required.")
+    if role == "HOD" and str(department).casefold() != str(verified_user.get("departmentCode") or "").casefold():
+        raise HTTPException(status_code=403, detail="An HOD may only apply substitutions for their department.")
+    if str(req.absence_data.get("department") or "").casefold() != str(department).casefold():
+        raise HTTPException(status_code=403, detail="The substitution proposal does not match the authorized department.")
     try:
         res = absence_adjuster.execute_approved_substitutions(
             absence_data=req.absence_data,
-            approved_by=req.approved_by
+            approved_by=str(verified_user.get("name") or verified_user["id"]),
+            department=department
         )
         return res
     except Exception as e:
@@ -375,16 +559,52 @@ async def apply_substitutions_api(req: ApplySubstitutionRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ai/timetable/export/excel")
-async def export_excel_api(req: ExportTimetableRequest):
-    slots = postgres_tools.get_timetable(year=req.year, semester=req.semester, section=req.section)
+async def export_excel_api(
+    req: ExportTimetableRequest,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret")
+):
+    verified_user = _verified_agent_user(req, internal_secret)
+    role = str(verified_user.get("role") or "").upper()
+    if role not in {"HOD", "ADMIN"}:
+        raise HTTPException(status_code=403, detail="Only department administrators may use this legacy export endpoint.")
+    if role == "HOD" and str(req.department or "").casefold() != str(verified_user.get("departmentCode") or "").casefold():
+        raise HTTPException(status_code=403, detail="An HOD may only export their department's timetable.")
+    if not req.department:
+        raise HTTPException(status_code=400, detail="A department is required for timetable export.")
+    slots = postgres_tools.get_timetable(
+        year=req.year,
+        semester=req.semester,
+        section=req.section,
+        department=req.department,
+        academic_year=req.academic_year,
+        version=req.version
+    )
     res = timetable_file_generator.generate_excel(
         req.department, req.year, req.semester, req.section, req.academic_year, req.version, slots
     )
     return {"success": True, **res}
 
 @app.post("/ai/timetable/export/pdf")
-async def export_pdf_api(req: ExportTimetableRequest):
-    slots = postgres_tools.get_timetable(year=req.year, semester=req.semester, section=req.section)
+async def export_pdf_api(
+    req: ExportTimetableRequest,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret")
+):
+    verified_user = _verified_agent_user(req, internal_secret)
+    role = str(verified_user.get("role") or "").upper()
+    if role not in {"HOD", "ADMIN"}:
+        raise HTTPException(status_code=403, detail="Only department administrators may use this legacy export endpoint.")
+    if role == "HOD" and str(req.department or "").casefold() != str(verified_user.get("departmentCode") or "").casefold():
+        raise HTTPException(status_code=403, detail="An HOD may only export their department's timetable.")
+    if not req.department:
+        raise HTTPException(status_code=400, detail="A department is required for timetable export.")
+    slots = postgres_tools.get_timetable(
+        year=req.year,
+        semester=req.semester,
+        section=req.section,
+        department=req.department,
+        academic_year=req.academic_year,
+        version=req.version
+    )
     res = timetable_file_generator.generate_pdf(
         req.department, req.year, req.semester, req.section, req.academic_year, req.version, slots
     )
@@ -393,17 +613,26 @@ async def export_pdf_api(req: ExportTimetableRequest):
 # ----------------- Document RAG Indexing & Retrieval -----------------
 
 @app.post("/ai/rag/index")
-async def index_document_endpoint(req: IndexDocumentRequest):
+async def index_document_endpoint(
+    req: IndexDocumentRequest,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret")
+):
     """
     Ingests document into Qdrant erp_documents with department isolation.
     """
+    verified_user = _verified_agent_user(req, internal_secret)
+    department = str(verified_user.get("departmentCode") or "")
+    if str(verified_user.get("role") or "").upper() not in {"TEACHER", "TG", "HOD", "ADMIN"}:
+        raise HTTPException(status_code=403, detail="The authenticated role cannot index institutional documents.")
+    if not department:
+        raise HTTPException(status_code=403, detail="A verified department scope is required.")
     try:
         if not os.path.exists(req.filePath):
             raise HTTPException(status_code=404, detail=f"File not found on server: {req.filePath}")
 
         raw_text = document_processor.extract_text(req.filePath)
         if not raw_text or not raw_text.strip():
-            raw_text = f"Title: {req.title}\nCategory: {req.category}\nDepartment: Computer Science & Engineering"
+            raise HTTPException(status_code=422, detail="The uploaded document contains no extractable text.")
 
         metadata = {
             "title": req.title,
@@ -413,7 +642,7 @@ async def index_document_endpoint(req: IndexDocumentRequest):
             "subject_id": req.subjectId,
             "year": req.year,
             "semester": req.semester,
-            "department": "CSE"
+            "department": department
         }
         chunks = document_processor.chunk_text(raw_text, metadata=metadata)
         count = qdrant_manager.index_document_chunks(collection_name="erp_documents", chunks=chunks)
@@ -425,26 +654,35 @@ async def index_document_endpoint(req: IndexDocumentRequest):
             "collection": "erp_documents",
             "title": req.title
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[RAG Index Error]: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ai/rag/search")
-async def rag_search_endpoint(req: RAGSearchRequest):
+async def rag_search_endpoint(
+    req: RAGSearchRequest,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret")
+):
     """
     Performs hybrid retrieval against Qdrant erp_documents with department isolation.
     """
+    verified_user = _verified_agent_user(req, internal_secret)
+    department = str(verified_user.get("departmentCode") or "")
+    if not department:
+        raise HTTPException(status_code=403, detail="A verified department scope is required.")
     try:
         results = qdrant_manager.search_rag(
             query=req.query,
-            department=req.department,
+            department=department,
             category=req.collection,
             top_k=req.top_k
         )
         return {
             "success": True,
             "query": req.query,
-            "department": req.department,
+            "department": department,
             "results": results
         }
     except Exception as e:
@@ -455,11 +693,22 @@ async def rag_search_endpoint(req: RAGSearchRequest):
 # ----------------- Universal File Processing Pipeline -----------------
 
 @app.post("/ai/files/process")
-async def process_file_endpoint(req: FileProcessRequest, background_tasks: BackgroundTasks):
+async def process_file_endpoint(
+    req: FileProcessRequest,
+    background_tasks: BackgroundTasks,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret")
+):
     """
     Universal File Processing Pipeline entry point.
     Receives file metadata from Node.js backend, processes asynchronously.
     """
+    verified_user = _verified_agent_user(req, internal_secret)
+    if str(req.user_id) != str(verified_user["id"]) or str(req.role).upper() != str(verified_user["role"]).upper():
+        raise HTTPException(status_code=403, detail="File-processing identity does not match the authenticated user.")
+    if str(req.department_id or "") != str(verified_user.get("departmentId") or ""):
+        raise HTTPException(status_code=403, detail="File-processing department scope does not match the authenticated user.")
+    if str(req.department_code or "").casefold() != str(verified_user.get("departmentCode") or "").casefold():
+        raise HTTPException(status_code=403, detail="File-processing department code does not match the authenticated user.")
     try:
         logger.info(f"[File Process] Received: {req.filename} (type={req.file_type}, id={req.file_id})")
 
@@ -474,6 +723,7 @@ async def process_file_endpoint(req: FileProcessRequest, background_tasks: Backg
             user_id=req.user_id,
             conversation_id=req.conversation_id,
             department_id=req.department_id,
+            department_code=req.department_code,
             role=req.role,
             local_path=req.local_path
         )
@@ -498,6 +748,7 @@ async def _background_process_file(
     user_id: str,
     conversation_id: str,
     department_id: str,
+    department_code: str,
     role: str,
     local_path: Optional[str] = None
 ):
@@ -512,6 +763,7 @@ async def _background_process_file(
             user_id=user_id,
             conversation_id=conversation_id or "",
             department_id=department_id or "",
+            department_code=department_code or "",
             role=role,
             local_path=local_path
         )
@@ -521,8 +773,17 @@ async def _background_process_file(
 
 
 @app.get("/ai/files/{file_id}/content")
-async def get_file_content(file_id: str):
+async def get_file_content(
+    file_id: str,
+    internal_secret: Optional[str] = Header(default=None, alias="x-internal-secret"),
+    authenticated_user_id: Optional[str] = Header(default=None, alias="x-user-id"),
+    authenticated_department: Optional[str] = Header(default=None, alias="x-user-department")
+):
     """
+    if not INTERNAL_API_SECRET or not internal_secret or not hmac.compare_digest(INTERNAL_API_SECRET, internal_secret):
+        raise HTTPException(status_code=401, detail="Authenticated Node.js gateway required.")
+    if not authenticated_user_id or not authenticated_department:
+        raise HTTPException(status_code=401, detail="Authenticated user and department context are required.")
     Get processed/normalized content for a file.
     Useful for agents that need to reason over file content.
     """
@@ -530,7 +791,7 @@ async def get_file_content(file_id: str):
         # Search Qdrant for chunks belonging to this document
         results = qdrant_manager.search_rag(
             query="document content",
-            department="CSE",
+            department=authenticated_department,
             top_k=20
         )
 
@@ -538,7 +799,7 @@ async def get_file_content(file_id: str):
         doc_chunks = []
         for r in results:
             meta = r.get("metadata", {})
-            if meta.get("document_id") == file_id:
+            if meta.get("document_id") == file_id and meta.get("user_id") == authenticated_user_id:
                 doc_chunks.append({
                     "content": r.get("snippet", ""),
                     "section": meta.get("section", "General"),

@@ -10,6 +10,7 @@ import httpx
 from typing import Dict, Any, Optional
 from loguru import logger
 from file_processing.normalizer import NormalizedContent, VisualAnalysis
+from llm.provider import llm_provider
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
@@ -57,7 +58,7 @@ class ImagePipeline:
     """
     def __init__(self):
         self.api_key = GROQ_API_KEY
-        self.model = GROQ_VISION_MODEL
+        self.model = llm_provider.get_model_for_role("vision") or GROQ_VISION_MODEL
         self.groq_url = "https://api.groq.com/openai/v1/chat/completions"
 
     def process(

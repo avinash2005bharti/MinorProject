@@ -34,10 +34,6 @@ export default function AIChatWidget() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  if (location.pathname.includes('ai-workspace')) {
-    return null;
-  }
-
   const [isOpen, setIsOpen] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [attachedFile, setAttachedFile] = useState(null);
@@ -272,6 +268,10 @@ export default function AIChatWidget() {
       handleSend();
     }
   };
+
+  if (location.pathname.includes('ai-workspace')) {
+    return null;
+  }
 
   return (
     <>

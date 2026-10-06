@@ -6,6 +6,7 @@
 
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+const axios = require('axios');
 const xlsx = require('xlsx');
 const path = require('path');
 const fs = require('fs');
@@ -14,6 +15,8 @@ const { PERMISSIONS, getPermissionsForRole } = require('../config/permissions');
 const { logger, aiLogger } = require('./loggerService');
 const excelService = require('./excelService');
 const pdfService = require('./pdfService');
+const PYTHON_AI_SERVICE_URL = process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
+const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || '';
 
 // Verify server-side authorization for a specific tool execution
 function verifyToolAuthorization(user, requiredPermission) {
@@ -50,6 +53,23 @@ function getDayInfo(dateInput) {
 
 // Safely validate UUIDs before querying Prisma UUID fields to prevent PostgreSQL syntax errors
 const isUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str.trim());
+const isWithinDepartment = (user, resource) => {
+  if ((user?.role || '').toUpperCase() === 'ADMIN') return true;
+  return Boolean(user?.departmentId && resource?.departmentId && String(user.departmentId) === String(resource.departmentId));
+};
+const resolveDepartmentId = async (user, requestedCode) => {
+  if (!user?.departmentId && (user?.role || '').toUpperCase() !== 'ADMIN') return null;
+  if (requestedCode) {
+    if ((user?.role || '').toUpperCase() !== 'ADMIN' &&
+        String(requestedCode).toLowerCase() !== String(user.departmentCode || '').toLowerCase()) return null;
+    const department = await prisma.department.findFirst({
+      where: { code: { equals: String(requestedCode), mode: 'insensitive' } },
+      select: { id: true }
+    });
+    return department?.id || null;
+  }
+  return user?.departmentId || null;
+};
 
 // ----------------------------------------------------------------------------
 // Universal ERP Tool Registry
@@ -64,10 +84,14 @@ const erpAgentTools = {
   async getTeachers(args = {}, context = {}) {
     const user = context.user;
     const auth = verifyToolAuthorization(user, PERMISSIONS.FACULTY_MANAGE);
+    if ((user?.role || '').toUpperCase() === 'HOD' && !user.departmentId) {
+      return { success: false, error: 'Department scope is required for this operation.' };
+    }
     // Students can view public faculty directory
     const isPublic = (user?.role || '').toLowerCase() === 'student';
 
     const where = {
+      ...((user?.role || '').toUpperCase() === 'HOD' ? { departmentId: user.departmentId } : {}),
       ...(args.status ? { status: args.status } : { status: 'ACTIVE' }),
       ...(args.isTG !== undefined ? { isTG: Boolean(args.isTG) } : {}),
       ...(args.designation ? { designation: { contains: args.designation, mode: 'insensitive' } } : {})
@@ -134,6 +158,12 @@ const erpAgentTools = {
     if (!teacher) {
       return { success: false, error: `Teacher '${identifier}' not found in PostgreSQL.` };
     }
+    const role = (user?.role || '').toUpperCase();
+    if (role === 'HOD' && !isWithinDepartment(user, teacher)) {
+      return { success: false, error: 'Access denied: this teacher is outside your department.' };
+    }
+    const canViewPrivateDetails = ['HOD', 'ADMIN'].includes(role) ||
+      String(user?.teacherId || '') === String(teacher.id);
 
     const steps = [
       `Searching teacher record for '${identifier}'`,
@@ -146,9 +176,11 @@ const erpAgentTools = {
       data: {
         id: teacher.id,
         name: `${teacher.firstName} ${teacher.lastName || ''}`.trim(),
-        employeeId: teacher.employeeId,
-        email: teacher.email,
-        phone: teacher.phone,
+        ...(canViewPrivateDetails ? {
+          employeeId: teacher.employeeId,
+          email: teacher.email,
+          phone: teacher.phone
+        } : {}),
         designation: teacher.designation,
         isTG: teacher.isTG,
         status: teacher.status,
@@ -159,15 +191,17 @@ const erpAgentTools = {
           section: ts.section?.name,
           isPrimary: ts.isPrimary
         })),
-        weeklySlotsCount: teacher.timetableSlots.length,
-        schedulePreview: teacher.timetableSlots.slice(0, 10).map(s => ({
+        ...(canViewPrivateDetails ? {
+          weeklySlotsCount: teacher.timetableSlots.length,
+          schedulePreview: teacher.timetableSlots.slice(0, 10).map(s => ({
           day: s.dayOfWeek,
           period: s.periodNumber,
           time: `${s.startTime} - ${s.endTime}`,
           subject: s.subject?.name,
           room: s.classroom?.roomNumber,
           section: s.section?.name
-        }))
+          }))
+        } : {})
       }
     };
   },
@@ -207,7 +241,8 @@ const erpAgentTools = {
       return { success: false, error: `A teacher with email '${cleanEmail}' or ID '${empId}' already exists.` };
     }
 
-    const defaultDept = await prisma.department.findFirst();
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (!departmentId) return { success: false, error: 'A valid authorized department is required to create a teacher.' };
     const teacherRole = await prisma.role.findFirst({ where: { name: 'TEACHER' } });
     const defaultPasswordHash = await bcrypt.hash('Teacher@123', 10);
 
@@ -218,7 +253,7 @@ const erpAgentTools = {
           email: cleanEmail,
           passwordHash: defaultPasswordHash,
           roleId: teacherRole?.id || (await tx.role.findFirst()).id,
-          departmentId: defaultDept?.id
+          departmentId
         }
       });
 
@@ -231,7 +266,7 @@ const erpAgentTools = {
           email: cleanEmail,
           phone: phone || null,
           designation,
-          departmentId: defaultDept?.id,
+          departmentId,
           isTG: Boolean(isTG),
           maxPeriodsPerDay: Number(maxPeriodsPerDay) || 4,
           maxPeriodsPerWeek: Number(maxPeriodsPerWeek) || 18,
@@ -266,6 +301,11 @@ const erpAgentTools = {
 
     const teacherId = args.id || args.teacherId || args.teacher_id;
     if (!teacherId) return { success: false, error: 'Teacher ID is required.' };
+    const currentTeacher = await prisma.teacher.findUnique({ where: { id: teacherId } });
+    if (!currentTeacher) return { success: false, error: 'Teacher not found.' };
+    if ((user?.role || '').toUpperCase() === 'HOD' && !isWithinDepartment(user, currentTeacher)) {
+      return { success: false, error: 'Access denied: this teacher is outside your department.' };
+    }
 
     const updateData = {};
     if (args.firstName) updateData.firstName = args.firstName;
@@ -320,6 +360,9 @@ const erpAgentTools = {
 
     if (!teacher) {
       return { success: false, error: `Teacher '${identifier}' not found.` };
+    }
+    if ((user?.role || '').toUpperCase() === 'HOD' && !isWithinDepartment(user, teacher)) {
+      return { success: false, error: 'Access denied: this teacher is outside your department.' };
     }
 
     const teacherName = `${teacher.firstName} ${teacher.lastName || ''}`.trim();
@@ -402,8 +445,17 @@ const erpAgentTools = {
 
   // 1.7 Teacher Workload
   async getTeacherWorkload(args = {}, context = {}) {
+    const user = context.user;
+    const role = (user?.role || '').toUpperCase();
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (role !== 'ADMIN' && !departmentId) return { success: false, error: 'Department scope is required for this report.' };
+    if (role === 'TEACHER' && !user?.teacherId) return { success: false, error: 'Could not resolve the authenticated teacher profile.' };
     const teachers = await prisma.teacher.findMany({
-      where: { status: 'ACTIVE' },
+      where: {
+        status: 'ACTIVE',
+        ...(departmentId ? { departmentId } : {}),
+        ...(role === 'TEACHER' ? { id: user.teacherId } : {})
+      },
       include: {
         teacherSubjects: { include: { subject: true } },
         timetableSlots: { include: { subject: true } }
@@ -441,11 +493,15 @@ const erpAgentTools = {
 
   // 1.8 Teacher Availability
   async getTeacherAvailability(args = {}, context = {}) {
+    const user = context.user;
+    const role = (user?.role || '').toUpperCase();
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (role !== 'ADMIN' && !departmentId) return { success: false, error: 'Department scope is required for this availability lookup.' };
     const { start, end, dayName, dateStr } = getDayInfo(args.date);
 
     const [teachers, todayLeaves, daySlots] = await Promise.all([
       prisma.teacher.findMany({
-        where: { status: 'ACTIVE' },
+        where: { status: 'ACTIVE', ...(departmentId ? { departmentId } : {}), ...(role === 'TEACHER' ? { id: user.teacherId } : {}) },
         include: { teacherSubjects: { include: { subject: true } } }
       }),
       prisma.leaveApplication.findMany({
@@ -453,11 +509,12 @@ const erpAgentTools = {
           applicantType: 'TEACHER',
           status: { in: ['APPROVED', 'PENDING'] },
           startDate: { lte: end },
-          endDate: { gte: start }
+          endDate: { gte: start },
+          ...(departmentId ? { teacher: { departmentId } } : {})
         }
       }),
       prisma.timetableSlot.findMany({
-        where: { dayOfWeek: dayName },
+        where: { dayOfWeek: dayName, ...(departmentId ? { section: { departmentId } } : {}) },
         include: { subject: true, classroom: true, section: true }
       })
     ]);
@@ -601,10 +658,26 @@ const erpAgentTools = {
     const user = context.user;
     const auth = verifyToolAuthorization(user, PERMISSIONS.STUDENT_LIST_VIEW);
     if (!auth.authorized) return { success: false, error: auth.reason };
+    if ((user?.role || '').toUpperCase() === 'HOD' && !user.departmentId) {
+      return { success: false, error: 'Department scope is required for this operation.' };
+    }
 
+    const role = (user?.role || '').toUpperCase();
+    if (role === 'TG' && !user?.teacherId) return { success: false, error: 'Could not resolve the authenticated Tutor Guardian profile.' };
+    if (role === 'TEACHER' && !user?.teacherId) return { success: false, error: 'Could not resolve the authenticated teacher profile.' };
     const where = {
+      ...((user?.role || '').toUpperCase() === 'HOD' ? { departmentId: user.departmentId } : {}),
       ...(args.semester ? { semester: Number(args.semester) } : {}),
-      ...(args.status ? { status: args.status } : { status: 'ACTIVE' })
+      ...(args.status ? { status: args.status } : { status: 'ACTIVE' }),
+      ...(role === 'TG' ? {
+        OR: [
+          { tgTeacherId: user.teacherId },
+          { section: { tgTeacherId: user.teacherId } }
+        ]
+      } : {}),
+      ...(role === 'TEACHER' ? {
+        section: { timetableSlots: { some: { teacherId: user.teacherId } } }
+      } : {})
     };
 
     const students = await prisma.student.findMany({
@@ -660,6 +733,26 @@ const erpAgentTools = {
     });
 
     if (!student) return { success: false, error: `Student '${identifier}' not found.` };
+    const role = (user?.role || '').toUpperCase();
+    if (role === 'HOD' && !isWithinDepartment(user, student)) {
+      return { success: false, error: 'Access denied: this student is outside your department.' };
+    }
+    if (role === 'TG') {
+      const assignedMentee = user?.teacherId &&
+        (String(student.tgTeacherId) === String(user.teacherId) ||
+          Boolean(await prisma.section.findFirst({
+            where: { id: student.sectionId, tgTeacherId: user.teacherId },
+            select: { id: true }
+          })));
+      if (!assignedMentee) return { success: false, error: 'Access denied: this student is outside your mentorship scope.' };
+    }
+    if (role === 'TEACHER' && student.sectionId) {
+      const assignedSection = await prisma.timetableSlot.findFirst({
+        where: { teacherId: user?.teacherId, sectionId: student.sectionId },
+        select: { id: true }
+      });
+      if (!assignedSection) return { success: false, error: 'Access denied: this student is outside your assigned teaching scope.' };
+    }
 
     return {
       success: true,
@@ -692,7 +785,7 @@ const erpAgentTools = {
       enrollmentNo,
       rollNo,
       semester = 5,
-      sectionName = 'A'
+      sectionName = args.section || 'A'
     } = args;
 
     const fName = firstName || (name ? name.split(' ')[0] : 'Student');
@@ -700,9 +793,17 @@ const erpAgentTools = {
     const cleanEmail = (email || `${fName.toLowerCase()}.${Date.now()}@college.edu`).trim().toLowerCase();
     const enrollNo = (enrollmentNo || `ENR${Math.floor(100000 + Math.random() * 900000)}`).toUpperCase();
 
-    const defaultDept = await prisma.department.findFirst();
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (!departmentId) return { success: false, error: 'A valid authorized department is required to create a student.' };
     const studentRole = await prisma.role.findFirst({ where: { name: 'STUDENT' } });
-    const defaultSec = await prisma.section.findFirst({ where: { name: sectionName.toUpperCase() } });
+    const defaultSec = await prisma.section.findFirst({
+      where: {
+        name: sectionName.toUpperCase(),
+        departmentId,
+        semester: { semesterNumber: Number(semester) || 5 }
+      }
+    });
+    if (!defaultSec) return { success: false, error: 'The requested section does not exist in the selected department and semester.' };
     const defaultPasswordHash = await bcrypt.hash('Student@123', 10);
 
     const result = await prisma.$transaction(async (tx) => {
@@ -712,7 +813,7 @@ const erpAgentTools = {
           email: cleanEmail,
           passwordHash: defaultPasswordHash,
           roleId: studentRole?.id || (await tx.role.findFirst()).id,
-          departmentId: defaultDept?.id
+          departmentId
         }
       });
 
@@ -725,8 +826,8 @@ const erpAgentTools = {
           lastName: lName,
           email: cleanEmail,
           semester: Number(semester) || 5,
-          departmentId: defaultDept?.id,
-          sectionId: defaultSec?.id || null,
+          departmentId,
+          sectionId: defaultSec.id,
           status: 'ACTIVE'
         }
       });
@@ -768,6 +869,9 @@ const erpAgentTools = {
     });
 
     if (!student) return { success: false, error: `Student '${identifier}' not found.` };
+    if ((user?.role || '').toUpperCase() === 'HOD' && !isWithinDepartment(user, student)) {
+      return { success: false, error: 'Access denied: this student is outside your department.' };
+    }
     const studentName = `${student.firstName} ${student.lastName || ''}`.trim();
 
     if (!args.confirmed && !args.confirm) {
@@ -812,6 +916,7 @@ const erpAgentTools = {
   // 2.5 Student Attendance Tool
   async getStudentAttendance(args = {}, context = {}) {
     const user = context.user;
+    const role = (user?.role || '').toUpperCase();
     let targetStudentId = args.studentId || args.student_id;
 
     if (!targetStudentId) {
@@ -830,18 +935,15 @@ const erpAgentTools = {
       }
     }
 
-    if (!targetStudentId) {
-      if (args.enrollmentNo || args.name) {
-        const found = await prisma.student.findFirst({
-          where: {
-            OR: [
-              { enrollmentNo: { equals: args.enrollmentNo, mode: 'insensitive' } },
-              { firstName: { contains: args.name, mode: 'insensitive' } }
-            ]
-          }
-        });
-        if (found) targetStudentId = found.id;
-      }
+    if (!targetStudentId && ['TG', 'HOD', 'ADMIN'].includes(role) && (args.enrollmentNo || args.name)) {
+      const identifier = args.enrollmentNo || args.name;
+      const found = await prisma.student.findFirst({
+        where: args.enrollmentNo
+          ? { enrollmentNo: { equals: identifier, mode: 'insensitive' } }
+          : { firstName: { contains: identifier, mode: 'insensitive' } },
+        select: { id: true }
+      });
+      targetStudentId = found?.id;
     }
 
     if (!targetStudentId) {
@@ -859,6 +961,24 @@ const erpAgentTools = {
     });
 
     if (!student) return { success: false, error: 'Student record not found in PostgreSQL.' };
+    const isSelf = String(student.id) === String(user?.studentId);
+    if (role === 'STUDENT' && !isSelf) {
+      return { success: false, error: 'Access denied: students may only view their own attendance.' };
+    }
+    if (role === 'HOD' && !isWithinDepartment(user, student)) {
+      return { success: false, error: 'Access denied: this student is outside your department.' };
+    }
+    if (!['STUDENT', 'HOD', 'ADMIN'].includes(role)) {
+      if (role === 'TG') {
+        const isMentee = student.tgTeacherId === user?.teacherId ||
+          (await prisma.section.findFirst({ where: { id: student.sectionId, tgTeacherId: user?.teacherId }, select: { id: true } })) !== null;
+        if (!user?.teacherId || !isMentee) {
+          return { success: false, error: 'Access denied: this student is not assigned to your mentorship scope.' };
+        }
+      } else {
+        return { success: false, error: 'Access denied: your role cannot view another student’s attendance.' };
+      }
+    }
 
     const totalSessions = student.attendanceRecords.length;
     const presentSessions = student.attendanceRecords.filter(r =>
@@ -914,7 +1034,10 @@ const erpAgentTools = {
 
   // 3.1 Get Subjects
   async getSubjects(args = {}, context = {}) {
+    const departmentId = await resolveDepartmentId(context.user, args.department);
+    if (!departmentId) return { success: false, error: 'A valid authorized department scope is required.' };
     const where = {
+      departmentId,
       ...(args.semester ? { semester: Number(args.semester) } : {}),
       ...(args.isElective !== undefined ? { isElective: Boolean(args.isElective) } : {})
     };
@@ -953,7 +1076,8 @@ const erpAgentTools = {
     const { code, name, semester = 5, credits = 4, weeklyHours = 4, isElective = false } = args;
     if (!code || !name) return { success: false, error: 'Subject code and name are required.' };
 
-    const defaultDept = await prisma.department.findFirst();
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (!departmentId) return { success: false, error: 'A valid authorized department is required to create a subject.' };
 
     const created = await prisma.subject.create({
       data: {
@@ -963,7 +1087,7 @@ const erpAgentTools = {
         credits: Number(credits) || 4,
         weeklyHours: Number(weeklyHours) || 4,
         isElective: Boolean(isElective),
-        departmentId: defaultDept?.id
+        departmentId
       }
     });
 
@@ -992,6 +1116,9 @@ const erpAgentTools = {
     });
 
     if (!subject) return { success: false, error: `Subject '${identifier}' not found.` };
+    if ((user?.role || '').toUpperCase() !== 'ADMIN' && !isWithinDepartment(user, subject)) {
+      return { success: false, error: 'Access denied: this subject is outside your department.' };
+    }
 
     if (!args.confirmed && !args.confirm) {
       return {
@@ -1021,13 +1148,45 @@ const erpAgentTools = {
   // 4.1 Get Timetable
   async getTimetable(args = {}, context = {}) {
     const user = context.user;
-    const sem = Number(args.semester) || 5;
-    const secName = (args.section || 'A').toUpperCase();
+    const role = (user?.role || '').toUpperCase();
+    let sem = Number(args.semester);
+    let secName = args.section ? String(args.section).toUpperCase() : '';
+    let departmentId = user?.departmentId;
+
+    if (role === 'STUDENT') {
+      const student = await prisma.student.findFirst({
+        where: {
+          OR: [
+            ...(user?.studentId ? [{ id: user.studentId }] : []),
+            ...(user?.id ? [{ userId: user.id }] : [])
+          ]
+        },
+        include: { section: true }
+      });
+      if (!student?.section) return { success: false, error: 'Could not resolve your enrolled section.' };
+      if ((sem && sem !== student.semester) || (secName && secName !== student.section.name.toUpperCase())) {
+        return { success: false, error: 'Access denied: students may only view their own section timetable.' };
+      }
+      sem = student.semester;
+      secName = student.section.name.toUpperCase();
+      departmentId = student.departmentId;
+    } else if (!sem || !secName) {
+      return { success: false, error: 'Semester and section are required for this timetable lookup.' };
+    }
+
+    if (role === 'ADMIN' && args.department) {
+      const department = await prisma.department.findFirst({
+        where: { code: { equals: String(args.department), mode: 'insensitive' } },
+        select: { id: true }
+      });
+      departmentId = department?.id;
+    }
+    if (!departmentId) return { success: false, error: 'A valid department scope is required for this timetable lookup.' };
 
     const timetable = await prisma.timetable.findFirst({
       where: {
         semester: sem,
-        section: { name: secName }
+        section: { name: secName, departmentId }
       },
       orderBy: { version: 'desc' },
       include: {
@@ -1073,131 +1232,87 @@ const erpAgentTools = {
   // 4.2 Generate Timetable
   async generateTimetable(args = {}, context = {}) {
     const user = context.user;
-    const auth = verifyToolAuthorization(user, PERMISSIONS.TIMETABLE_GENERATE);
-    if (!auth.authorized) return { success: false, error: auth.reason };
-
-    const sem = Number(args.semester) || 5;
-    const secName = (args.section || 'A').toUpperCase();
-    const defaultDept = await prisma.department.findFirst();
-    const section = await prisma.section.findFirst({ where: { name: secName } });
-
-    const steps = [
-      `Planning timetable for Semester ${sem} Section ${secName}`,
-      'Checking faculty availability and subject credits',
-      'Checking classroom allocations',
-      'Running CSP deterministic constraint optimizer',
-      'Validating teacher and room conflicts'
-    ];
-
-    const [subjects, facultyList, rooms] = await Promise.all([
-      prisma.subject.findMany({ where: { semester: sem } }),
-      prisma.teacher.findMany({ where: { status: 'ACTIVE' } }),
-      prisma.classroom.findMany({ where: { isActive: true } })
-    ]);
-
-    if (subjects.length === 0 || facultyList.length === 0) {
-      return { success: false, error: 'Insufficient subjects or faculty configured to generate a timetable.' };
+    const role = (user?.role || '').toUpperCase();
+    const permissions = Array.isArray(user?.permissions) ? user.permissions : getPermissionsForRole(role);
+    if (!user?.id || !['HOD', 'ADMIN'].includes(role) || !permissions.includes(PERMISSIONS.TIMETABLE_GENERATE)) {
+      return { success: false, error: 'Only an authorized HOD or administrator may generate a timetable.' };
+    }
+    if (!INTERNAL_API_SECRET) {
+      return { success: false, error: 'The authenticated timetable generation service is not configured.' };
+    }
+    const department = args.department || user.departmentCode;
+    if (!department) return { success: false, error: 'A department is required to generate a timetable.' };
+    if (role === 'HOD' && String(department).toLowerCase() !== String(user.departmentCode || '').toLowerCase()) {
+      return { success: false, error: 'Access denied: an HOD may only generate timetables for their department.' };
     }
 
-    const workingDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-    const periodsPerDay = 6;
-    const periodTimings = [
-      { start: '09:00 AM', end: '09:50 AM' },
-      { start: '09:50 AM', end: '10:40 AM' },
-      { start: '10:50 AM', end: '11:40 AM' },
-      { start: '11:40 AM', end: '12:30 PM' },
-      { start: '01:30 PM', end: '02:20 PM' },
-      { start: '02:20 PM', end: '03:10 PM' }
-    ];
-
-    // Find current latest version
-    const lastVersion = await prisma.timetable.findFirst({
-      where: { semester: sem, sectionId: section?.id },
-      orderBy: { version: 'desc' }
-    });
-    const newVersion = (lastVersion?.version || 0) + 1;
-
-    // Generate slots
-    const generatedSlots = [];
-    let subIdx = 0;
-    let teacherIdx = 0;
-    let roomIdx = 0;
-
-    for (const day of workingDays) {
-      for (let p = 1; p <= periodsPerDay; p++) {
-        const sub = subjects[subIdx % subjects.length];
-        const teacher = facultyList[teacherIdx % facultyList.length];
-        const room = rooms[roomIdx % rooms.length];
-        const timing = periodTimings[p - 1];
-
-        generatedSlots.push({
-          dayOfWeek: day,
-          periodNumber: p,
-          startTime: timing.start,
-          endTime: timing.end,
-          subjectId: sub.id,
-          teacherId: teacher.id,
-          classroomId: room?.id,
-          sectionId: section?.id,
-          isLab: p === 5 && sub.isElective
-        });
-
-        subIdx++;
-        teacherIdx++;
-        roomIdx++;
-      }
-    }
-
-    // Save in PostgreSQL
-    const savedTimetable = await prisma.$transaction(async (tx) => {
-      const tt = await tx.timetable.create({
-        data: {
-          departmentId: defaultDept?.id,
-          sectionId: section?.id,
-          semester: sem,
-          version: newVersion,
-          status: 'DRAFT',
-          metrics: {
-            slotsGenerated: generatedSlots.length,
-            conflictsCount: 0,
-            optimizationScore: 98.5
-          }
+    try {
+      const response = await axios.post(`${PYTHON_AI_SERVICE_URL}/ai/timetable/generate`, {
+        department,
+        semester: Number(args.semester) || 5,
+        section: String(args.section || 'A').toUpperCase(),
+        user_id: String(user.id),
+        role,
+        user
+      }, {
+        timeout: 60000,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': INTERNAL_API_SECRET
         }
       });
-
-      await tx.timetableSlot.createMany({
-        data: generatedSlots.map(s => ({
-          ...s,
-          timetableId: tt.id
-        }))
-      });
-
-      return tt;
-    });
-
-    steps.push(`Timetable generated: v${newVersion} saved in PostgreSQL with ${generatedSlots.length} slots`);
-
-    return {
-      success: true,
-      steps,
-      data: {
-        timetableId: savedTimetable.id,
-        version: newVersion,
-        semester: sem,
-        section: secName,
-        slotsCount: generatedSlots.length,
-        conflictsCount: 0,
-        optimizationScore: 98.5
+      const generated = response.data;
+      if (generated?.success !== true || !generated.master_id) {
+        return {
+          success: false,
+          error: generated?.detail || generated?.error || 'The timetable service did not verify a saved timetable.'
+        };
       }
-    };
+      return {
+        success: true,
+        steps: [
+          'Generated timetable using the existing constraint optimizer.',
+          `Saved timetable version ${generated.version} to PostgreSQL.`
+        ],
+        data: {
+          timetableId: generated.master_id,
+          version: generated.version,
+          department: generated.department,
+          semester: generated.semester,
+          section: generated.section,
+          slotsCount: generated.slots_count,
+          metrics: generated.metrics,
+          conflicts: generated.conflicts,
+          files: generated.files
+        }
+      };
+    } catch (error) {
+      logger.error(`[Agent Timetable Tool] Generation service failed: ${error.message}`);
+      return {
+        success: false,
+        error: error.response?.data?.detail || 'The timetable generation service could not complete the operation.'
+      };
+    }
   },
 
   // 4.3 Export Timetable Excel
   async exportTimetableExcel(args = {}, context = {}) {
+    const user = context.user;
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (!departmentId) return { success: false, error: 'An authorized department is required for this export.' };
     const sem = Number(args.semester) || 5;
     const sec = (args.section || 'A').toUpperCase();
+    if ((user?.role || '').toUpperCase() === 'STUDENT') {
+      const student = await prisma.student.findFirst({
+        where: { OR: [...(user?.studentId ? [{ id: user.studentId }] : []), ...(user?.id ? [{ userId: user.id }] : [])] },
+        include: { section: true }
+      });
+      if (!student?.section || student.semester !== sem || student.section.name.toUpperCase() !== sec) {
+        return { success: false, error: 'Access denied: students may export only their own section timetable.' };
+      }
+    }
 
-    const result = await excelService.exportTimetableExcel(sec, sem);
+    const result = await excelService.exportTimetableExcel(sec, sem, undefined, null, null, departmentId);
     return {
       success: true,
       steps: [
@@ -1213,10 +1328,22 @@ const erpAgentTools = {
 
   // 4.4 Export Timetable PDF
   async exportTimetablePDF(args = {}, context = {}) {
+    const user = context.user;
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (!departmentId) return { success: false, error: 'An authorized department is required for this export.' };
     const sem = Number(args.semester) || 5;
     const sec = (args.section || 'A').toUpperCase();
+    if ((user?.role || '').toUpperCase() === 'STUDENT') {
+      const student = await prisma.student.findFirst({
+        where: { OR: [...(user?.studentId ? [{ id: user.studentId }] : []), ...(user?.id ? [{ userId: user.id }] : [])] },
+        include: { section: true }
+      });
+      if (!student?.section || student.semester !== sem || student.section.name.toUpperCase() !== sec) {
+        return { success: false, error: 'Access denied: students may export only their own section timetable.' };
+      }
+    }
 
-    const result = await pdfService.exportTimetablePDF(sec, sem);
+    const result = await pdfService.exportTimetablePDF(sec, sem, undefined, null, null, departmentId);
     return {
       success: true,
       steps: [
@@ -1236,6 +1363,10 @@ const erpAgentTools = {
 
   // 5.1 Get Teachers On Leave Today
   async getTeachersOnLeave(args = {}, context = {}) {
+    const user = context.user;
+    const role = (user?.role || '').toUpperCase();
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (role !== 'ADMIN' && !departmentId) return { success: false, error: 'Department scope is required for this lookup.' };
     const { start, end, dayName, dateStr } = getDayInfo(args.date);
 
     const leaves = await prisma.leaveApplication.findMany({
@@ -1243,7 +1374,8 @@ const erpAgentTools = {
         applicantType: 'TEACHER',
         status: { in: ['APPROVED', 'PENDING'] },
         startDate: { lte: end },
-        endDate: { gte: start }
+        endDate: { gte: start },
+        ...(departmentId ? { teacher: { departmentId } } : {})
       },
       include: {
         teacher: {
@@ -1293,12 +1425,27 @@ const erpAgentTools = {
     const user = context.user;
     const auth = verifyToolAuthorization(user, PERMISSIONS.LEAVE_APPROVE_HOD);
     if (!auth.authorized) return { success: false, error: auth.reason };
+    const role = (user?.role || '').toUpperCase();
+    if (!['HOD', 'ADMIN'].includes(role)) return { success: false, error: 'Only an HOD or administrator may approve leave.' };
 
     const leaveId = args.id || args.leaveId;
     if (!leaveId) return { success: false, error: 'Leave application ID required.' };
 
-    const leave = await prisma.leaveApplication.update({
+    const existingLeave = await prisma.leaveApplication.findUnique({
       where: { id: leaveId },
+      include: { teacher: true, student: true }
+    });
+    if (!existingLeave) return { success: false, error: 'Leave application not found.' };
+    const applicant = existingLeave.teacher || existingLeave.student;
+    if (role === 'HOD' && !isWithinDepartment(user, applicant)) {
+      return { success: false, error: 'Access denied: this leave application is outside your department.' };
+    }
+    if (!['PENDING', 'RECOMMENDED_BY_TG'].includes(existingLeave.status)) {
+      return { success: false, error: `Leave application is already ${existingLeave.status}.` };
+    }
+
+    const leave = await prisma.leaveApplication.update({
+      where: { id: leaveId, status: existingLeave.status },
       data: {
         status: 'APPROVED',
         approvalComments: args.comments || 'Approved via HOD AI Copilot'
@@ -1330,8 +1477,15 @@ const erpAgentTools = {
 
   // 6.1 Get Rooms
   async getRooms(args = {}, context = {}) {
+    const user = context.user;
+    const role = (user?.role || '').toUpperCase();
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (role !== 'ADMIN' && !departmentId) return { success: false, error: 'Department scope is required for this room lookup.' };
     const rooms = await prisma.classroom.findMany({
-      where: { ...(args.isActive !== undefined ? { isActive: Boolean(args.isActive) } : { isActive: true }) },
+      where: {
+        ...(departmentId ? { OR: [{ departmentId }, { departmentId: null }] } : {}),
+        ...(args.isActive !== undefined ? { isActive: Boolean(args.isActive) } : { isActive: true })
+      },
       orderBy: [{ building: 'asc' }, { roomNumber: 'asc' }]
     });
 
@@ -1353,13 +1507,26 @@ const erpAgentTools = {
 
   // 6.2 Check Room Availability
   async checkRoomAvailability(args = {}, context = {}) {
+    const user = context.user;
+    const role = (user?.role || '').toUpperCase();
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (role !== 'ADMIN' && !departmentId) return { success: false, error: 'Department scope is required for this availability lookup.' };
     const day = args.day || 'Monday';
     const period = Number(args.period) || 1;
 
     const [allRooms, occupiedSlots] = await Promise.all([
-      prisma.classroom.findMany({ where: { isActive: true } }),
+      prisma.classroom.findMany({
+        where: {
+          isActive: true,
+          ...(departmentId ? { OR: [{ departmentId }, { departmentId: null }] } : {})
+        }
+      }),
       prisma.timetableSlot.findMany({
-        where: { dayOfWeek: day, periodNumber: period },
+        where: {
+          dayOfWeek: day,
+          periodNumber: period,
+          ...(departmentId ? { section: { departmentId } } : {})
+        },
         select: { classroomId: true }
       })
     ]);
@@ -1480,6 +1647,1074 @@ const erpAgentTools = {
         totalStudents: students.length,
         shortageCount
       }
+    };
+  },
+
+  // ==========================================================================
+  // 8. ATTENDANCE OPERATIONS (Teacher / Faculty / HOD)
+  // ==========================================================================
+
+  // 8.1 Mark Single Student Attendance
+  async markAttendance(args = {}, context = {}) {
+    const user = context.user;
+    const auth = verifyToolAuthorization(user, PERMISSIONS.ATTENDANCE_MARK);
+    if (!auth.authorized) return { success: false, error: auth.reason };
+
+    const studentIdentifier = args.studentId || args.student_id || args.enrollmentNo || args.rollNo || args.name;
+    const subjectIdentifier = args.subjectId || args.subject_id || args.subjectCode || args.code || args.subject;
+    const status = (args.status || 'PRESENT').toUpperCase();
+    const periodNumber = Number(args.periodNumber || args.period || 1);
+    const dateInput = args.date ? new Date(args.date) : new Date();
+    dateInput.setHours(0, 0, 0, 0);
+
+    if (!studentIdentifier) {
+      return { success: false, error: 'Student ID, enrollment number, or name is required.' };
+    }
+    if (!subjectIdentifier) {
+      return { success: false, error: 'Subject code or subject ID is required.' };
+    }
+
+    // Resolve Student
+    const student = await prisma.student.findFirst({
+      where: {
+        OR: [
+          ...(isUUID(studentIdentifier) ? [{ id: studentIdentifier }] : []),
+          { enrollmentNo: { equals: studentIdentifier, mode: 'insensitive' } },
+          { firstName: { contains: studentIdentifier, mode: 'insensitive' } }
+        ]
+      },
+      include: { section: true }
+    });
+
+    if (!student) {
+      return { success: false, error: `Student '${studentIdentifier}' not found in PostgreSQL.` };
+    }
+
+    // Resolve Subject
+    const subject = await prisma.subject.findFirst({
+      where: {
+        OR: [
+          ...(isUUID(subjectIdentifier) ? [{ id: subjectIdentifier }] : []),
+          { code: { equals: subjectIdentifier, mode: 'insensitive' } },
+          { name: { contains: subjectIdentifier, mode: 'insensitive' } }
+        ]
+      }
+    });
+
+    if (!subject) {
+      return { success: false, error: `Subject '${subjectIdentifier}' not found in PostgreSQL.` };
+    }
+
+    // Resolve Teacher
+    let teacherId = user?.teacherId;
+    if (!teacherId && user?.id) {
+      const ownTeacher = await prisma.teacher.findFirst({ where: { userId: user.id }, select: { id: true } });
+      teacherId = ownTeacher?.id;
+    }
+    const role = (user?.role || '').toUpperCase();
+    if (!student.sectionId) return { success: false, error: 'The student is not assigned to a section.' };
+    if (role === 'HOD' && (!isWithinDepartment(user, student) || !isWithinDepartment(user, subject))) {
+      return { success: false, error: 'Access denied: this attendance operation is outside your department.' };
+    }
+    if (!['HOD', 'ADMIN'].includes(role)) {
+      if (!teacherId) return { success: false, error: 'Could not resolve the authenticated teacher profile.' };
+      const scheduledClass = await prisma.timetableSlot.findFirst({
+        where: {
+          teacherId,
+          subjectId: subject.id,
+          sectionId: student.sectionId,
+          periodNumber,
+          dayOfWeek: getDayInfo(dateInput).dayName
+        },
+        select: { id: true }
+      });
+      if (!scheduledClass) {
+        return { success: false, error: 'Access denied: you are not assigned to teach this subject for this section and period.' };
+      }
+    }
+
+    // Upsert Attendance parent session
+    const attendanceSession = await prisma.attendance.upsert({
+      where: {
+        subjectId_date_periodNumber_sectionId: {
+          subjectId: subject.id,
+          date: dateInput,
+          periodNumber,
+          sectionId: student.sectionId
+        }
+      },
+      update: { teacherId },
+      create: {
+        subjectId: subject.id,
+        teacherId,
+        sectionId: student.sectionId,
+        date: dateInput,
+        periodNumber,
+        totalStudents: 1,
+        presentCount: status === 'PRESENT' ? 1 : 0,
+        absentCount: status === 'ABSENT' ? 1 : 0
+      }
+    });
+
+    // Upsert AttendanceRecord
+    const record = await prisma.attendanceRecord.upsert({
+      where: {
+        attendanceId_studentId: {
+          attendanceId: attendanceSession.id,
+          studentId: student.id
+        }
+      },
+      update: {
+        status,
+        verificationMethod: 'MANUAL_AI_OPERATOR',
+        remarks: args.remarks || 'Marked via AI Agent'
+      },
+      create: {
+        attendanceId: attendanceSession.id,
+        studentId: student.id,
+        status,
+        verificationMethod: 'MANUAL_AI_OPERATOR',
+        remarks: args.remarks || 'Marked via AI Agent'
+      }
+    });
+
+    // Recompute parent counts
+    const allRecords = await prisma.attendanceRecord.findMany({ where: { attendanceId: attendanceSession.id } });
+    const presentCount = allRecords.filter(r => ['PRESENT', 'EXCUSED'].includes(r.status)).length;
+    const absentCount = allRecords.filter(r => r.status === 'ABSENT').length;
+
+    await prisma.attendance.update({
+      where: { id: attendanceSession.id },
+      data: { totalStudents: allRecords.length, presentCount, absentCount }
+    });
+
+    return {
+      success: true,
+      steps: [
+        `Resolved student ${student.firstName} ${student.lastName || ''} (${student.enrollmentNo})`,
+        `Resolved subject ${subject.name} (${subject.code})`,
+        `Recorded status '${status}' for lecture on ${dateInput.toISOString().split('T')[0]} (Period ${periodNumber})`
+      ],
+      data: {
+        recordId: record.id,
+        student: `${student.firstName} ${student.lastName || ''}`.trim(),
+        enrollmentNo: student.enrollmentNo,
+        subject: `${subject.name} (${subject.code})`,
+        status: record.status,
+        date: dateInput.toISOString().split('T')[0],
+        periodNumber,
+        sessionPresentCount: presentCount,
+        sessionTotal: allRecords.length
+      }
+    };
+  },
+
+  // 8.2 Bulk Mark Class Attendance
+  async bulkMarkAttendance(args = {}, context = {}) {
+    const user = context.user;
+    const auth = verifyToolAuthorization(user, PERMISSIONS.ATTENDANCE_MARK);
+    if (!auth.authorized) return { success: false, error: auth.reason };
+
+    const sem = Number(args.semester || 5);
+    const sec = (args.section || 'A').toUpperCase();
+    const subjectIdentifier = args.subjectCode || args.subjectId || args.subject;
+    const absentEnrollments = Array.isArray(args.absentEnrollments) ? args.absentEnrollments.map(e => String(e).trim().toUpperCase()) : [];
+    const dateInput = args.date ? new Date(args.date) : new Date();
+    dateInput.setHours(0, 0, 0, 0);
+    const periodNumber = Number(args.periodNumber || 1);
+
+    if (!subjectIdentifier) {
+      return { success: false, error: 'Subject code or subject ID is required.' };
+    }
+
+    const section = await prisma.section.findFirst({
+      where: { name: sec, semester: { number: sem } }
+    });
+    if (!section) return { success: false, error: `Section ${sec} for semester ${sem} was not found.` };
+    if ((user?.role || '').toUpperCase() === 'HOD' && !isWithinDepartment(user, section)) {
+      return { success: false, error: 'Access denied: this section is outside your department.' };
+    }
+
+    const students = await prisma.student.findMany({
+      where: {
+        semester: sem,
+        status: 'ACTIVE',
+        sectionId: section.id
+      }
+    });
+
+    if (students.length === 0) {
+      return { success: false, error: `No active students found in Semester ${sem} Section ${sec}.` };
+    }
+
+    // Resolve subject & teacher
+    const subject = await prisma.subject.findFirst({
+      where: {
+        OR: [
+          ...(isUUID(subjectIdentifier) ? [{ id: subjectIdentifier }] : []),
+          { code: { equals: subjectIdentifier, mode: 'insensitive' } },
+          { name: { contains: subjectIdentifier, mode: 'insensitive' } }
+        ]
+      }
+    });
+
+    if (!subject) return { success: false, error: `Subject '${subjectIdentifier}' not found.` };
+
+    let teacherId = user?.teacherId;
+    if (!teacherId && user?.id) {
+      const ownTeacher = await prisma.teacher.findFirst({ where: { userId: user.id }, select: { id: true } });
+      teacherId = ownTeacher?.id;
+    }
+    const role = (user?.role || '').toUpperCase();
+    if (role === 'HOD' && (!isWithinDepartment(user, section) || !isWithinDepartment(user, subject))) {
+      return { success: false, error: 'Access denied: this attendance operation is outside your department.' };
+    }
+    if (!['HOD', 'ADMIN'].includes(role)) {
+      if (!teacherId) return { success: false, error: 'Could not resolve the authenticated teacher profile.' };
+      const scheduledClass = await prisma.timetableSlot.findFirst({
+        where: {
+          teacherId,
+          subjectId: subject.id,
+          sectionId: section.id,
+          periodNumber,
+          dayOfWeek: getDayInfo(dateInput).dayName
+        },
+        select: { id: true }
+      });
+      if (!scheduledClass) {
+        return { success: false, error: 'Access denied: you are not assigned to teach this subject for this section and period.' };
+      }
+    }
+
+    // Confirmation is issued only after resolving the class and verifying the caller's scope.
+    if (!args.confirmed) {
+      return {
+        success: true,
+        requires_confirmation: true,
+        confirmation_message: `Confirmation required before recording attendance for ${students.length} students in Semester ${sem} Section ${sec}.`,
+        confirmation_action: {
+          tool: 'bulkMarkAttendance',
+          args: { ...args, confirmed: true },
+          userId: user?.id
+        }
+      };
+    }
+
+    const attendanceSession = await prisma.attendance.upsert({
+      where: {
+        subjectId_date_periodNumber_sectionId: {
+          subjectId: subject.id,
+          date: dateInput,
+          periodNumber,
+          sectionId: section.id
+        }
+      },
+      update: { teacherId },
+      create: {
+        subjectId: subject.id,
+        teacherId,
+        sectionId: section.id,
+        date: dateInput,
+        periodNumber,
+        totalStudents: students.length,
+        presentCount: 0,
+        absentCount: 0
+      }
+    });
+
+    let markedPresent = 0;
+    let markedAbsent = 0;
+
+    for (const std of students) {
+      const isAbsent = absentEnrollments.includes(std.enrollmentNo.toUpperCase());
+      const status = isAbsent ? 'ABSENT' : 'PRESENT';
+      if (isAbsent) markedAbsent++;
+      else markedPresent++;
+
+      await prisma.attendanceRecord.upsert({
+        where: {
+          attendanceId_studentId: {
+            attendanceId: attendanceSession.id,
+            studentId: std.id
+          }
+        },
+        update: { status, verificationMethod: 'BULK_AI_OPERATOR' },
+        create: {
+          attendanceId: attendanceSession.id,
+          studentId: std.id,
+          status,
+          verificationMethod: 'BULK_AI_OPERATOR'
+        }
+      });
+    }
+
+    await prisma.attendance.update({
+      where: { id: attendanceSession.id },
+      data: { totalStudents: students.length, presentCount: markedPresent, absentCount: markedAbsent }
+    });
+
+    return {
+      success: true,
+      steps: [
+        `Loaded ${students.length} students for Semester ${sem} Section ${sec}`,
+        `Batch upserted attendance session for ${subject.name}`,
+        `Committed: ${markedPresent} Present, ${markedAbsent} Absent`
+      ],
+      data: {
+        sessionId: attendanceSession.id,
+        class: `Sem ${sem} Sec ${sec}`,
+        subject: subject.code,
+        totalMarked: students.length,
+        present: markedPresent,
+        absent: markedAbsent
+      }
+    };
+  },
+
+  // ==========================================================================
+  // 9. LEAVE OPERATIONS (Student / Teacher / TG / HOD)
+  // ==========================================================================
+
+  // 9.1 Apply Leave (Universal for Student and Teacher)
+  async applyLeave(args = {}, context = {}) {
+    const user = context.user;
+    const auth = verifyToolAuthorization(user, PERMISSIONS.LEAVE_APPLY);
+    if (!auth.authorized) return { success: false, error: auth.reason };
+
+    const role = (user?.role || '').toUpperCase();
+    const isStudent = role === 'STUDENT';
+    const applicantType = isStudent ? 'STUDENT' : 'TEACHER';
+
+    let studentId = null;
+    let teacherId = null;
+
+    if (isStudent) {
+      studentId = user?.studentId;
+      if (!studentId && user?.id) {
+        const std = await prisma.student.findFirst({ where: { userId: user.id }, select: { id: true } });
+        studentId = std?.id;
+      }
+      if (args.studentId && String(args.studentId) !== String(studentId)) {
+        return { success: false, error: 'Access denied: a student may only apply leave for their own profile.' };
+      }
+    } else {
+      teacherId = user?.teacherId;
+      if (!teacherId && user?.id) {
+        const tch = await prisma.teacher.findFirst({ where: { userId: user.id }, select: { id: true } });
+        teacherId = tch?.id;
+      }
+      if (args.teacherId && String(args.teacherId) !== String(teacherId)) {
+        return { success: false, error: 'Access denied: a teacher may only apply leave for their own profile.' };
+      }
+    }
+    if (!studentId && !teacherId) {
+      return { success: false, error: 'Could not resolve a leave applicant from the authenticated identity.' };
+    }
+
+    const leaveType = (args.leaveType || args.type || 'CASUAL').toUpperCase();
+    const reason = String(args.reason || '').trim();
+    if (!reason) return { success: false, error: 'A reason is required to apply for leave.' };
+
+    // Parse start date (supports 'tomorrow', 'today', or YYYY-MM-DD)
+    let startDate = new Date();
+    const startInput = (args.startDate || args.date || '').toLowerCase();
+    if (startInput.includes('tomorrow')) {
+      startDate = new Date(Date.now() + 86400000);
+    } else if (args.startDate) {
+      startDate = new Date(args.startDate);
+    }
+    if (Number.isNaN(startDate.getTime())) {
+      return { success: false, error: 'The leave start date is invalid.' };
+    }
+    startDate.setHours(0, 0, 0, 0);
+
+    let endDate = new Date(startDate);
+    if (args.endDate) {
+      endDate = new Date(args.endDate);
+      endDate.setHours(23, 59, 59, 999);
+    } else {
+      endDate.setHours(23, 59, 59, 999);
+    }
+    if (Number.isNaN(endDate.getTime()) || endDate < startDate) {
+      return { success: false, error: 'The leave end date must be on or after the start date.' };
+    }
+
+    const diffMs = endDate.getTime() - startDate.getTime();
+    const totalDays = Math.max(1, Math.round(diffMs / (1000 * 60 * 60 * 24)));
+
+    const leaveApp = await prisma.leaveApplication.create({
+      data: {
+        applicantType,
+        studentId,
+        teacherId,
+        leaveType,
+        startDate,
+        endDate,
+        totalDays,
+        reason,
+        status: 'PENDING'
+      }
+    });
+
+    let applicantName = user?.name || 'Applicant';
+    if (isStudent && studentId) {
+      const s = await prisma.student.findUnique({ where: { id: studentId } });
+      if (s) applicantName = `${s.firstName} ${s.lastName || ''}`.trim();
+    } else if (teacherId) {
+      const t = await prisma.teacher.findUnique({ where: { id: teacherId } });
+      if (t) applicantName = `${t.firstName} ${t.lastName || ''}`.trim();
+    }
+
+    return {
+      success: true,
+      steps: [
+        `Validated leave entitlement for ${applicantName} (${applicantType})`,
+        `Computed duration: ${totalDays} day(s) from ${startDate.toISOString().split('T')[0]} to ${endDate.toISOString().split('T')[0]}`,
+        `Persisted LeaveApplication #${leaveApp.id.slice(0, 8)} to PostgreSQL`
+      ],
+      data: {
+        leaveId: leaveApp.id,
+        applicant: applicantName,
+        applicantType,
+        leaveType,
+        startDate: startDate.toISOString().split('T')[0],
+        endDate: endDate.toISOString().split('T')[0],
+        totalDays,
+        reason,
+        status: leaveApp.status
+      }
+    };
+  },
+
+  // 9.2 Reject Leave (TG / HOD / Admin)
+  async rejectLeave(args = {}, context = {}) {
+    const user = context.user;
+    const role = (user?.role || '').toUpperCase();
+    const isHod = ['HOD', 'ADMIN'].includes(role);
+    const requiredPermission = isHod ? PERMISSIONS.LEAVE_APPROVE_HOD : PERMISSIONS.LEAVE_REVIEW_TG;
+    const auth = verifyToolAuthorization(user, requiredPermission);
+    if (!auth.authorized) return { success: false, error: auth.reason };
+
+    const identifier = args.leaveId || args.id;
+    if (!identifier) return { success: false, error: 'Leave application ID required.' };
+    const reason = args.reason || args.rejectionReason || 'Administrative decision';
+
+    const leave = isUUID(identifier)
+      ? await prisma.leaveApplication.findUnique({ where: { id: identifier }, include: { student: true, teacher: true } })
+      : null;
+
+    if (!leave) return { success: false, error: 'Leave application not found.' };
+    if (!['PENDING', 'RECOMMENDED_BY_TG'].includes(leave.status)) return { success: false, error: `Leave application is already ${leave.status}.` };
+    if (role === 'HOD' && !isWithinDepartment(user, leave.student || leave.teacher)) {
+      return { success: false, error: 'Access denied: this leave application is outside your department.' };
+    }
+    if (role === 'TG') {
+      const student = leave.student;
+      const assignedMentee = user?.teacherId && student &&
+        (String(student.tgTeacherId) === String(user.teacherId) ||
+          Boolean(await prisma.section.findFirst({
+            where: { id: student.sectionId, tgTeacherId: user.teacherId },
+            select: { id: true }
+          })));
+      if (!assignedMentee) return { success: false, error: 'Access denied: this student is outside your mentorship scope.' };
+    }
+
+    const updated = await prisma.leaveApplication.update({
+      where: { id: leave.id, status: leave.status },
+      data: {
+        status: 'REJECTED',
+        rejectedBy: user?.name || 'Authorized Officer',
+        rejectedAt: new Date(),
+        rejectionReason: reason
+      }
+    });
+
+    return {
+      success: true,
+      steps: [
+        `Located LeaveApplication #${leave.id.slice(0, 8)}`,
+        `Set status to REJECTED with remark: '${reason}'`
+      ],
+      data: {
+        leaveId: updated.id,
+        status: updated.status,
+        rejectedBy: updated.rejectedBy,
+        rejectionReason: reason
+      }
+    };
+  },
+
+  // ==========================================================================
+  // 10. ATTENDANCE QUERY OPERATIONS (Student & TG / HOD)
+  // ==========================================================================
+
+  // 10.1 Submit Attendance Query (Student)
+  async submitAttendanceQuery(args = {}, context = {}) {
+    const user = context.user;
+    const auth = verifyToolAuthorization(user, PERMISSIONS.ATTENDANCE_QUERY_SUBMIT);
+    if (!auth.authorized) return { success: false, error: auth.reason };
+
+    let studentId = user?.studentId;
+    if (!studentId && user?.id) {
+      const std = await prisma.student.findFirst({ where: { userId: user.id } });
+      studentId = std?.id;
+    }
+    if (!studentId) return { success: false, error: 'Could not resolve the authenticated student profile.' };
+
+    const subjectIdentifier = args.subjectCode || args.subjectId || args.subject;
+    const dateInput = args.date ? new Date(args.date) : new Date();
+    dateInput.setHours(0, 0, 0, 0);
+    const reason = args.reason || 'I was present in the lecture but marked absent in the portal.';
+
+    const subject = await prisma.subject.findFirst({
+      where: {
+        OR: [
+          ...(subjectIdentifier && isUUID(subjectIdentifier) ? [{ id: subjectIdentifier }] : []),
+          ...(subjectIdentifier ? [{ code: { equals: subjectIdentifier, mode: 'insensitive' } }] : []),
+          ...(subjectIdentifier ? [{ name: { contains: subjectIdentifier, mode: 'insensitive' } }] : [])
+        ]
+      }
+    });
+    if (!subject) return { success: false, error: 'A valid subject is required to submit an attendance query.' };
+
+    const student = await prisma.student.findUnique({ where: { id: studentId }, select: { id: true, departmentId: true } });
+    if (!student) return { success: false, error: 'Authenticated student profile was not found.' };
+    if (String(student.departmentId) !== String(subject.departmentId)) {
+      return { success: false, error: 'Access denied: the subject is outside the student’s department.' };
+    }
+
+    const correction = await prisma.attendanceCorrectionRequest.create({
+      data: {
+        studentId,
+        subjectId: subject.id,
+        date: dateInput,
+        requestedStatus: 'PRESENT',
+        reason,
+        status: 'PENDING'
+      }
+    });
+
+    return {
+      success: true,
+      steps: [
+        `Recorded AttendanceCorrectionRequest for ${subject.name}`,
+        `Queued for Tutor Guardian review and HOD clearance`
+      ],
+      data: {
+        queryId: correction.id,
+        subject: `${subject.name} (${subject.code})`,
+        date: dateInput.toISOString().split('T')[0],
+        requestedStatus: correction.requestedStatus,
+        reason,
+        status: correction.status
+      }
+    };
+  },
+
+  // 10.2 Review / Approve Attendance Query (TG / HOD)
+  async reviewAttendanceQuery(args = {}, context = {}) {
+    const user = context.user;
+    const isHod = ['hod', 'admin'].includes((user?.role || '').toLowerCase());
+    const isTg = (user?.role || '').toLowerCase() === 'tg';
+    const queryId = args.queryId || args.id;
+    if (!queryId || !isUUID(queryId)) {
+      return { success: false, error: 'A valid attendance query ID is required.' };
+    }
+
+    const auth = verifyToolAuthorization(
+      user,
+      isHod ? PERMISSIONS.ATTENDANCE_QUERY_APPROVE : PERMISSIONS.ATTENDANCE_QUERY_REVIEW
+    );
+    if (!auth.authorized) return { success: false, error: auth.reason };
+
+    const action = (args.action || (isHod ? 'APPROVE' : 'RECOMMEND')).toUpperCase();
+    const remarks = args.remarks || 'Verified and approved by academic officer.';
+    if ((isTg && !['RECOMMEND', 'REJECT'].includes(action)) ||
+        (isHod && !['APPROVE', 'REJECT'].includes(action)) ||
+        (!isTg && !isHod)) {
+      return { success: false, error: 'The requested attendance-query action is not permitted for this role.' };
+    }
+
+    const query = await prisma.attendanceCorrectionRequest.findUnique({
+      where: { id: queryId },
+      include: { student: true, subject: true }
+    });
+
+    if (!query) return { success: false, error: 'No matching attendance correction request found.' };
+    if (isHod && (user.role || '').toUpperCase() === 'HOD' && !isWithinDepartment(user, query.student)) {
+      return { success: false, error: 'Access denied: this attendance query is outside your department.' };
+    }
+    if (isTg) {
+      const assignedMentee = user?.teacherId &&
+        (String(query.student.tgTeacherId) === String(user.teacherId) ||
+          Boolean(await prisma.section.findFirst({
+            where: { id: query.student.sectionId, tgTeacherId: user.teacherId },
+            select: { id: true }
+          })));
+      if (!assignedMentee) return { success: false, error: 'Access denied: this student is outside your mentorship scope.' };
+    }
+
+    if (action === 'APPROVE' && isHod) {
+      const updated = await prisma.$transaction(async (tx) => {
+        const corr = await tx.attendanceCorrectionRequest.update({
+          where: { id: query.id },
+          data: {
+            status: 'APPROVED',
+            approvedByHodId: user?.teacherId || null,
+            hodRemarks: remarks,
+            approvedAt: new Date()
+          }
+        });
+
+        // Find and update the real AttendanceRecord
+        const session = await tx.attendance.findFirst({
+          where: { subjectId: query.subjectId, date: query.date }
+        });
+
+        if (session) {
+          await tx.attendanceRecord.upsert({
+            where: { attendanceId_studentId: { attendanceId: session.id, studentId: query.studentId } },
+            update: { status: 'PRESENT', verificationMethod: 'AI_HOD_CORRECTION' },
+            create: { attendanceId: session.id, studentId: query.studentId, status: 'PRESENT', verificationMethod: 'AI_HOD_CORRECTION' }
+          });
+
+          const recs = await tx.attendanceRecord.findMany({ where: { attendanceId: session.id } });
+          const pres = recs.filter(r => ['PRESENT', 'EXCUSED'].includes(r.status)).length;
+          await tx.attendance.update({
+            where: { id: session.id },
+            data: { presentCount: pres, absentCount: recs.length - pres }
+          });
+        }
+
+        return corr;
+      });
+
+      return {
+        success: true,
+        steps: [
+          `Approved AttendanceCorrectionRequest #${query.id.slice(0, 8)}`,
+          `Updated student attendance ledger in PostgreSQL to PRESENT`
+        ],
+        data: {
+          queryId: updated.id,
+          student: `${query.student.firstName} ${query.student.lastName || ''}`.trim(),
+          subject: query.subject.code,
+          status: 'APPROVED',
+          remarks
+        }
+      };
+    } else if (action === 'RECOMMEND') {
+      const updated = await prisma.attendanceCorrectionRequest.update({
+        where: { id: query.id },
+        data: {
+          status: 'RECOMMENDED_BY_TG',
+          reviewedByTeacherId: user?.teacherId || null,
+          tgRemarks: remarks,
+          recommendedAt: new Date()
+        }
+      });
+      return {
+        success: true,
+        steps: [`TG recommended query #${query.id.slice(0, 8)} for HOD final signoff`],
+        data: { queryId: updated.id, status: updated.status, remarks }
+      };
+    } else {
+      const updated = await prisma.attendanceCorrectionRequest.update({
+        where: { id: query.id },
+        data: { status: 'REJECTED', rejectedBy: user?.name || 'Officer', rejectedAt: new Date() }
+      });
+      return {
+        success: true,
+        steps: [`Rejected attendance correction query #${query.id.slice(0, 8)}`],
+        data: { queryId: updated.id, status: 'REJECTED' }
+      };
+    }
+  },
+
+  // ==========================================================================
+  // 11. TIMETABLE & SCHEDULE LOOKUPS (Student & Faculty)
+  // ==========================================================================
+
+  // 11.1 Get Student Section Schedule
+  async getStudentSchedule(args = {}, context = {}) {
+    const user = context.user;
+    const role = (user?.role || '').toUpperCase();
+    let semester = Number(args.semester);
+    let sectionName = args.section;
+    let departmentId = user?.departmentId;
+
+    if (role === 'STUDENT') {
+      const student = await prisma.student.findFirst({
+        where: {
+          OR: [
+            ...(user?.studentId ? [{ id: user.studentId }] : []),
+            ...(user?.id ? [{ userId: user.id }] : [])
+          ]
+        },
+        include: { section: true }
+      });
+      if (!student?.section) return { success: false, error: 'Could not resolve your enrolled section.' };
+      if ((semester && semester !== student.semester) || (sectionName && sectionName.toUpperCase() !== student.section.name.toUpperCase())) {
+        return { success: false, error: 'Access denied: students may only view their own section timetable.' };
+      }
+      semester = student.semester;
+      sectionName = student.section.name;
+      departmentId = student.departmentId;
+    } else if (!semester || !sectionName) {
+      return { success: false, error: 'Semester and section are required for this timetable lookup.' };
+    }
+    if (!departmentId && role !== 'ADMIN') return { success: false, error: 'Department scope is required for this timetable lookup.' };
+
+    const section = await prisma.section.findFirst({
+      where: {
+        name: sectionName.toUpperCase(),
+        semester: { semesterNumber: semester },
+        ...(role === 'ADMIN' ? {} : { departmentId })
+      }
+    });
+    if (!section) return { success: false, error: 'The requested section was not found in your authorized department scope.' };
+
+    const slots = await prisma.timetableSlot.findMany({
+      where: {
+        ...(section ? { sectionId: section.id } : {}),
+        timetable: { semester }
+      },
+      include: {
+        subject: true,
+        teacher: true,
+        classroom: true
+      },
+      orderBy: [{ dayOfWeek: 'asc' }, { periodNumber: 'asc' }]
+    });
+
+    const steps = [
+      `Queried timetable slots for Semester ${semester} Section ${sectionName}`,
+      `Loaded ${slots.length} period allocations`
+    ];
+
+    const schedule = slots.map(s => ({
+      day: s.dayOfWeek,
+      period: s.periodNumber,
+      time: `${s.startTime} - ${s.endTime}`,
+      subjectCode: s.subject?.code,
+      subjectName: s.subject?.name,
+      teacher: `${s.teacher?.firstName} ${s.teacher?.lastName || ''}`.trim(),
+      room: s.classroom?.roomNumber || 'TBD',
+      isLab: s.isLab
+    }));
+
+    return {
+      success: true,
+      steps,
+      count: schedule.length,
+      data: {
+        semester,
+        section: sectionName,
+        totalSlots: schedule.length,
+        schedule
+      }
+    };
+  },
+
+  // 11.2 Get Teacher Teaching Schedule
+  async getTeacherSchedule(args = {}, context = {}) {
+    const user = context.user;
+    let teacherId = args.teacherId || user?.teacherId;
+    const role = (user?.role || '').toUpperCase();
+    if (!teacherId && args.name) {
+      const t = await prisma.teacher.findFirst({
+        where: { firstName: { contains: args.name, mode: 'insensitive' } }
+      });
+      teacherId = t?.id;
+    }
+    if (!teacherId) {
+      const ownTeacher = await prisma.teacher.findFirst({ where: { userId: user?.id }, select: { id: true } });
+      teacherId = ownTeacher?.id;
+    }
+    if (!teacherId) return { success: false, error: 'Could not resolve a teacher schedule from the authenticated identity.' };
+    if (!['HOD', 'ADMIN'].includes(role) && String(teacherId) !== String(user?.teacherId)) {
+      return { success: false, error: 'Access denied: teachers may only view their own schedule.' };
+    }
+
+    const teacher = await prisma.teacher.findUnique({
+      where: { id: teacherId },
+      include: { department: true }
+    });
+
+    if (!teacher) return { success: false, error: 'Teacher not found.' };
+    if (role === 'HOD' && !isWithinDepartment(user, teacher)) {
+      return { success: false, error: 'Access denied: this teacher is outside your department.' };
+    }
+
+    const slots = await prisma.timetableSlot.findMany({
+      where: { teacherId },
+      include: {
+        subject: true,
+        classroom: true,
+        section: true
+      },
+      orderBy: [{ dayOfWeek: 'asc' }, { periodNumber: 'asc' }]
+    });
+
+    return {
+      success: true,
+      steps: [
+        `Loaded schedule for Prof. ${teacher.firstName} ${teacher.lastName || ''}`,
+        `Found ${slots.length} active weekly teaching periods`
+      ],
+      data: {
+        teacher: `${teacher.firstName} ${teacher.lastName || ''}`.trim(),
+        designation: teacher.designation,
+        totalWeeklySlots: slots.length,
+        slots: slots.map(s => ({
+          day: s.dayOfWeek,
+          period: s.periodNumber,
+          time: `${s.startTime} - ${s.endTime}`,
+          subject: `${s.subject?.name} (${s.subject?.code})`,
+          section: s.section?.name,
+          room: s.classroom?.roomNumber,
+          isLab: s.isLab
+        }))
+      }
+    };
+  },
+
+  // ==========================================================================
+  // 12. TG / MENTOR OPERATIONS (Tutor Guardian)
+  // ==========================================================================
+
+  // 12.1 Get Mentees
+  async getMentees(args = {}, context = {}) {
+    const user = context.user;
+    const auth = verifyToolAuthorization(user, PERMISSIONS.MENTEE_MONITOR);
+    if (!auth.authorized) return { success: false, error: auth.reason };
+
+    let teacherId = user?.teacherId;
+    if (!teacherId) return { success: false, error: 'Could not resolve the authenticated Tutor Guardian profile.' };
+
+    const students = await prisma.student.findMany({
+      where: {
+        OR: [
+          ...(teacherId ? [{ tgTeacherId: teacherId }] : []),
+          { section: { tgTeacherId: teacherId } }
+        ],
+        status: 'ACTIVE'
+      },
+      include: {
+        section: true,
+        attendanceRecords: true
+      },
+      orderBy: [{ firstName: 'asc' }]
+    });
+
+    const menteeList = students.map(s => {
+      const total = s.attendanceRecords.length;
+      const present = s.attendanceRecords.filter(r => ['PRESENT', 'EXCUSED'].includes(r.status)).length;
+      const pct = total > 0 ? Math.round((present / total) * 100) : 100;
+      return {
+        id: s.id,
+        name: `${s.firstName} ${s.lastName || ''}`.trim(),
+        enrollmentNo: s.enrollmentNo,
+        rollNo: s.rollNo,
+        semester: s.semester,
+        section: s.section?.name || 'A',
+        totalClasses: total,
+        attendedClasses: present,
+        attendancePercentage: pct,
+        hasShortage: pct < 75
+      };
+    });
+
+    const filtered = args.onlyShortage ? menteeList.filter(m => m.hasShortage) : menteeList;
+
+    return {
+      success: true,
+      steps: [
+        `Identified ${students.length} assigned mentees in PostgreSQL`,
+        `Computed real-time attendance ledger for each student`
+      ],
+      count: filtered.length,
+      data: {
+        totalMentees: menteeList.length,
+        shortageCount: menteeList.filter(m => m.hasShortage).length,
+        mentees: filtered
+      }
+    };
+  },
+
+  // 12.2 Appoint TG (HOD / Admin)
+  async appointTg(args = {}, context = {}) {
+    const user = context.user;
+    const auth = verifyToolAuthorization(user, PERMISSIONS.FACULTY_MANAGE);
+    if (!auth.authorized) return { success: false, error: auth.reason };
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (!departmentId) return { success: false, error: 'An authorized department is required to assign a Tutor Guardian.' };
+
+    const teacherIdentifier = args.teacherId || args.name || args.teacher;
+    const secName = (args.section || 'A').toUpperCase();
+    const sem = Number(args.semester || 5);
+
+    const teacher = await prisma.teacher.findFirst({
+      where: {
+        OR: [
+          ...(teacherIdentifier && isUUID(teacherIdentifier) ? [{ id: teacherIdentifier }] : []),
+          ...(teacherIdentifier ? [{ firstName: { contains: teacherIdentifier, mode: 'insensitive' } }] : [])
+        ]
+      }
+    });
+
+    if (!teacher) return { success: false, error: `Teacher '${teacherIdentifier}' not found.` };
+    if (String(teacher.departmentId) !== String(departmentId)) {
+      return { success: false, error: 'Access denied: the teacher is outside the selected department.' };
+    }
+
+    const section = await prisma.section.findFirst({
+      where: { name: secName, departmentId, semester: { semesterNumber: sem } }
+    });
+    if (!section) return { success: false, error: 'The selected section was not found in the department and semester.' };
+
+    await prisma.$transaction(async (tx) => {
+      await tx.teacher.update({
+        where: { id: teacher.id },
+        data: { isTG: true }
+      });
+
+      if (section) {
+        await tx.section.update({
+          where: { id: section.id },
+          data: { tgTeacherId: teacher.id }
+        });
+
+        await tx.student.updateMany({
+          where: { sectionId: section.id },
+          data: { tgTeacherId: teacher.id }
+        });
+      }
+    });
+
+    return {
+      success: true,
+      steps: [
+        `Set isTG = true for Prof. ${teacher.firstName} ${teacher.lastName || ''}`,
+        `Assigned as Tutor Guardian for Semester ${sem} Section ${secName}`
+      ],
+      data: {
+        teacher: `${teacher.firstName} ${teacher.lastName || ''}`.trim(),
+        assignedClass: `Sem ${sem} Sec ${secName}`,
+        isTG: true
+      }
+    };
+  },
+
+  // ==========================================================================
+  // 13. ADMINISTRATIVE & SYSTEM OPERATIONS (Admin)
+  // ==========================================================================
+
+  // 13.1 Create Classroom
+  async createClassroom(args = {}, context = {}) {
+    const user = context.user;
+    const role = (user?.role || '').toUpperCase();
+    const auth = verifyToolAuthorization(
+      user,
+      role === 'HOD' ? PERMISSIONS.SUBJECT_MANAGE : PERMISSIONS.DEPARTMENT_MANAGE
+    );
+    if (!auth.authorized) return { success: false, error: auth.reason };
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (!departmentId) return { success: false, error: 'A valid authorized department is required to create a classroom.' };
+
+    const roomNumber = (args.roomNumber || args.room || '').trim().toUpperCase();
+    const building = args.building || 'CSE Block';
+    const capacity = Number(args.capacity || 60);
+    const type = (args.type || 'LECTURE_HALL').toUpperCase();
+
+    if (!roomNumber) return { success: false, error: 'Room number is required (e.g. CS-204).' };
+
+    const existing = await prisma.classroom.findFirst({
+      where: { roomNumber: { equals: roomNumber, mode: 'insensitive' } }
+    });
+    if (existing) return { success: false, error: `Classroom '${roomNumber}' already exists.` };
+
+    const classroom = await prisma.classroom.create({
+      data: {
+        roomNumber,
+        building,
+        capacity,
+        type,
+        departmentId,
+        isActive: true
+      }
+    });
+
+    return {
+      success: true,
+      steps: [`Created classroom ${roomNumber} in PostgreSQL (${building}, capacity ${capacity})`],
+      data: classroom
+    };
+  },
+
+  // 13.2 Get Department Analytics
+  async getDepartmentAnalytics(args = {}, context = {}) {
+    const user = context.user;
+    const role = (user?.role || '').toUpperCase();
+    const departmentId = await resolveDepartmentId(user, args.department);
+    if (role !== 'ADMIN' && !departmentId) return { success: false, error: 'Department scope is required for analytics.' };
+    const department = departmentId
+      ? await prisma.department.findUnique({ where: { id: departmentId }, select: { code: true, name: true } })
+      : null;
+    const scoped = departmentId ? { departmentId } : {};
+    const [studentsCount, teachersCount, subjectsCount, classroomsCount, timetablesCount, recentLeaves] = await Promise.all([
+      prisma.student.count({ where: { ...scoped, status: 'ACTIVE' } }),
+      prisma.teacher.count({ where: { ...scoped, status: 'ACTIVE' } }),
+      prisma.subject.count({ where: scoped }),
+      prisma.classroom.count({ where: scoped }),
+      prisma.timetable.count({ where: scoped }),
+      prisma.leaveApplication.count({
+        where: {
+          status: 'PENDING',
+          ...(departmentId ? { OR: [{ student: { departmentId } }, { teacher: { departmentId } }] } : {})
+        }
+      })
+    ]);
+
+    return {
+      success: true,
+      steps: ['Compiled department operational metrics from PostgreSQL'],
+      data: {
+        department: department ? `${department.name} (${department.code})` : 'All departments',
+        activeStudents: studentsCount,
+        activeTeachers: teachersCount,
+        curriculumSubjects: subjectsCount,
+        allocatedClassrooms: classroomsCount,
+        activeTimetables: timetablesCount,
+        pendingLeaveRequests: recentLeaves
+      }
+    };
+  },
+
+  // 13.3 Get Users List (Admin)
+  async getUsers(args = {}, context = {}) {
+    const user = context.user;
+    const auth = verifyToolAuthorization(user, PERMISSIONS.USER_READ);
+    if (!auth.authorized) return { success: false, error: auth.reason };
+
+    const users = await prisma.user.findMany({
+      take: 25,
+      include: { role: true, department: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return {
+      success: true,
+      steps: [`Loaded ${users.length} user accounts from PostgreSQL`],
+      count: users.length,
+      data: users.map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        role: u.role?.name,
+        department: u.department?.name,
+        isActive: u.isActive
+      }))
     };
   }
 };

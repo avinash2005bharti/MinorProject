@@ -57,8 +57,14 @@ exports.uploadNote = async (req, res) => {
           fileName: req.file.originalname,
           title: doc.title,
           category: doc.category,
-          subjectId: doc.subjectId
-        }, { timeout: 10000 });
+          subjectId: doc.subjectId,
+          user_id: String(req.user.id),
+          role: req.user.role,
+          user: req.user
+        }, {
+          timeout: 10000,
+          headers: { 'x-internal-secret': process.env.INTERNAL_API_SECRET || '' }
+        });
 
         if (ingestRes.data?.success) {
           await prisma.documentMetadata.update({
