@@ -7,7 +7,7 @@ const { ToolExecutionLog } = require('../models/mongo/aiMemoryModels');
 const { erpAgentTools } = require('../services/erpAgentTools');
 const { envConfig } = require('../config/env');
 
-const PYTHON_AI_SERVICE_URL = process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
+const PYTHON_AI_SERVICE_URL = process.env.AI_SERVICE_URL || process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || '';
 const JWT_SECRET = process.env.JWT_SECRET || envConfig.jwtSecret;
 const CONFIRMATION_TOOLS = new Set(['deactivateTeacher', 'deactivateStudent', 'deleteSubject', 'bulkMarkAttendance']);

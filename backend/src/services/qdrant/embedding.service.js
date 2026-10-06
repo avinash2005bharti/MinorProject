@@ -7,7 +7,7 @@ const axios = require('axios');
 
 class QdrantEmbeddingService {
   constructor() {
-    this.aiServiceUrl = process.env.PYTHON_AI_SERVICE_URL || 'http://127.0.0.1:8000';
+    this.aiServiceUrl = process.env.AI_SERVICE_URL || process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
     this.geminiApiKey = process.env.GEMINI_API_KEY || '';
     this.vectorSize = 768; // Default embedding dimension for gemini-embedding-2 / text-embedding-004
   }

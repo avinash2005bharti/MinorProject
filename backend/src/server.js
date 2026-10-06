@@ -22,7 +22,7 @@ const server = http.createServer(app);
 
 // Initialize Whitelisted Origins (SEC-08)
 const parseCorsOrigins = () => {
-  const envOrigins = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || process.env.CLIENT_URL;
+  const envOrigins = process.env.FRONTEND_URL || process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || process.env.CLIENT_URL;
   if (!envOrigins) {
     if (process.env.NODE_ENV === 'production') {
       console.error('[FATAL CONFIG] CORS_ORIGINS environment variable is required in production.');
@@ -228,4 +228,3 @@ if (require.main === module || process.env.NODE_ENV !== 'test') {
 }
 
 module.exports = { app, server, startServer };
-

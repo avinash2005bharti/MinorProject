@@ -1,5 +1,6 @@
 import React from 'react';
 import { useERP } from '../context/ERPContext';
+import { getBackendUrl } from '../api/client';
 import ApprovalStatus from './ApprovalStatus';
 import WorkflowTimeline from './WorkflowTimeline';
 import { FileText, ArrowRight, CheckCircle2, UserCheck, Calendar, ArrowUpRight, Zap, ShieldCheck, Clock } from 'lucide-react';
@@ -90,11 +91,7 @@ export default function RequestCard({
           <FileText size={15} style={{ color: 'var(--primary)' }} />
           <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Attached Proof:</span>
           <a
-            href={
-              (request.proofDocumentUrl || request.docUrl || request.supportingDoc).startsWith('http')
-                ? (request.proofDocumentUrl || request.docUrl || request.supportingDoc)
-                : `http://localhost:5000${(request.proofDocumentUrl || request.docUrl || request.supportingDoc).startsWith('/') ? '' : '/'}${request.proofDocumentUrl || request.docUrl || request.supportingDoc}`
-            }
+            href={getBackendUrl(request.proofDocumentUrl || request.docUrl || request.supportingDoc)}
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: 'var(--primary)', fontWeight: 700, textDecoration: 'underline', display: 'inline-flex', alignItems: 'center', gap: '3px' }}

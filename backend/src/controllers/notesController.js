@@ -9,7 +9,7 @@ const axios = require('axios');
 const { prisma } = require('../config/postgres');
 const { logger } = require('../services/loggerService');
 
-const PYTHON_AI_SERVICE_URL = process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
+const PYTHON_AI_SERVICE_URL = process.env.AI_SERVICE_URL || process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
 
 // 1. Upload Document & Ingest to Qdrant RAG Pipeline
 exports.uploadNote = async (req, res) => {

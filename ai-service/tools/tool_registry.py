@@ -23,7 +23,7 @@ load_dotenv()
 
 from memory.mongo_memory import mongo_memory
 
-NODE_BACKEND_URL = os.getenv("NODE_BACKEND_URL", "http://127.0.0.1:5000")
+NODE_BACKEND_URL = os.getenv("BACKEND_URL") or os.getenv("NODE_BACKEND_URL", "http://localhost:5000")
 INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET", "")
 
 

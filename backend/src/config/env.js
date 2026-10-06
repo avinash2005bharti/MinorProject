@@ -36,8 +36,8 @@ function validateEnv() {
     }
   }
 
-  if (isProd && !process.env.CORS_ORIGINS && !process.env.CORS_ORIGIN) {
-    errors.push('CRITICAL: CORS_ORIGINS environment variable is missing in production environment.');
+  if (isProd && !process.env.FRONTEND_URL && !process.env.CORS_ORIGINS && !process.env.CORS_ORIGIN) {
+    errors.push('CRITICAL: FRONTEND_URL or CORS_ORIGINS environment variable is missing in production environment.');
   }
 
   if (isProd && errors.length > 0) {

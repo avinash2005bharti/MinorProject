@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import { noticeApi } from '../../api/noticeApi';
+import { getBackendUrl } from '../../api/client';
 import {
   X,
   Megaphone,
@@ -31,11 +32,7 @@ export default function NoticeDetailModal({ notice, onClose, onReadChange, onDel
   const isUrgent = notice.priority === 'urgent' || notice.type === 'ALERT';
 
   // Construct absolute URL for local /uploads paths
-  const fileUrl = rawUrl
-    ? rawUrl.startsWith('http') || rawUrl.startsWith('//')
-      ? rawUrl
-      : `http://localhost:5000${rawUrl}`
-    : null;
+  const fileUrl = rawUrl ? getBackendUrl(rawUrl) : null;
 
   const fileName =
     notice.attachmentName ||

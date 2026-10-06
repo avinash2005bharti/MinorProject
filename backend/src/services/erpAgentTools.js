@@ -15,7 +15,7 @@ const { PERMISSIONS, getPermissionsForRole } = require('../config/permissions');
 const { logger, aiLogger } = require('./loggerService');
 const excelService = require('./excelService');
 const pdfService = require('./pdfService');
-const PYTHON_AI_SERVICE_URL = process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
+const PYTHON_AI_SERVICE_URL = process.env.AI_SERVICE_URL || process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
 const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET || '';
 
 // Verify server-side authorization for a specific tool execution

@@ -18,7 +18,7 @@ from file_processing.text_pipeline import text_pipeline
 from file_processing.chunker import intelligent_chunker
 from rag.qdrant_manager import qdrant_manager
 
-NODE_BACKEND_URL = os.getenv("NODE_BACKEND_URL", "http://localhost:5000")
+NODE_BACKEND_URL = os.getenv("BACKEND_URL") or os.getenv("NODE_BACKEND_URL", "http://localhost:5000")
 
 
 # File type classification
@@ -126,7 +126,7 @@ class FileTypeRouter:
                             break
 
         # Ensure file_url is full URL if relative
-        backend_base = NODE_BACKEND_URL.replace("localhost", "127.0.0.1")
+        backend_base = NODE_BACKEND_URL
         if file_url and file_url.startswith("/"):
             file_url = f"{backend_base}{file_url}"
 
@@ -347,7 +347,7 @@ class FileTypeRouter:
 
         # 2. Also notify Node backend HTTP endpoint (SEC-09: include X-Microservice-Secret)
         try:
-            backend_base = NODE_BACKEND_URL.replace("localhost", "127.0.0.1")
+            backend_base = NODE_BACKEND_URL
             internal_secret = os.getenv("INTERNAL_API_SECRET", "dev_internal_microservice_secret_key_123")
             httpx.patch(
                 f"{backend_base}/api/files/{file_id}/status",

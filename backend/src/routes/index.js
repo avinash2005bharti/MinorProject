@@ -33,7 +33,7 @@ const { verifyToken, checkRole } = require('../middleware/auth');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-const PYTHON_AI_SERVICE_URL = process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
+const PYTHON_AI_SERVICE_URL = process.env.AI_SERVICE_URL || process.env.PYTHON_AI_SERVICE_URL || 'http://localhost:8000';
 
 // Mount Core Application Routes
 router.use('/auth', authRoutes);
@@ -185,4 +185,3 @@ router.get('/health', async (req, res) => {
 });
 
 module.exports = router;
-

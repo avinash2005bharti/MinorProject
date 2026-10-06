@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useERP } from '../../context/ERPContext';
 import NoticeDetailModal from '../../components/modals/NoticeDetailModal';
+import { getBackendUrl } from '../../api/client';
 import {
   Compass,
   Bell,
@@ -70,8 +71,7 @@ export default function StudentNotices() {
     e.stopPropagation();
     const url = notice.attachmentUrl || notice.linkUrl;
     if (url) {
-      const fullUrl = url.startsWith('http') || url.startsWith('//') ? url : `http://localhost:5000${url}`;
-      window.open(fullUrl, '_blank', 'noopener,noreferrer');
+      window.open(getBackendUrl(url), '_blank', 'noopener,noreferrer');
     }
   };
 

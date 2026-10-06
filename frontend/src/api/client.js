@@ -4,16 +4,19 @@
 // ==========================================================================
 
 const RAW_BASE_URL = (
+  import.meta.env.VITE_BACKEND_URL ||
   import.meta.env.VITE_API_BASE_URL ||
   import.meta.env.VITE_API_URL ||
-  import.meta.env.VITE_BACKEND_URL ||
-  ''
+  (import.meta.env.PROD ? '' : 'http://localhost:5000')
 ).replace(/\/$/, '');
 
-// If empty in dev, Vite proxy forwards /api to http://localhost:5000/api
-export const API_BASE_URL = RAW_BASE_URL
-  ? (RAW_BASE_URL.endsWith('/api') ? RAW_BASE_URL : `${RAW_BASE_URL}/api`)
-  : '/api';
+export const BACKEND_BASE_URL = RAW_BASE_URL.replace(/\/api$/, '');
+export const API_BASE_URL = BACKEND_BASE_URL ? `${BACKEND_BASE_URL}/api` : '/api';
+
+export const getBackendUrl = (path) => {
+  if (!path || path.startsWith('http') || path.startsWith('//')) return path;
+  return `${BACKEND_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
+};
 
 export class ApiError extends Error {
   constructor(message, status = 500, data = null) {
