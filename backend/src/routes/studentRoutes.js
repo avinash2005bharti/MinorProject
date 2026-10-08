@@ -10,13 +10,13 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 // Invalidate student & dashboard cache on mutations
 router.use(cacheService.invalidateOnMutation(['/students', '/dashboard']));
 
-// Import & Export (Must precede /:id)
-router.post('/import', upload.single('file'), masterDataController.importStudents);
-router.get('/export', masterDataController.exportStudents);
+// Import & Export (Must precede /:id) - require authenticated admin/hod access
+router.post('/import', verifyToken, checkRole('admin', 'hod'), upload.single('file'), masterDataController.importStudents);
+router.get('/export', verifyToken, checkRole('admin', 'hod'), masterDataController.exportStudents);
 
 // Core Student CRUD (Cached 30s)
-router.get('/', optionalAuth, cacheService.middleware(30), studentController.getStudents);
-router.get('/:id', optionalAuth, studentController.getStudentById);
+router.get('/', verifyToken, checkRole('admin', 'faculty', 'hod', 'tg', 'teacher'), cacheService.middleware(30), studentController.getStudents);
+router.get('/:id', verifyToken, checkRole('admin', 'faculty', 'hod', 'tg', 'teacher'), studentController.getStudentById);
 router.post('/move-next-semester', verifyToken, checkRole('admin', 'hod'), studentController.moveToNextSemester);
 router.post('/', verifyToken, checkRole('admin', 'faculty', 'hod'), studentController.createStudent);
 router.put('/:id', verifyToken, checkRole('admin', 'faculty', 'hod'), studentController.updateStudent);

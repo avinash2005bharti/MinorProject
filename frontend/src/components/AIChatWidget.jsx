@@ -83,9 +83,11 @@ export default function AIChatWidget() {
         ];
       case 'tg':
         return [
-          'Show mentees with attendance < 75%',
-          'Pending student clearances in my queue',
-          'Office clearance procedures'
+          'Show students below 75% attendance',
+          'Which students are at risk?',
+          'Show pending requests',
+          'Who has the lowest attendance?',
+          'Show students needing mentor intervention'
         ];
       case 'hod':
         return [
@@ -276,46 +278,78 @@ export default function AIChatWidget() {
   return (
     <>
       {/* Floating Chat Trigger Button (Fixed Bottom-Right) */}
-      <button
-        onClick={() => setIsOpen((prev) => !prev)}
+      <div
         style={{
           position: 'fixed',
           bottom: '1.75rem',
           right: '1.75rem',
           zIndex: 90,
-          width: '52px',
-          height: '52px',
-          borderRadius: '50%',
-          backgroundColor: 'var(--primary-700)',
-          color: '#FFFFFF',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: 'var(--shadow-float)',
-          border: '2px solid rgba(255, 255, 255, 0.95)',
-          cursor: 'pointer',
-          transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+          gap: '0.5rem'
         }}
-        className="hover:scale-110 active:scale-95"
-        title={isOpen ? 'Close AI Assistant' : 'Chat with CampusFlow AI'}
-        aria-label="Toggle AI Chat"
       >
-        {isOpen ? <X size={22} /> : <Bot size={24} />}
-        {!isOpen && (
-          <span
+        {!isOpen && (location.pathname.startsWith('/tg') || currentRole === 'tg') && (
+          <button
+            onClick={() => setIsOpen(true)}
             style={{
-              position: 'absolute',
-              top: '-2px',
-              right: '-2px',
-              width: '14px',
-              height: '14px',
-              borderRadius: '50%',
-              backgroundColor: 'var(--secondary)',
-              border: '2px solid #FFFFFF'
+              padding: '0.45rem 0.85rem',
+              backgroundColor: '#1e293b',
+              color: '#ffffff',
+              borderRadius: '9999px',
+              fontSize: '11px',
+              fontWeight: 600,
+              boxShadow: '0 4px 12px rgba(15, 23, 42, 0.25)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem',
+              transition: 'background 0.15s ease'
             }}
-          />
+            className="hover:bg-slate-800"
+          >
+            <span>Ask about your Section A students</span>
+          </button>
         )}
-      </button>
+
+        <button
+          onClick={() => setIsOpen((prev) => !prev)}
+          style={{
+            width: '46px',
+            height: '46px',
+            borderRadius: '50%',
+            backgroundColor: '#2563eb',
+            color: '#FFFFFF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: 'var(--shadow-float)',
+            border: '2px solid rgba(255, 255, 255, 0.95)',
+            cursor: 'pointer',
+            transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)'
+          }}
+          className="hover:scale-105 active:scale-95"
+          title={isOpen ? 'Close AI Assistant' : 'Chat with CampusFlow AI'}
+          aria-label="Toggle AI Chat"
+        >
+          {isOpen ? <X size={20} /> : <Bot size={22} />}
+          {!isOpen && (
+            <span
+              style={{
+                position: 'absolute',
+                top: '-2px',
+                right: '-2px',
+                width: '12px',
+                height: '12px',
+                borderRadius: '50%',
+                backgroundColor: '#22c55e',
+                border: '2px solid #FFFFFF'
+              }}
+            />
+          )}
+        </button>
+      </div>
 
       {/* Floating Chat Drawer Window */}
       {isOpen && (

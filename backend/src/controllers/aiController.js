@@ -722,9 +722,9 @@ exports.getObservability = async (req, res) => {
     // Fetch FastAPI health / Qdrant status if available
     let qdrantStatus = 'Cloud Qdrant Connected';
     let activeModels = {
-      llm: 'openai/gpt-oss-120b',
-      vision: 'qwen/qwen3.8-27b (Groq)',
-      embeddings: 'gemini-embedding-2 (Google Gemini)'
+      llm: 'llama-3.3-70b-versatile',
+      vision: 'llama-3.2-11b-vision-preview (Groq)',
+      embeddings: 'sentence-transformers/all-mpnet-base-v2 (Local)'
     };
 
     try {

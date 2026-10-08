@@ -160,7 +160,7 @@ export function ERPProvider({ children }) {
           setIsAuthenticated(true);
           localStorage.setItem('oist_user', JSON.stringify(combinedUser));
 
-          // Set role based on backend user: If teacher is appointed as TG by HOD, route to TG dashboard
+          // TG is a faculty responsibility; keep faculty as the user's primary dashboard.
           let normalizedRole = (user.role || '').toLowerCase();
           const isAppointedTg = Boolean(
             normalizedRole === 'tg' ||
@@ -174,11 +174,12 @@ export function ERPProvider({ children }) {
             (combinedUser.designation || '').toLowerCase().includes('tg')
           );
 
-          if (normalizedRole === 'faculty') {
-            normalizedRole = 'teacher';
-          }
-          const savedRole = localStorage.getItem('oist_role');
-          if (isAppointedTg && savedRole === 'tg') {
+          const storedRole = localStorage.getItem('oist_role');
+          if (storedRole === 'tg' && isAppointedTg) {
+            normalizedRole = 'tg';
+          } else if (normalizedRole === 'faculty') {
+            normalizedRole = isAppointedTg && storedRole === 'tg' ? 'tg' : 'teacher';
+          } else if (normalizedRole === 'tg') {
             normalizedRole = 'tg';
           }
           combinedUser.isTG = isAppointedTg;
@@ -442,8 +443,7 @@ export function ERPProvider({ children }) {
 
     if (targetRole === 'faculty') {
       targetRole = 'teacher';
-    }
-    if ((targetRole === 'tg' || isAppointedTg) && role === 'tg') {
+    } else if (targetRole === 'tg' || ((role || '').toLowerCase() === 'tg' && isAppointedTg)) {
       targetRole = 'tg';
     }
 

@@ -13,7 +13,7 @@ from file_processing.normalizer import NormalizedContent, VisualAnalysis
 from llm.provider import llm_provider
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+GROQ_VISION_MODEL = os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
 
 VISION_SYSTEM_PROMPT = """You are a precise document and image analysis AI. Analyze the provided image thoroughly and return a structured JSON response. Extract ALL useful information visible in the image.
 
@@ -179,7 +179,7 @@ class ImagePipeline:
         ]
 
         api_key = self.api_key or os.getenv("GROQ_API_KEY", "")
-        model = self.model or os.getenv("GROQ_VISION_MODEL", "qwen/qwen3.8-27b")
+        model = self.model or os.getenv("GROQ_VISION_MODEL", "llama-3.2-11b-vision-preview")
 
         try:
             response = httpx.post(

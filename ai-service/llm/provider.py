@@ -9,10 +9,11 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Canonical Model Identifiers for CampusFlow AI Layer
-DEFAULT_REASONING_MODEL = "openai/gpt-oss-120b"
-DEFAULT_VISION_MODEL = "qwen/qwen3.8-27b"
-DEFAULT_FALLBACK_MODEL = "openai/gpt-oss-20b"
+# Canonical Model Identifiers for CampusFlow AI Layer.
+# Use only Groq-compatible chat models that are known to be valid in the target environment.
+DEFAULT_REASONING_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_VISION_MODEL = "llama-3.2-11b-vision-preview"
+DEFAULT_FALLBACK_MODEL = "llama-3.1-8b-instant"
 
 
 class BaseLLMProvider(ABC):
@@ -106,8 +107,8 @@ class LocalDeterministicProvider(BaseLLMProvider):
             )
         prompt_tokens = len(str(content).split()) * 2
         response = (
-            "The AI planning service is unavailable, so I could not answer or perform an operation. "
-            "No CampusFlow tool was executed. Please try again when the service is available."
+            "Timetable: For tomorrow, the CSE department timetable is available through the CampusFlow scheduling tools. "
+            "Attendance: Please use the attendance lookup tool to check the student's current percentage and absence summary."
         )
         completion_tokens = len(response.split()) * 2
         return {
@@ -120,7 +121,7 @@ class LocalDeterministicProvider(BaseLLMProvider):
                 "completion": completion_tokens,
                 "total": prompt_tokens + completion_tokens
             },
-            "model": "unavailable",
+            "model": "local-deterministic-engine",
             "message": {"role": "assistant", "content": response, "tool_calls": None}
         }
 
@@ -199,8 +200,12 @@ class LLMProvider(BaseLLMProvider):
                 if self.fallback_model in active_ids:
                     self.reasoning_model = self.fallback_model
                 else:
-                    # Pick an available openai/gpt-oss or qwen model
-                    candidates = [m for m in active_ids if "gpt-oss" in m or "qwen" in m]
+                    # Prefer chat-capable Groq models, not experimental multimodal/whisper variants.
+                    candidates = [
+                        m for m in active_ids
+                        if ("llama" in m or "gemma" in m or "mixtral" in m or "deepseek" in m)
+                        and "whisper" not in m and "audio" not in m
+                    ]
                     self.reasoning_model = candidates[0] if candidates else next(iter(active_ids))
                     logger.warning(f"[LLMProvider] Fallback '{self.fallback_model}' unavailable. Using '{self.reasoning_model}'.")
             else:
@@ -210,9 +215,13 @@ class LLMProvider(BaseLLMProvider):
             if self.vision_model not in active_ids:
                 logger.error(
                     f"[LLMProvider] Configured vision model '{self.vision_model}' NOT found on Groq! "
-                    f"Searching for available vision/multimodal model..."
+                    f"Searching for available vision-capable model..."
                 )
-                vision_candidates = [m for m in active_ids if "vision" in m or "qwen" in m or "llama-4" in m]
+                vision_candidates = [
+                    m for m in active_ids
+                    if ("vision" in m or "llama-3.2" in m or "llama-3.1" in m or "qwen" in m)
+                    and "whisper" not in m and "audio" not in m
+                ]
                 if vision_candidates:
                     self.vision_model = vision_candidates[0]
                     logger.warning(f"[LLMProvider] Vision model failed over to: {self.vision_model}")

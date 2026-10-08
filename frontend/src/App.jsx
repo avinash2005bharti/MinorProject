@@ -215,12 +215,13 @@ export default function App() {
           <Route path="student/profile" element={<RoleRouteGuard role="student"><StudentProfile /></RoleRouteGuard>} />
 
           {/* TG / Mentor Routes */}
-          <Route path="tg" element={<RoleRouteGuard role="tg"><TgDashboard /></RoleRouteGuard>} />
-          <Route path="tg/students" element={<RoleRouteGuard role="tg"><TgMyStudents /></RoleRouteGuard>} />
-          <Route path="tg/requests" element={<RoleRouteGuard role="tg"><TgRequests /></RoleRouteGuard>} />
-          <Route path="tg/attendance" element={<RoleRouteGuard role="tg"><TgRequests /></RoleRouteGuard>} />
-          <Route path="tg/leave" element={<RoleRouteGuard role="tg"><TgRequests /></RoleRouteGuard>} />
-          <Route path="tg/notices" element={<RoleRouteGuard role="tg"><TgNotices /></RoleRouteGuard>} />
+          <Route path="tg" element={<RoleRouteGuard role={['tg', 'teacher', 'faculty', 'hod', 'admin']}><TgDashboard /></RoleRouteGuard>} />
+          <Route path="tg/dashboard" element={<RoleRouteGuard role={['tg', 'teacher', 'faculty', 'hod', 'admin']}><TgDashboard /></RoleRouteGuard>} />
+          <Route path="tg/students" element={<RoleRouteGuard role={['tg', 'teacher', 'faculty', 'hod', 'admin']}><TgMyStudents /></RoleRouteGuard>} />
+          <Route path="tg/requests" element={<RoleRouteGuard role={['tg', 'teacher', 'faculty', 'hod', 'admin']}><TgRequests /></RoleRouteGuard>} />
+          <Route path="tg/attendance" element={<RoleRouteGuard role={['tg', 'teacher', 'faculty', 'hod', 'admin']}><TgRequests /></RoleRouteGuard>} />
+          <Route path="tg/leave" element={<RoleRouteGuard role={['tg', 'teacher', 'faculty', 'hod', 'admin']}><TgRequests /></RoleRouteGuard>} />
+          <Route path="tg/notices" element={<RoleRouteGuard role={['tg', 'teacher', 'faculty', 'hod', 'admin']}><TgNotices /></RoleRouteGuard>} />
 
           {/* HOD Routes */}
           <Route path="hod" element={<RoleRouteGuard role="hod"><HodDashboard /></RoleRouteGuard>} />

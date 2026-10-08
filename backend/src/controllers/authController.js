@@ -23,7 +23,7 @@ const otpStore = new Map();
  */
 const buildSafeUser = (user, effectiveRole) => {
   const isHod = (user.teacherProfile?.hodAssignments && user.teacherProfile.hodAssignments.length > 0) || effectiveRole === 'HOD';
-  const isTg = user.teacherProfile?.isTG || effectiveRole === 'TG';
+  const isTg = Boolean(user.teacherProfile?.isTG);
 
   return {
     id: user.id,
@@ -128,10 +128,10 @@ exports.login = async (req, res) => {
       });
     }
 
-    // Determine authoritative role
+    // Determine authoritative role from verified profile data only.
     const baseRole = (user.role?.name || 'STUDENT').toUpperCase();
     const isHod = (user.teacherProfile?.hodAssignments && user.teacherProfile.hodAssignments.length > 0) || baseRole === 'HOD';
-    const isTg = (user.teacherProfile?.isTG) || baseRole === 'TG';
+    const isTg = Boolean(user.teacherProfile?.isTG);
 
     let effectiveRole = baseRole;
     if (isHod) effectiveRole = 'HOD';
@@ -429,11 +429,10 @@ exports.registerTeacher = async (req, res) => {
       });
     }
 
-    // Role
-    const targetRoleName = isTG ? 'TG' : 'TEACHER';
-    let teacherRole = await prisma.role.findUnique({ where: { name: targetRoleName } });
+    // Faculty registration is never permitted to self-appoint as TG.
+    const teacherRole = await prisma.role.findUnique({ where: { name: 'TEACHER' } });
     if (!teacherRole) {
-      teacherRole = await prisma.role.findUnique({ where: { name: 'TEACHER' } });
+      throw new Error('Teacher role definition missing in system database.');
     }
 
     // Department

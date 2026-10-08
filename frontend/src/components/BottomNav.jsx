@@ -4,16 +4,20 @@ import { useERP } from '../context/ERPContext';
 import { LayoutDashboard, CheckSquare, Calendar, FileText, User } from 'lucide-react';
 
 export default function BottomNav() {
-  const { currentRole } = useERP();
+  const { currentRole, currentUser } = useERP();
+  const isAppointedTg = Boolean(currentUser?.isTG || currentUser?.isTg || currentUser?.isAppointedTg);
 
   const getBottomLinks = () => {
     switch (currentRole) {
+      case 'tg':
       case 'teacher':
         return [
           { to: '/teacher', label: 'Home', icon: <LayoutDashboard size={20} /> },
           { to: '/teacher/attendance', label: 'Attendance', icon: <CheckSquare size={20} /> },
           { to: '/teacher/timetable', label: 'Timetable', icon: <Calendar size={20} /> },
-          { to: '/teacher/classes', label: 'Classes', icon: <FileText size={20} /> }
+          ...(isAppointedTg
+            ? [{ to: '/tg/students', label: 'Mentees', icon: <User size={20} /> }]
+            : [{ to: '/teacher/classes', label: 'Classes', icon: <FileText size={20} /> }])
         ];
       case 'hod':
         return [
@@ -21,13 +25,6 @@ export default function BottomNav() {
           { to: '/hod/attendance', label: 'Approvals', icon: <CheckSquare size={20} /> },
           { to: '/hod/timetable', label: 'Timetable', icon: <Calendar size={20} /> },
           { to: '/hod/requests', label: 'Requests', icon: <FileText size={20} /> }
-        ];
-      case 'tg':
-        return [
-          { to: '/tg', label: 'Home', icon: <LayoutDashboard size={20} /> },
-          { to: '/tg/students', label: 'Mentees', icon: <User size={20} /> },
-          { to: '/tg/requests', label: 'Requests', icon: <FileText size={20} /> },
-          { to: '/tg/attendance', label: 'Attendance', icon: <CheckSquare size={20} /> }
         ];
       case 'student':
       default:

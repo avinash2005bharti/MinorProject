@@ -1,5 +1,4 @@
 import os
-import hashlib
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import List
@@ -19,12 +18,25 @@ class BaseEmbeddingProvider(ABC):
 
 class LocalDenseEmbeddingProvider(BaseEmbeddingProvider):
     """
-    Local Deterministic Dense Vector Embedder with L2 Normalization.
-    Produces 768-dimensional vectors with high semantic cosine alignment.
-    Does not require external API keys.
+    Lightweight deterministic fallback that preserves lexical signal without pretending
+    to be semantic retrieval. It is intentionally a stable, explainable fallback for
+    offline operation and is not a substitute for a real sentence embedding model.
     """
     def __init__(self, dimension: int = VECTOR_DIMENSION):
         self.dimension = dimension
+
+    def _token_vector(self, token: str, position: int, count: int) -> np.ndarray:
+        token_bytes = token.encode('utf-8')
+        if not token_bytes:
+            return np.zeros(self.dimension, dtype=np.float32)
+
+        # Use a stable, deterministic projection that preserves token identity while
+        # remaining bounded and normalized. This is a fallback only: it is not semantic.
+        value = float(sum(b for b in token_bytes) % 997) / 997.0
+        vec = np.zeros(self.dimension, dtype=np.float32)
+        idx = int((position * 37 + len(token) * 17 + value * self.dimension) % self.dimension)
+        vec[idx] = 1.0 * (1.0 + 0.05 * count)
+        return vec
 
     def embed_text(self, text: str) -> List[float]:
         if not text or not text.strip():
@@ -34,17 +46,15 @@ class LocalDenseEmbeddingProvider(BaseEmbeddingProvider):
         tokens = cleaned.split()
         vector = np.zeros(self.dimension, dtype=np.float32)
 
-        for i, token in enumerate(tokens):
-            token_hash = hashlib.sha256(token.encode('utf-8')).hexdigest()
-            for j in range(0, min(len(token_hash), 32), 2):
-                idx = (int(token_hash[j:j+2], 16) * 3 + (i * 11)) % self.dimension
-                val = (int(token_hash[j:j+2], 16) / 255.0) - 0.5
-                vector[idx] += val
+        if not tokens:
+            return vector.tolist()
 
-        full_hash = hashlib.sha512(cleaned.encode('utf-8')).hexdigest()
-        for k in range(0, len(full_hash), 4):
-            idx = int(full_hash[k:k+4], 16) % self.dimension
-            vector[idx] += 0.35
+        token_counts = {}
+        for token in tokens:
+            token_counts[token] = token_counts.get(token, 0) + 1
+
+        for index, (token, count) in enumerate(token_counts.items()):
+            vector += self._token_vector(token, index, count)
 
         norm = np.linalg.norm(vector)
         if norm > 0:

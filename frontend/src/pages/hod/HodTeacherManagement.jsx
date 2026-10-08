@@ -36,7 +36,7 @@ export default function HodTeacherManagement() {
   // TG Appointment Modal & State
   const [showTgModal, setShowTgModal] = useState(false);
   const [tgTeacher, setTgTeacher] = useState(null);
-  const [tgSection, setTgSection] = useState('');
+  const [tgSectionId, setTgSectionId] = useState('');
   const [tgAcademicYear, setTgAcademicYear] = useState('2026-27');
   const [appointingTg, setAppointingTg] = useState(false);
 
@@ -258,30 +258,38 @@ export default function HodTeacherManagement() {
   const tgCount = facultyList.filter((f) => f.isTG).length;
   const regularCount = facultyList.filter((f) => !f.isTG).length;
   const assignedSections = [...new Set(facultyList.filter((f) => f.isTG && f.tgSection).map((f) => f.tgSection))];
+  const selectedTgSection = sections.find((section) => section.id === tgSectionId);
 
   // Open TG Appointment Modal
   const handleOpenTgModal = (faculty = null) => {
     const target = faculty || (facultyList.length > 0 ? facultyList[0] : null);
     setTgTeacher(target);
-    setTgSection(target?.tgSection || sections[0]?.name || '');
+    const currentSection = sections.find((section) =>
+      section.id === target?.tgSectionId ||
+      (section.name === target?.tgSection && (!target?.tgSemester || section.semester === target.tgSemester))
+    );
+    setTgSectionId(currentSection?.id || sections[0]?.id || '');
+    setTgAcademicYear(currentSection?.academicYear || '2026-27');
     setShowTgModal(true);
   };
 
   // Submit TG Appointment
   const handleAppointTgSubmit = async (e) => {
     e.preventDefault();
-    if (!tgTeacher || !tgSection) return;
+    if (!tgTeacher || !selectedTgSection) return;
     setAppointingTg(true);
 
     try {
       const res = await teacherApi.appointTg(tgTeacher.id, {
-        section: tgSection,
+        sectionId: selectedTgSection.id,
+        section: selectedTgSection.name,
+        semester: selectedTgSection.semester,
         academicYear: tgAcademicYear
       });
 
       addToast(
         'TG Appointed Successfully',
-        res.message || `${tgTeacher.name} has been appointed as Tutor Guardian for Section ${tgSection}.`,
+        res.message || `${tgTeacher.name} has been appointed as Tutor Guardian for Semester ${selectedTgSection.semester}, Section ${selectedTgSection.name}.`,
         'success'
       );
       setShowTgModal(false);
@@ -615,7 +623,7 @@ export default function HodTeacherManagement() {
                             className="badge badge-emerald"
                             style={{ fontSize: '10px', fontWeight: 700, padding: '0.2rem 0.5rem' }}
                           >
-                            TG • Sec {fac.tgSection || 'A'}
+                            TG • {fac.tgSection || 'Section unassigned'}
                           </span>
                         )}
                       </div>
@@ -675,7 +683,7 @@ export default function HodTeacherManagement() {
                             }}
                           >
                             <ShieldCheck size={14} />
-                            <span>Designated TG (Section {fac.tgSection || 'A'})</span>
+                            <span>Designated TG ({fac.tgSection || 'Section unassigned'})</span>
                           </span>
                         </div>
                       ) : (
@@ -839,18 +847,20 @@ export default function HodTeacherManagement() {
                   Assigned Student Section *
                 </label>
                 <select
-                  value={tgSection}
-                  onChange={(e) => setTgSection(e.target.value)}
+                  value={tgSectionId}
+                  onChange={(e) => setTgSectionId(e.target.value)}
                   className="input-field"
                   required
                 >
                   <option value="">Select a section</option>
                   {sections.map((section) => (
-                    <option key={section.id} value={section.name}>Section {section.name}</option>
+                    <option key={section.id} value={section.id}>
+                      Semester {section.semester} • Section {section.name} ({section.academicYear})
+                    </option>
                   ))}
                 </select>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '4px' }}>
-                  All students in this section will report directly to this Tutor Guardian.
+                  All students in the selected semester and section will report directly to this Tutor Guardian.
                 </span>
               </div>
 

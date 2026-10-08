@@ -39,7 +39,7 @@ class AgentDefinition(BaseModel):
     goal: str = ""
     system_instructions: str
     allowed_tools: List[str] = Field(default_factory=list)
-    model_name: str = Field(default="openai/gpt-oss-120b")
+    model_name: str = Field(default="llama-3.3-70b-versatile")
     planning_policy: PlanningPolicy = Field(default_factory=PlanningPolicy)
     verification_policy: VerificationPolicy = Field(default_factory=VerificationPolicy)
     memory_policy: MemoryPolicy = Field(default_factory=MemoryPolicy)

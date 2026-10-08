@@ -8,14 +8,19 @@ const { emitNotification } = require('../sockets/socketHandler');
 
 exports.getNotifications = async (req, res, next) => {
   try {
-    const role = (req.params.role || req.query.role || req.user?.role || 'STUDENT').toUpperCase();
+    const role = (req.user?.role || req.user?.roleName || '').toUpperCase();
     const userId = req.user?.id;
+    const audienceRoles = role === 'TG'
+      ? ['TEACHER', 'FACULTY', 'TG', 'ALL']
+      : role === 'TEACHER' || role === 'FACULTY'
+        ? ['TEACHER', 'FACULTY', 'ALL']
+        : [role, 'ALL'];
 
     const notifications = await prisma.notification.findMany({
       where: {
-        OR: [
-          { recipientRole: { in: [role, 'ALL'] } },
-          ...(userId ? [{ userId }] : [])
+        AND: [
+          { OR: [{ recipientRole: { in: audienceRoles } }, ...(userId ? [{ userId }] : [])] },
+          { OR: [{ userId: null }, ...(userId ? [{ userId }] : [])] }
         ]
       },
       orderBy: { createdAt: 'desc' },
@@ -79,6 +84,26 @@ exports.createNotification = async (req, res, next) => {
 exports.markAsRead = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const role = (req.user?.role || req.user?.roleName || '').toUpperCase();
+    const userId = req.user?.id;
+    const audienceRoles = role === 'TG'
+      ? ['TEACHER', 'FACULTY', 'TG', 'ALL']
+      : role === 'TEACHER' || role === 'FACULTY'
+        ? ['TEACHER', 'FACULTY', 'ALL']
+        : [role, 'ALL'];
+    const existing = await prisma.notification.findFirst({
+      where: {
+        id,
+        AND: [
+          { OR: [{ recipientRole: { in: audienceRoles } }, ...(userId ? [{ userId }] : [])] },
+          { OR: [{ userId: null }, ...(userId ? [{ userId }] : [])] }
+        ]
+      }
+    });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Notification not found.' });
+    }
+
     const notif = await prisma.notification.update({
       where: { id },
       data: { isRead: true }
@@ -92,9 +117,20 @@ exports.markAsRead = async (req, res, next) => {
 
 exports.clearAllNotifications = async (req, res, next) => {
   try {
-    const role = (req.query.role || req.user?.role || 'STUDENT').toUpperCase();
+    const role = (req.user?.role || req.user?.roleName || '').toUpperCase();
+    const userId = req.user?.id;
+    const audienceRoles = role === 'TG'
+      ? ['TEACHER', 'FACULTY', 'TG', 'ALL']
+      : role === 'TEACHER' || role === 'FACULTY'
+        ? ['TEACHER', 'FACULTY', 'ALL']
+        : [role, 'ALL'];
     await prisma.notification.updateMany({
-      where: { recipientRole: { in: [role, 'ALL'] } },
+      where: {
+        AND: [
+          { OR: [{ recipientRole: { in: audienceRoles } }, ...(userId ? [{ userId }] : [])] },
+          { OR: [{ userId: null }, ...(userId ? [{ userId }] : [])] }
+        ]
+      },
       data: { isRead: true }
     });
 

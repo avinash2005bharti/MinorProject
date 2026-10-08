@@ -8,8 +8,8 @@ const cacheService = require('../services/cacheService');
 router.get('/student', verifyToken, checkRole('student'), cacheService.middleware(20, true), dashboardController.getStudentDashboard);
 router.get('/teacher', verifyToken, checkRole('faculty', 'teacher', 'tg'), cacheService.middleware(20, true), dashboardController.getTeacherDashboard);
 router.get('/faculty', verifyToken, checkRole('faculty', 'teacher', 'tg'), cacheService.middleware(20, true), dashboardController.getTeacherDashboard);
-router.get('/tg', verifyToken, checkRole('tg', 'faculty', 'teacher'), cacheService.middleware(20, true), dashboardController.getTgDashboard);
-router.get('/hod', verifyToken, checkRole('hod'), cacheService.middleware(20, false), dashboardController.getHodDashboard);
+router.get('/tg', verifyToken, checkRole('tg', 'faculty', 'teacher'), cacheService.middleware(5, true), dashboardController.getTgDashboard);
+router.get('/hod', verifyToken, checkRole('hod'), cacheService.middleware(20, true), dashboardController.getHodDashboard);
 router.get('/admin', verifyToken, checkRole('admin'), cacheService.middleware(20, false), dashboardController.getAdminDashboard);
 
 module.exports = router;

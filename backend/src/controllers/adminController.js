@@ -582,7 +582,7 @@ exports.getAiConfig = async (req, res) => {
     success: true,
     config: {
       provider: 'Groq',
-      model: 'openai/gpt-oss-120b',
+      model: 'llama-3.3-70b-versatile',
       temperature: 0.2,
       maxTokens: 2048,
       vectorEngine: 'Qdrant Cloud',

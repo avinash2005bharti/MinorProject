@@ -21,8 +21,8 @@ router.post('/import', verifyToken, checkRole('admin', 'hod'), upload.single('fi
 router.get('/export', verifyToken, checkRole('admin', 'hod'), masterDataController.exportTeachers);
 
 // 3. Core Faculty CRUD - Cached 30s
-router.get('/', optionalAuth, cacheService.middleware(30), facultyController.getFaculty);
-router.get('/:id', optionalAuth, facultyController.getFacultyById);
+router.get('/', verifyToken, checkRole('admin', 'faculty', 'hod', 'tg', 'teacher'), cacheService.middleware(30), facultyController.getFaculty);
+router.get('/:id', verifyToken, checkRole('admin', 'faculty', 'hod', 'tg', 'teacher'), facultyController.getFacultyById);
 router.post('/', verifyToken, checkRole('admin', 'hod'), facultyController.createFaculty);
 router.put('/:id', verifyToken, checkRole('admin', 'hod'), facultyController.updateFaculty);
 router.delete('/:id', verifyToken, checkRole('admin', 'hod'), facultyController.deleteFaculty);

@@ -153,6 +153,7 @@ export default function TeacherDashboard() {
   const teacher = dashboard?.teacher || dashboard?.faculty || currentUser || {};
   const teacherName = teacher?.name || currentUser?.name || 'Test Teacher';
   const departmentName = teacher?.department || 'Computer Science & Engineering';
+  const isAppointedTg = Boolean(currentUser?.isTG || currentUser?.isTg || currentUser?.isAppointedTg);
 
   // Metrics from Real DB API
   const classesTodayCount = dashboard?.classesToday ?? (dashboard?.todayClasses?.length ?? 3);
@@ -398,6 +399,67 @@ export default function TeacherDashboard() {
           </Link>
         </div>
       </div>
+
+      {isAppointedTg && (
+        <div
+          style={{
+            borderRadius: '12px',
+            border: '1px solid #bfdbfe',
+            backgroundColor: '#eff6ff',
+            padding: '0.85rem 1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '0.75rem',
+            boxShadow: '0 1px 3px rgba(37, 99, 235, 0.08)'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div
+              style={{
+                width: '34px',
+                height: '34px',
+                borderRadius: '8px',
+                backgroundColor: '#dbeafe',
+                color: '#2563eb',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              <GraduationCap size={20} />
+            </div>
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e3a8a' }}>
+                Tutor Guardian (TG) Portal Available
+              </div>
+              <div style={{ fontSize: '12px', color: '#3b82f6' }}>
+                You are assigned to mentor students in CSE 5th Semester Section A.
+              </div>
+            </div>
+          </div>
+          <Link
+            to="/tg"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              backgroundColor: '#2563eb',
+              color: '#ffffff',
+              fontSize: '12px',
+              fontWeight: 700,
+              padding: '7px 14px',
+              borderRadius: '8px',
+              textDecoration: 'none',
+              boxShadow: '0 2px 4px rgba(37, 99, 235, 0.2)'
+            }}
+          >
+            <span>Open TG Dashboard</span>
+            <ArrowRight size={14} />
+          </Link>
+        </div>
+      )}
 
       {/* 2. Today's Faculty Duty Status Banner (Image 1) */}
       <div

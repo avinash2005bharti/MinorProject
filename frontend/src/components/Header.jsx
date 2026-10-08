@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useERP } from '../context/ERPContext';
-import { Bell, ShieldCheck, User, Menu, Bot, LogOut } from 'lucide-react';
-import { useNavigate, Link } from 'react-router-dom';
+import { Bell, ShieldCheck, User, Menu, Bot, LogOut, ArrowRight } from 'lucide-react';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 
 export default function Header({ isSidebarOpen, onToggleSidebar }) {
   const { currentRole, currentUser, notifications, logout } = useERP();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showNotifications, setShowNotifications] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -40,8 +41,9 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
         {/* Left: Menu Trigger & Branding */}
         <div className="flex items-center gap-3 shrink-0">
           <button
+            type="button"
             onClick={onToggleSidebar}
-            className="w-9 h-9 rounded-lg flex items-center justify-center bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900 border border-slate-200 transition-all cursor-pointer active:scale-95"
+            className="tg-sidebar-toggle-btn"
             title={isSidebarOpen ? 'Slide Menu Closed' : 'Slide Menu Open'}
             aria-label="Toggle Navigation Menu"
             id="btn-sidebar-toggle"
@@ -106,6 +108,32 @@ export default function Header({ isSidebarOpen, onToggleSidebar }) {
 
         {/* Right: AI Workspace, Notification Bell, User & Logout */}
         <div className="flex items-center gap-2 shrink-0 relative">
+          {/* Teacher Dashboard route button per user sketch: route to /teacher */}
+          {(location.pathname.startsWith('/tg') || currentRole === 'tg') && (
+            <Link
+              to="/teacher"
+              id="header-teacher-dashboard-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 text-xs font-bold transition-all no-underline shadow-xs cursor-pointer"
+              title="Switch to Teacher Dashboard"
+            >
+              <span>Teacher Dashboard</span>
+              <ArrowRight size={13} />
+            </Link>
+          )}
+
+          {/* TG Dashboard route button when viewing Teacher dashboard */}
+          {location.pathname.startsWith('/teacher') && (currentUser?.isTG || currentUser?.isTg || currentRole === 'tg' || (currentUser?.mentorGroups && currentUser?.mentorGroups.length > 0)) && (
+            <Link
+              to="/tg"
+              id="header-tg-dashboard-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 text-xs font-bold transition-all no-underline shadow-xs cursor-pointer"
+              title="Switch to TG / Mentor Dashboard"
+            >
+              <span>TG Dashboard</span>
+              <ArrowRight size={13} />
+            </Link>
+          )}
+
           {/* AI Workspace Shortcut */}
           <button
             onClick={() => navigate('/ai-workspace')}

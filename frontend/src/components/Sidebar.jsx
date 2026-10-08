@@ -1,9 +1,10 @@
 import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useERP } from '../context/ERPContext';
 import { Badge } from './common';
 import {
   LayoutDashboard,
+  Home,
   CheckSquare,
   Calendar,
   FileText,
@@ -18,14 +19,16 @@ import {
   Clock,
   Megaphone,
   GraduationCap,
-  PanelLeftClose,
+  Menu,
   Database,
-  Bot
+  Bot,
+  ChevronsUpDown
 } from 'lucide-react';
 
 export default function Sidebar({ isOpen, onClose, onToggle }) {
-  const { currentRole, currentUser } = useERP();
+  const { currentRole, currentUser, attendanceRequests, leaveRequests, attendanceQueries } = useERP();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const isAppointedTg = Boolean(
     currentUser?.isTG ||
@@ -34,11 +37,24 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
     (currentUser?.designation || '').toLowerCase().includes('(tg)')
   );
 
-  const displayName = (!currentUser?.name || currentUser?.name.toLowerCase() === 'hod' || currentUser?.name.includes('Alok Verma'))
-    ? (currentRole === 'hod' ? 'HOD CSE' : 'Authorized User')
-    : currentUser.name;
+  const isTgMode = location.pathname.startsWith('/tg') || (currentRole === 'tg' && !location.pathname.startsWith('/teacher'));
+  const tgPendingCount = (attendanceRequests?.length || 0) + (leaveRequests?.length || 0) + (attendanceQueries?.length || 0);
+
+  const displayName = currentUser?.name || (currentRole === 'hod' ? 'HOD CSE' : (isTgMode ? 'Mentor' : 'Authorized User'));
 
   const getNavLinks = () => {
+    if (isTgMode) {
+      return [
+        { to: '/tg', label: 'Dashboard', icon: <Home size={19} /> },
+        { to: '/ai-workspace', label: 'AI Workspace', icon: <Bot size={19} /> },
+        { to: '/tg/students', label: 'My Mentees', icon: <Users size={19} /> },
+        { to: '/teacher/attendance', label: 'Attendance', icon: <CheckSquare size={19} /> },
+        { to: '/tg/requests', label: 'Requests', icon: <FileText size={19} />, badge: tgPendingCount > 0 ? String(tgPendingCount) : '4' },
+        { to: '/tg/notices', label: 'Notices', icon: <Megaphone size={19} /> },
+        { to: '/teacher', label: 'Teaching Classes', icon: <GraduationCap size={19} /> }
+      ];
+    }
+
     switch (currentRole) {
       case 'admin':
         return [
@@ -67,17 +83,18 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
         ];
       case 'tg':
         return [
-          { to: '/tg', label: 'TG Dashboard', icon: <LayoutDashboard size={19} /> },
+          { to: '/tg', label: 'TG Dashboard', icon: <LayoutDashboard size={19} />, badge: 'TG' },
           { to: '/ai-workspace', label: 'AI Workspace', icon: <Bot size={19} />, badge: 'Agent' },
           { to: '/tg/students', label: 'Mentee Students', icon: <Users size={19} /> },
-          { to: '/tg/attendance', label: 'Attendance', icon: <CheckSquare size={19} /> },
-          { to: '/tg/requests', label: 'Requests', icon: <FileText size={19} />, badge: 'Review' },
-          { to: '/tg/notices', label: 'Notices', icon: <Megaphone size={19} /> },
-          { to: '/teacher', label: 'Teaching Classes', icon: <BookOpen size={19} />, badge: 'Faculty' }
+          { to: '/tg/requests', label: 'Mentor Requests', icon: <FileText size={19} />, badge: 'Review' },
+          { to: '/tg/notices', label: 'Mentor Notices', icon: <Megaphone size={19} /> },
+          { to: '/teacher', label: 'Faculty Dashboard', icon: <BookOpen size={19} /> }
         ];
       case 'teacher':
+        {
         const teacherLinks = [
           { to: '/teacher', label: 'Dashboard', icon: <LayoutDashboard size={19} /> },
+          ...(isAppointedTg ? [{ to: '/tg', label: 'TG Portal', icon: <GraduationCap size={19} />, badge: 'TG' }] : []),
           { to: '/ai-workspace', label: 'AI Workspace', icon: <Bot size={19} />, badge: 'Agent' },
           { to: '/teacher/attendance', label: 'Attendance', icon: <CheckSquare size={19} />, badge: 'Live' },
           { to: '/teacher/lectures', label: 'Lectures', icon: <Clock size={19} /> },
@@ -86,10 +103,8 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
           { to: '/teacher/students', label: 'Students', icon: <Users size={19} /> },
           { to: '/teacher/notices', label: 'Notices', icon: <Megaphone size={19} /> }
         ];
-        if (isAppointedTg) {
-          teacherLinks.push({ to: '/tg', label: 'TG Mentorship Portal', icon: <Sparkles size={19} />, badge: 'TG' });
-        }
         return teacherLinks;
+        }
       case 'student':
       default:
         return [
@@ -193,36 +208,25 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
               />
             </div>
             <div style={{ minWidth: 0 }}>
-              <h2 style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
-                OIST CSE
+              <h2 style={{ fontSize: '15px', fontWeight: 800, color: isTgMode ? '#2563eb' : 'var(--text-primary)', lineHeight: 1.1, whiteSpace: 'nowrap' }}>
+                {isTgMode ? 'CampusFlow' : 'OIST CSE'}
               </h2>
               <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
-                Oriental Institute
+                {isTgMode ? 'COLLEGE ERP' : 'Oriental Institute'}
               </span>
             </div>
           </div>
 
-          {/* Slide-Close Button */}
+          {/* Sidebar Toggle Button matching header button type & style */}
           <button
-            onClick={onClose}
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: 'var(--radius-lg)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'var(--text-secondary)',
-              backgroundColor: 'var(--surface-low)',
-              border: '1px solid var(--border-subtle)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease'
-            }}
-            className="hover:bg-surface-high"
-            title="Slide sidebar closed"
-            aria-label="Slide sidebar closed"
+            type="button"
+            onClick={onToggle || onClose}
+            className="tg-sidebar-toggle-btn"
+            title="Toggle Navigation Menu"
+            aria-label="Toggle Navigation Menu"
+            id="sidebar-toggle-btn"
           >
-            <PanelLeftClose size={17} />
+            <Menu size={18} />
           </button>
         </div>
 
@@ -247,7 +251,7 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
               letterSpacing: '0.05em'
             }}
           >
-            {currentRole} portal
+            {isTgMode ? 'TG PORTAL' : `${currentRole} portal`}
           </div>
 
           {navLinks.map((link) => (
@@ -281,7 +285,7 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
           ))}
         </nav>
 
-        {/* Sidebar Footer User Info (Replaces duplicate logout with authenticated display name) */}
+        {/* Sidebar Footer User Info */}
         <div
           style={{
             padding: '0.75rem 0.85rem',
@@ -293,36 +297,74 @@ export default function Sidebar({ isOpen, onClose, onToggle }) {
             gap: '0.65rem'
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
-            <div
-              style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '50%',
-                backgroundColor: 'var(--primary-100)',
-                color: 'var(--primary-700)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 700,
-                fontSize: '12px',
-                flexShrink: 0
-              }}
-            >
-              {displayName.charAt(0)}
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {displayName}
+          {isTgMode ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: '#2563eb',
+                    color: '#ffffff',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 800,
+                    fontSize: '12px',
+                    flexShrink: 0
+                  }}
+                >
+                  {(displayName || 'TG').split(' ').filter(Boolean).map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {displayName}
+                  </div>
+                  <div style={{ fontSize: '10px', fontWeight: 600, color: '#2563eb', whiteSpace: 'nowrap' }}>
+                    TG Role
+                  </div>
+                  <div style={{ fontSize: '9px', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {currentUser?.assignedSection || 'CSE · 5th Sem · Section A'}
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
-                {currentUser?.designation || `${currentRole} role`}
-              </div>
+              <ChevronsUpDown size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
             </div>
-          </div>
-          <Badge variant="primary" size="xs">
-            {currentRole?.toUpperCase()}
-          </Badge>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0 }}>
+                <div
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--primary-100)',
+                    color: 'var(--primary-700)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 700,
+                    fontSize: '12px',
+                    flexShrink: 0
+                  }}
+                >
+                  {displayName.charAt(0)}
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {displayName}
+                  </div>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>
+                    {currentUser?.designation || `${currentRole} role`}
+                  </div>
+                </div>
+              </div>
+              <Badge variant="primary" size="xs">
+                {currentRole?.toUpperCase()}
+              </Badge>
+            </>
+          )}
         </div>
       </aside>
     </>

@@ -84,7 +84,7 @@ export default function DashboardLayout() {
         <main style={{ flex: 1, minWidth: 0, width: '100%', overflowX: 'hidden' }}>
           {/* Animated Page Shift Container when any menu item or route is selected */}
           <div key={location.pathname} className="page-shift-container">
-            <Outlet />
+            <Outlet context={{ isSidebarOpen, onToggleSidebar: handleToggleSidebar }} />
           </div>
         </main>
       </div>

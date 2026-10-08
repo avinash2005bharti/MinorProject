@@ -1,21 +1,49 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useERP } from '../../context/ERPContext';
+import { dashboardApi } from '../../api/dashboardApi';
 import { Users, Search, AlertTriangle, CheckCircle2, ChevronRight, ShieldCheck, Mail } from 'lucide-react';
 
 export default function TgMyStudents() {
-  const { students, currentUser, openModal } = useERP();
+  const { currentUser, openModal } = useERP();
+  const [students, setStudents] = useState([]);
+  const [assignedSection, setAssignedSection] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('all');
+
+  useEffect(() => {
+    let isMounted = true;
+    dashboardApi.getTgDashboard()
+      .then((res) => {
+        if (!isMounted) return;
+        setStudents(res?.data?.mentees || []);
+        setAssignedSection(res?.data?.mentor?.assignedSection || 'Section unassigned');
+      })
+      .catch((err) => {
+        if (isMounted) setError(err.message || 'Unable to load your assigned mentees.');
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filteredStudents = students.filter((st) => {
     const studentName = (st.name || '').toLowerCase();
     const roll = (st.rollNo || st.enrollment_no || '').toLowerCase();
     const q = search.toLowerCase();
-    const matchesSearch = studentName.includes(q) || roll.includes(q);
+    const matchesSearch = studentName.includes(q) || roll.includes(q) || (st.academicStatus || '').toLowerCase().includes(q) || (st.issue || '').toLowerCase().includes(q);
 
-    const att = st.attendance !== undefined ? st.attendance : 80;
-    if (filter === 'at-risk') return matchesSearch && att < 75;
-    if (filter === 'safe') return matchesSearch && att >= 75;
+    const att = st.attendanceRate !== undefined && st.attendanceRate !== null ? st.attendanceRate : (st.attendance !== undefined ? st.attendance : 80);
+    const health = st.healthStatus || (att < 60 ? 'AT_RISK' : att < 75 ? 'NEEDS_ATTENTION' : 'GOOD');
+
+    if (filter === 'at-risk') return matchesSearch && health === 'AT_RISK';
+    if (filter === 'needs-attention') return matchesSearch && health === 'NEEDS_ATTENTION';
+    if (filter === 'good') return matchesSearch && health === 'GOOD';
     return matchesSearch;
   });
 
@@ -26,10 +54,10 @@ export default function TgMyStudents() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem' }}>
           <div>
             <h1 style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)' }}>
-              My Mentees (Section {currentUser?.assignedSection || currentUser?.section || 'CSE'})
+              My Mentees ({assignedSection || currentUser?.assignedSection || 'Section unassigned'})
             </h1>
             <p style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-              Teacher Guardian supervision • {students.length} enrolled students
+              Teacher Guardian supervision • {students.length} assigned mentees in this cohort
             </p>
           </div>
 
@@ -45,7 +73,7 @@ export default function TgMyStudents() {
             <Search size={18} color="var(--text-muted)" />
             <input
               type="text"
-              placeholder="Search by student name or roll number..."
+              placeholder="Search by student name, roll number, issue, or academic standing..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input-field"
@@ -53,11 +81,12 @@ export default function TgMyStudents() {
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '0.35rem' }}>
+          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
             {[
               { id: 'all', label: 'All Students' },
-              { id: 'at-risk', label: 'Shortage (<75%)' },
-              { id: 'safe', label: 'Safe (≥75%)' }
+              { id: 'at-risk', label: 'At Risk (<60%)' },
+              { id: 'needs-attention', label: 'Needs Attention (60-74%)' },
+              { id: 'good', label: 'Good Standing (≥75%)' }
             ].map((f) => (
               <button
                 key={f.id}
@@ -77,8 +106,12 @@ export default function TgMyStudents() {
           </div>
         </div>
 
-        {/* Students Table / Cards Grid */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+        {error && <div className="card text-sm text-danger-700">{error}</div>}
+
+        {loading && <div className="card text-center text-slate-500">Loading your assigned mentees…</div>}
+
+        {!loading && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
           {filteredStudents.length === 0 ? (
             <div className="card text-center" style={{ padding: '2.5rem', color: 'var(--text-secondary)' }}>
               <Users size={36} style={{ margin: '0 auto 0.75rem', opacity: 0.4 }} />
@@ -135,7 +168,7 @@ export default function TgMyStudents() {
                         )}
                       </div>
                       <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        Enrollment: {roll} • Semester: {st.semester || 5} • Section: {typeof st.section === 'object' && st.section !== null ? (st.section.name || 'A') : (st.section || 'A')}
+                        Enrollment: {roll} • Semester: {st.semester || '—'} • Section: {typeof st.section === 'object' && st.section !== null ? (st.section.name || 'Unassigned') : (st.section || 'Unassigned')}
                       </span>
                     </div>
                   </div>
@@ -172,7 +205,8 @@ export default function TgMyStudents() {
               );
             })
           )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

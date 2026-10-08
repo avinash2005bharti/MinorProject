@@ -11,9 +11,19 @@ const imageKitService = require('../services/imageKitService');
 
 exports.getNotices = async (req, res, next) => {
   try {
+    const role = (req.user?.role || req.user?.roleName || '').toUpperCase();
+    const audienceRoles = role === 'TG'
+      ? ['TEACHER', 'FACULTY', 'TG', 'ALL']
+      : role === 'TEACHER' || role === 'FACULTY'
+        ? ['TEACHER', 'FACULTY', 'ALL']
+        : [role, 'ALL'];
     const notices = await prisma.notification.findMany({
       where: {
-        type: { in: ['NOTICE', 'INFO', 'ALERT'] }
+        type: { in: ['NOTICE', 'INFO', 'ALERT'] },
+        AND: [
+          { recipientRole: { in: audienceRoles } },
+          { OR: [{ userId: null }, { userId: req.user.id }] }
+        ]
       },
       orderBy: { createdAt: 'desc' },
       take: 50
@@ -151,6 +161,24 @@ exports.createNotice = async (req, res, next) => {
 exports.markRead = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const role = (req.user?.role || req.user?.roleName || '').toUpperCase();
+    const audienceRoles = role === 'TG'
+      ? ['TEACHER', 'FACULTY', 'TG', 'ALL']
+      : role === 'TEACHER' || role === 'FACULTY'
+        ? ['TEACHER', 'FACULTY', 'ALL']
+        : [role, 'ALL'];
+    const existing = await prisma.notification.findFirst({
+      where: {
+        id,
+        AND: [
+          { OR: [{ recipientRole: { in: audienceRoles } }, { userId: req.user.id }] },
+          { OR: [{ userId: null }, { userId: req.user.id }] }
+        ]
+      }
+    });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Notice not found.' });
+    }
     const notice = await prisma.notification.update({
       where: { id },
       data: { isRead: true }
@@ -164,6 +192,24 @@ exports.markRead = async (req, res, next) => {
 exports.markUnread = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const role = (req.user?.role || req.user?.roleName || '').toUpperCase();
+    const audienceRoles = role === 'TG'
+      ? ['TEACHER', 'FACULTY', 'TG', 'ALL']
+      : role === 'TEACHER' || role === 'FACULTY'
+        ? ['TEACHER', 'FACULTY', 'ALL']
+        : [role, 'ALL'];
+    const existing = await prisma.notification.findFirst({
+      where: {
+        id,
+        AND: [
+          { OR: [{ recipientRole: { in: audienceRoles } }, { userId: req.user.id }] },
+          { OR: [{ userId: null }, { userId: req.user.id }] }
+        ]
+      }
+    });
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Notice not found.' });
+    }
     const notice = await prisma.notification.update({
       where: { id },
       data: { isRead: false }

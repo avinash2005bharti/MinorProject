@@ -14,8 +14,8 @@ export const dashboardApi = {
     return apiClient.get('/dashboard/teacher');
   },
 
-  getTgDashboard() {
-    return apiClient.get('/dashboard/tg');
+  getTgDashboard(params = {}) {
+    return apiClient.get('/dashboard/tg', { params });
   },
 
   getHodDashboard() {

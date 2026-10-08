@@ -24,6 +24,28 @@ exports.getStudents = async (req, res) => {
       where.section = { name: section.toUpperCase() };
     }
 
+    // Role-based scoping: If user is TG (and not ADMIN or HOD), strictly scope to their assigned mentees
+    const isExplicitTgRole = (req.user?.role || '').toUpperCase() === 'TG';
+    const isMentorOnly = req.query.mentorOnly === 'true' || isExplicitTgRole;
+    if (isMentorOnly && !['ADMIN', 'HOD'].includes((req.user?.role || '').toUpperCase())) {
+      let teacherId = req.user?.teacherId;
+      if (!teacherId && req.user?.id) {
+        const tc = await prisma.teacher.findUnique({ where: { userId: req.user.id } });
+        if (tc) teacherId = tc.id;
+      }
+      if (teacherId) {
+        where.AND = [
+          ...(where.AND || []),
+          {
+            OR: [
+              { tgTeacherId: teacherId },
+              { section: { tgTeacherId: teacherId } }
+            ]
+          }
+        ];
+      }
+    }
+
     if (search) {
       where.OR = [
         { firstName: { contains: search, mode: 'insensitive' } },
@@ -100,10 +122,26 @@ exports.getStudentById = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Student record not found in ERP database.' });
     }
 
+    // Role-based authorization: If user is TG and not ADMIN/HOD, ensure student belongs to this TG
+    if ((req.user?.role || '').toUpperCase() === 'TG' && !['ADMIN', 'HOD'].includes((req.user?.role || '').toUpperCase())) {
+      let teacherId = req.user?.teacherId;
+      if (!teacherId && req.user?.id) {
+        const tc = await prisma.teacher.findUnique({ where: { userId: req.user.id } });
+        if (tc) teacherId = tc.id;
+      }
+      const isAssigned = student.tgTeacherId === teacherId || student.section?.tgTeacherId === teacherId;
+      if (!isAssigned) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied: This student is not assigned to your mentorship cohort.'
+        });
+      }
+    }
+
     // Compute student attendance stats
     const totalRecords = await prisma.attendanceRecord.count({ where: { studentId: student.id } });
     const presentRecords = await prisma.attendanceRecord.count({
-      where: { studentId: student.id, status: { in: ['PRESENT', 'Present'] } }
+      where: { studentId: student.id, status: { in: ['PRESENT', 'Present', 'LATE', 'Late'] } }
     });
     const attendancePct = totalRecords > 0 ? Math.round((presentRecords / totalRecords) * 100) : 0;
 

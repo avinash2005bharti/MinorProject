@@ -14,8 +14,8 @@ function validateEnv() {
     if (isProd) {
       errors.push('CRITICAL: JWT_SECRET environment variable is missing in production environment.');
     } else {
-      process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
-      console.warn('[SECURITY WARNING] JWT_SECRET is not set. Generated ephemeral random secret for development.');
+      process.env.JWT_SECRET = 'dev_jwt_secret_change_me';
+      console.warn('[SECURITY WARNING] JWT_SECRET is not set. Using a deterministic development secret to avoid rotating sessions on restart.');
     }
   }
 

@@ -10,7 +10,8 @@ const { logger } = require('../services/loggerService');
 // Format teacher record helper
 const formatTeacher = (t) => {
   const isHod = (t.hodAssignments && t.hodAssignments.length > 0) || (t.user?.role?.name === 'HOD');
-  const isTg = t.isTG || (t.user?.role?.name === 'TG');
+  const isTg = t.isTG || (t.user?.role?.name === 'TG') || Boolean(t.tgSections?.length);
+  const assignedSection = t.tgSections?.[0];
   const name = `${t.firstName} ${t.lastName || ''}`.trim();
 
   return {
@@ -19,7 +20,12 @@ const formatTeacher = (t) => {
     isTG: isTg,
     isTg,
     isHOD: isHod,
-    role: isTg ? 'tg' : (isHod ? 'hod' : 'teacher'),
+    role: isHod ? 'hod' : 'teacher',
+    tgSection: assignedSection
+      ? `Semester ${assignedSection.semester?.semesterNumber || '—'} • Section ${assignedSection.name}`
+      : null,
+    tgSectionId: assignedSection?.id || null,
+    tgSemester: assignedSection?.semester?.semesterNumber || null,
     departmentName: t.department?.name || 'Computer Science & Engineering',
     departmentCode: t.department?.code || 'CSE'
   };
@@ -47,7 +53,8 @@ exports.getFaculty = async (req, res) => {
       include: {
         department: true,
         user: { select: { id: true, email: true, role: true } },
-        hodAssignments: { where: { isCurrent: true } }
+        hodAssignments: { where: { isCurrent: true } },
+        tgSections: { include: { semester: true }, orderBy: { name: 'asc' } }
       },
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }]
     });
@@ -83,6 +90,7 @@ exports.getFacultyById = async (req, res) => {
         department: true,
         user: { select: { id: true, email: true, role: true } },
         hodAssignments: { where: { isCurrent: true } },
+        tgSections: { include: { semester: true }, orderBy: { name: 'asc' } },
         teacherSubjects: { include: { subject: true, section: true } }
       }
     });
@@ -290,7 +298,7 @@ exports.updateFaculty = async (req, res) => {
 exports.appointTg = async (req, res) => {
   try {
     const { id } = req.params;
-    const { section, sectionName, academicYear } = req.body;
+    const { sectionId, section, sectionName, academicYear } = req.body;
 
     const teacher = await prisma.teacher.findUnique({
       where: { id },
@@ -301,53 +309,114 @@ exports.appointTg = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Teacher record not found.' });
     }
 
-    const updated = await prisma.teacher.update({
-      where: { id },
-      data: { isTG: true },
-      include: { department: true }
-    });
-
-    // Update user role if user is linked
-    if (teacher.userId) {
-      const tgRole = await prisma.role.findUnique({ where: { name: 'TG' } });
-      if (tgRole) {
-        await prisma.user.update({
-          where: { id: teacher.userId },
-          data: { roleId: tgRole.id }
-        });
-      }
-    }
-
-    // Link TG to Section & its students
     const targetSectionName = (section || sectionName || '').trim().toUpperCase();
-    if (targetSectionName) {
-      const sec = await prisma.section.findFirst({
-        where: {
+    const targetSections = sectionId
+      ? [await prisma.section.findFirst({
+          where: { id: sectionId, departmentId: teacher.departmentId },
+          include: { semester: true }
+        })].filter(Boolean)
+      : await prisma.section.findMany({
+          where: {
           departmentId: teacher.departmentId,
           name: targetSectionName
-        }
-      });
-
-      if (sec) {
-        await prisma.section.update({
-          where: { id: sec.id },
-          data: { tgTeacherId: id }
+          },
+          include: { semester: true }
         });
 
-        // Update all students in that section
-        await prisma.student.updateMany({
-          where: { sectionId: sec.id },
-          data: { tgTeacherId: id }
+    if (!targetSectionName && !sectionId) {
+      return res.status(400).json({ success: false, message: 'A semester-specific section is required.' });
+    }
+    if (targetSections.length === 0) {
+      return res.status(404).json({ success: false, message: 'The selected section was not found in this faculty member’s department.' });
+    }
+    if (targetSections.length > 1) {
+      return res.status(400).json({
+        success: false,
+        message: 'Multiple sections share that name. Select a semester-specific section and retry.'
+      });
+    }
+
+    const targetSection = targetSections[0];
+    if (targetSectionName && targetSection.name.toUpperCase() !== targetSectionName) {
+      return res.status(400).json({ success: false, message: 'The selected section ID does not match the section name.' });
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const previousSections = await tx.section.findMany({
+        where: { tgTeacherId: id, id: { not: targetSection.id } },
+        select: { id: true }
+      });
+      const previousSectionIds = previousSections.map((assigned) => assigned.id);
+
+      if (previousSectionIds.length > 0) {
+        await tx.section.updateMany({
+          where: { id: { in: previousSectionIds }, tgTeacherId: id },
+          data: { tgTeacherId: null }
+        });
+        await tx.student.updateMany({
+          where: { sectionId: { in: previousSectionIds }, tgTeacherId: id },
+          data: { tgTeacherId: null }
         });
       }
-    }
+
+      await tx.section.update({
+        where: { id: targetSection.id },
+        data: { tgTeacherId: id }
+      });
+      await tx.student.updateMany({
+        where: { sectionId: targetSection.id },
+        data: { tgTeacherId: id }
+      });
+      await tx.teacher.update({
+        where: { id },
+        data: { isTG: true }
+      });
+
+      if (teacher.userId) {
+        const tgRole = await tx.role.findFirst({ where: { name: { equals: 'TG', mode: 'insensitive' } } });
+        if (tgRole) {
+          await tx.user.update({
+            where: { id: teacher.userId },
+            data: { roleId: tgRole.id }
+          });
+        }
+      }
+
+      const groupName = `TG Group - Semester ${targetSection.semester?.semesterNumber || '—'} Section ${targetSection.name} (${teacher.firstName} ${teacher.lastName || ''})`;
+      const existingGroup = await tx.mentorGroup.findFirst({ where: { teacherId: id } });
+      if (existingGroup) {
+        await tx.mentorGroup.update({
+          where: { id: existingGroup.id },
+          data: { name: groupName, academicYear: academicYear || targetSection.academicYear }
+        });
+      } else {
+        await tx.mentorGroup.create({
+          data: {
+            teacherId: id,
+            name: groupName,
+            departmentId: teacher.departmentId,
+            academicYear: academicYear || targetSection.academicYear
+          }
+        });
+      }
+
+      return tx.teacher.findUnique({
+        where: { id },
+        include: {
+          department: true,
+          user: { select: { id: true, email: true, role: true } },
+          hodAssignments: { where: { isCurrent: true } },
+          tgSections: { include: { semester: true }, orderBy: { name: 'asc' } }
+        }
+      });
+    });
 
     const { invalidateAuthUser } = require('../middleware/auth');
     if (updated?.userId) invalidateAuthUser(updated.userId);
 
     return res.status(200).json({
       success: true,
-      message: `Teacher appointed as Tutor Guardian (TG)${targetSectionName ? ` for Section ${targetSectionName}` : ''}.`,
+      message: `Teacher appointed as Tutor Guardian (TG) for Semester ${targetSection.semester?.semesterNumber || '—'}, Section ${targetSection.name}.`,
       faculty: formatTeacher(updated)
     });
   } catch (error) {

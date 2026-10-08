@@ -48,7 +48,7 @@ const resolveAuthUser = async (userId) => {
 
   const baseRole = String(user.role?.name || '').toUpperCase();
   const isHod = (user.teacherProfile?.hodAssignments && user.teacherProfile.hodAssignments.length > 0) || baseRole === 'HOD';
-  const isTg = Boolean(user.teacherProfile?.isTG) || baseRole === 'TG';
+  const isTg = Boolean(user.teacherProfile?.isTG);
 
   let effectiveRole = ['FACULTY', 'PROFESSOR'].includes(baseRole) ? 'TEACHER' : baseRole;
   if (isHod) effectiveRole = 'HOD';

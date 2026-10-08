@@ -1,0 +1,1668 @@
+/* ==========================================================================
+   CampusFlow – TG (Tutor Guardian) Dashboard Enterprise Stylesheet
+   SaaS College ERP Aesthetic matching reference design
+   Tightened gapping, harmonious cards, responsive grid
+   ========================================================================== */
+
+.tg-dashboard-wrapper {
+  background-color: #f8fafc;
+  min-height: 100vh;
+  padding: 0.75rem 1.25rem 3.5rem;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #0f172a;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.tg-dashboard-container {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem; /* Tight, compact gap matching SaaS dashboard */
+}
+
+/* --------------------------------------------------------------------------
+   1. PAGE HEADER (OIST CSE Branding Header per Reference Image)
+   -------------------------------------------------------------------------- */
+.tg-page-header {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 0.55rem 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.tg-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+/* Toggle button styled identically to system header */
+.tg-sidebar-toggle-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.tg-sidebar-toggle-btn:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.tg-brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  user-select: none;
+}
+
+.tg-brand-logo-box {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  flex-shrink: 0;
+}
+
+.tg-brand-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.tg-brand-titles {
+  display: flex;
+  flex-direction: column;
+}
+
+.tg-brand-main-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.tg-brand-sub-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #2563eb;
+  line-height: 1.1;
+}
+
+.tg-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.tg-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.tg-icon-btn:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.tg-header-badge-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background-color: #ef4444;
+  border: 1.5px solid #ffffff;
+}
+
+.tg-user-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 3px 10px 3px 4px;
+  border-radius: 9999px;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.tg-user-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background-color: #dbeafe;
+  color: #1d4ed8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.tg-user-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.tg-logout-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid #fecdd3;
+  background-color: #fff1f2;
+  color: #e11d48;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tg-logout-btn:hover {
+  background-color: #ffe4e6;
+  border-color: #fda4af;
+  color: #be123c;
+  transform: translateY(-1px);
+}
+
+/* --------------------------------------------------------------------------
+   2. WELCOME & COHORT CONTEXT BAR
+   -------------------------------------------------------------------------- */
+.tg-welcome-row {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.tg-welcome-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 0.85rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  box-sizing: border-box;
+  height: 100%;
+}
+
+.tg-welcome-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.tg-welcome-icon-box {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background-color: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tg-welcome-greeting {
+  font-size: 16.5px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 2px 0;
+  line-height: 1.2;
+}
+
+.tg-welcome-subtext {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.tg-cohort-dropdowns {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.tg-select-pill {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tg-select-pill:hover {
+  border-color: #94a3b8;
+  background-color: #f8fafc;
+}
+
+.tg-mentees-summary-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 0.85rem 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  box-sizing: border-box;
+  height: 100%;
+}
+
+.tg-mentees-summary-number {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.tg-mentees-summary-label {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   3. 5 KPI CARDS ROW
+   -------------------------------------------------------------------------- */
+.tg-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.75rem;
+}
+
+.tg-kpi-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 0.9rem 1.05rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tg-kpi-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(15, 23, 42, 0.05);
+}
+
+.tg-kpi-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+
+.tg-kpi-icon-blue { background-color: #eff6ff; color: #2563eb; }
+.tg-kpi-icon-green { background-color: #ecfdf5; color: #10b981; }
+.tg-kpi-icon-purple { background-color: #f3e8ff; color: #8b5cf6; }
+.tg-kpi-icon-amber { background-color: #fffbeb; color: #f59e0b; }
+.tg-kpi-icon-rose { background-color: #ffe4e6; color: #f43f5e; }
+
+.tg-kpi-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.tg-kpi-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.15;
+  margin: 2px 0 4px;
+}
+
+.tg-kpi-subtext {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.tg-trend-green {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+/* Clickable KPI cards */
+.tg-kpi-clickable {
+  cursor: pointer;
+  position: relative;
+  transition: all 0.15s ease;
+}
+
+.tg-kpi-clickable:hover {
+  transform: translateY(-2px);
+  border-color: #93c5fd;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.08);
+}
+
+.tg-kpi-clickable:active {
+  transform: translateY(0);
+}
+
+/* Quick Actions Replacement Card in 5 KPI Grid (replacing academic average) */
+.tg-quick-actions-card {
+  padding: 0.7rem 0.8rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #ffffff;
+}
+
+.tg-quick-actions-header {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
+
+.tg-quick-actions-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tg-qa-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.tg-qa-btn-blue {
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.tg-qa-btn-blue:hover {
+  background-color: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+
+.tg-qa-btn-purple {
+  background-color: #f5f3ff;
+  border-color: #ddd6fe;
+  color: #6d28d9;
+}
+.tg-qa-btn-purple:hover {
+  background-color: #ede9fe;
+  border-color: #c4b5fd;
+  color: #5b21b6;
+}
+
+.tg-qa-btn-amber {
+  background-color: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+.tg-qa-btn-amber:hover {
+  background-color: #fef3c7;
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+.tg-qa-badge {
+  background-color: #f59e0b;
+  color: #ffffff;
+  border-radius: 9999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 1px 5px;
+  line-height: 1.1;
+}
+
+/* "Mark on Leave" Toggle Switch in Welcome Card */
+.tg-leave-toggle-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.tg-leave-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px 4px 5px;
+  border-radius: 9999px;
+  border: 1px solid #cbd5e1;
+  background-color: #f8fafc;
+  color: #334155;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.tg-leave-toggle-btn.active-duty:hover {
+  border-color: #94a3b8;
+  background-color: #f1f5f9;
+}
+
+.tg-leave-toggle-btn.on-leave {
+  background-color: #fff1f2;
+  border-color: #fecdd3;
+  color: #e11d48;
+}
+
+.tg-leave-switch-handle {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tg-leave-switch-handle.handle-active {
+  background-color: #10b981;
+}
+
+.tg-leave-switch-handle.handle-leave {
+  background-color: #ef4444;
+}
+
+.tg-leave-toggle-label {
+  white-space: nowrap;
+}
+
+/* Toast message for quick status feedback */
+.tg-status-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background-color: #0f172a;
+  color: #ffffff;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.2);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* --------------------------------------------------------------------------
+   4. MIDDLE ROW (Health, Schedule, Notice Board)
+   -------------------------------------------------------------------------- */
+.tg-middle-grid {
+  display: grid;
+  grid-template-columns: 4.8fr 4.2fr 3fr;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.tg-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1.05rem 1.25rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  display: flex;
+  flex-direction: column;
+}
+
+.tg-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.tg-card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tg-card-title {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.tg-card-link {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #2563eb;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.tg-card-link:hover {
+  text-decoration: underline;
+  color: #1d4ed8;
+}
+
+.tg-card-subtitle {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0 0 0.85rem;
+}
+
+/* Health Section Inner Layout */
+.tg-health-inner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: center;
+  margin-top: auto;
+  margin-bottom: auto;
+}
+
+.tg-health-stats-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.tg-health-stat-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.75rem;
+  background-color: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+}
+
+.tg-health-stat-left {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.tg-health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tg-health-dot-green { background-color: #22c55e; }
+.tg-health-dot-yellow { background-color: #f59e0b; }
+.tg-health-dot-red { background-color: #f43f5e; }
+
+.tg-health-stat-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.tg-health-stat-count {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.tg-health-stat-pct {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.tg-donut-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.tg-donut-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #475569;
+  margin: 0 0 0.4rem;
+}
+
+.tg-donut-body {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tg-donut-chart-container {
+  position: relative;
+  width: 105px;
+  height: 105px;
+  flex-shrink: 0;
+}
+
+.tg-donut-center-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.tg-donut-center-value {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.tg-donut-center-label {
+  font-size: 8.5px;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.tg-donut-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 10.5px;
+}
+
+.tg-donut-legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.tg-donut-legend-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.tg-donut-legend-count {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* Schedule List */
+.tg-schedule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 1;
+}
+
+.tg-schedule-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.75rem;
+  background-color: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+}
+
+.tg-schedule-time {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #475569;
+  min-width: 86px;
+}
+
+.tg-schedule-details {
+  flex: 1;
+  padding: 0 0.45rem;
+}
+
+.tg-schedule-subject {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.tg-schedule-room {
+  font-size: 10.5px;
+  color: #64748b;
+}
+
+.tg-badge-lecture {
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.tg-badge-lab {
+  background-color: #f5f3ff;
+  color: #7c3aed;
+  border: 1px solid #ddd6fe;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.tg-schedule-attendance-banner {
+  background-color: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+  padding: 0.55rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.65rem;
+}
+
+.tg-schedule-att-left {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.tg-att-check-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: #10b981;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tg-att-banner-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #065f46;
+}
+
+.tg-att-banner-right {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.tg-att-banner-pct {
+  font-size: 15px;
+  font-weight: 800;
+  color: #064e3b;
+}
+
+.tg-att-banner-diff {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #059669;
+}
+
+/* Notice Board */
+.tg-notice-tabs {
+  display: flex;
+  gap: 5px;
+  margin: 0.15rem 0 0.75rem;
+}
+
+.tg-notice-tab {
+  background-color: #f1f5f9;
+  color: #64748b;
+  border: none;
+  border-radius: 9999px;
+  padding: 3px 11px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tg-notice-tab.active {
+  background-color: #2563eb;
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.tg-notice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  flex: 1;
+}
+
+.tg-notice-item {
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background-color: #f8fafc;
+  border: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tg-notice-item:hover {
+  background-color: #eff6ff;
+  border-color: #dbeafe;
+}
+
+.tg-notice-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.tg-notice-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.tg-notice-bullet {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background-color: #2563eb;
+  flex-shrink: 0;
+  position: relative;
+  top: -1px;
+}
+
+.tg-notice-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.25;
+}
+
+.tg-notice-date {
+  font-size: 10.5px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.tg-notice-snippet {
+  font-size: 10.5px;
+  color: #64748b;
+  margin: 2px 0 0 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   5. BOTTOM ROW (Students Table & Right Cards)
+   -------------------------------------------------------------------------- */
+.tg-bottom-grid {
+  display: grid;
+  grid-template-columns: 8fr 4fr;
+  gap: 0.75rem;
+}
+
+.tg-table-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1.05rem 1.25rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  display: flex;
+  flex-direction: column;
+}
+
+.tg-table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 0.25rem;
+}
+
+.tg-students-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  text-align: left;
+}
+
+.tg-students-table th {
+  padding: 8px 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.05em;
+  background-color: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.tg-students-table td {
+  padding: 10px 10px;
+  vertical-align: middle;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.tg-students-table tr:hover td {
+  background-color: #f8fafc;
+}
+
+.tg-student-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tg-student-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: #4f46e5;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tg-student-name {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.tg-roll-no {
+  font-family: monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.tg-badge-att-good {
+  background-color: #dcfce7;
+  color: #15803d;
+  border: 1px solid #86efac;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-block;
+}
+
+.tg-badge-att-warn {
+  background-color: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-block;
+}
+
+.tg-badge-att-danger {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-block;
+}
+
+.tg-badge-risk-red {
+  background-color: #fee2e2;
+  color: #b91c1c;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-block;
+}
+
+.tg-badge-risk-yellow {
+  background-color: #fef3c7;
+  color: #b45309;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: inline-block;
+}
+
+.tg-issue-text {
+  font-size: 11.5px;
+  color: #475569;
+  font-weight: 500;
+}
+
+.tg-time-text {
+  font-size: 11.5px;
+  color: #64748b;
+}
+
+.tg-action-btn-blue {
+  background-color: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 4px 13px;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.tg-action-btn-blue:hover {
+  background-color: #1d4ed8;
+}
+
+/* Right Stacked Column */
+.tg-right-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+}
+
+.tg-right-stack .tg-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.tg-pending-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  background-color: #f8fafc;
+  border: 1px solid #f1f5f9;
+  margin-bottom: 0.45rem;
+}
+
+.tg-pending-left {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.tg-pending-icon-box {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tg-pending-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.15;
+}
+
+.tg-pending-subtitle {
+  font-size: 10.5px;
+  color: #64748b;
+}
+
+.tg-pending-right {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.tg-pending-badge {
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  font-size: 10.5px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tg-pending-badge-orange { background-color: #ffedd5; color: #ea580c; }
+.tg-pending-badge-green { background-color: #dcfce7; color: #16a34a; }
+.tg-pending-badge-purple { background-color: #f3e8ff; color: #9333ea; }
+
+.tg-review-btn {
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+  border-radius: 7px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tg-review-btn:hover {
+  background-color: #2563eb;
+  color: #ffffff;
+}
+
+/* Activity Items */
+.tg-activity-group {
+  margin-bottom: 0.65rem;
+}
+
+.tg-activity-group-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.tg-activity-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  padding: 0.25rem 0;
+  font-size: 11.5px;
+}
+
+.tg-activity-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #334155;
+  font-weight: 500;
+}
+
+.tg-activity-time {
+  font-size: 10.5px;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   6. FLOATING AI ASSISTANT
+   -------------------------------------------------------------------------- */
+.tg-floating-ai-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  z-index: 100;
+}
+
+.tg-floating-ai-pill {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9999px;
+  padding: 7px 14px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #1e293b;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.15s ease;
+}
+
+.tg-floating-ai-pill:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.15);
+}
+
+.tg-floating-ai-btn {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background-color: #2563eb;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s ease;
+}
+
+.tg-floating-ai-btn:hover {
+  transform: scale(1.05);
+}
+
+/* --------------------------------------------------------------------------
+   RESPONSIVE DESIGN BREAKPOINTS
+   -------------------------------------------------------------------------- */
+@media (max-width: 1280px) {
+  .tg-kpi-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .tg-middle-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .tg-notices-card {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 1024px) {
+  .tg-welcome-row {
+    grid-template-columns: 1fr;
+  }
+  .tg-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .tg-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .tg-middle-grid {
+    grid-template-columns: 1fr;
+  }
+  .tg-notices-card {
+    grid-column: span 1;
+  }
+  .tg-health-inner {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 540px) {
+  .tg-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+  .tg-floating-ai-pill {
+    display: none;
+  }
+}
+
+/* ==========================================================================
+   NEW FEATURES: LEAVE TOGGLE, QUICK ACTIONS CARD, & INTERACTIVE MODALS
+   ========================================================================== */
+
+/* 1. Leave Toggle Button */
+.tg-leave-toggle-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tg-leave-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.38rem 0.8rem;
+  border-radius: 9999px;
+  border: 1.5px solid #e2e8f0;
+  background-color: #f8fafc;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.tg-leave-toggle-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.tg-leave-toggle-btn.active-duty {
+  background-color: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.tg-leave-toggle-btn.active-duty:hover {
+  border-color: #4ade80;
+}
+
+.tg-leave-toggle-btn.on-leave {
+  background-color: #fef2f2;
+  border-color: #fca5a5;
+  color: #991b1b;
+}
+
+.tg-leave-toggle-btn.on-leave:hover {
+  border-color: #f87171;
+}
+
+.tg-leave-switch-track {
+  width: 32px;
+  height: 18px;
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+  position: relative;
+  transition: background-color 0.25s ease;
+  flex-shrink: 0;
+}
+
+.tg-leave-toggle-btn.active-duty .tg-leave-switch-track {
+  background-color: #10b981;
+}
+
+.tg-leave-toggle-btn.on-leave .tg-leave-switch-track {
+  background-color: #ef4444;
+}
+
+.tg-leave-switch-handle {
+  width: 14px;
+  height: 14px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.tg-leave-toggle-btn.on-leave .tg-leave-switch-handle {
+  transform: translateX(14px);
+}
+
+/* 2. Clickable KPI Card Enhancements */
+.tg-kpi-clickable {
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tg-kpi-clickable:hover {
+  transform: translateY(-2px);
+  border-color: #3b82f6;
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+}
+
+.tg-kpi-clickable .tg-click-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #2563eb;
+  margin-top: 4px;
+}
+
+/* 3. Card 3: Quick Actions Card (Replacing Academic Average) */
+.tg-quick-actions-card {
+  background-color: #ffffff;
+  border-radius: 14px;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-height: 98px;
+}
+
+.tg-qa-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0 2px;
+}
+
+.tg-qa-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.36rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  color: #1e293b;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  width: 100%;
+}
+
+.tg-qa-btn:hover {
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+  color: #2563eb;
+  transform: translateX(1px);
+}
+
+.tg-qa-btn-left {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.tg-qa-btn-primary {
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.tg-qa-btn-primary:hover {
+  background-color: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.tg-qa-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  background-color: #f59e0b;
+  color: #ffffff;
+}
+
+/* 4. Status Toast Feedback */
+.tg-status-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #0f172a;
+  color: #f8fafc;
+  padding: 10px 18px;
+  border-radius: 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.25);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: tgToastPop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes tgToastPop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* 5. Considered List Cards in Modal */
+.tg-con-card {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 0.75rem;
+  transition: border-color 0.15s ease;
+}
+
+.tg-con-card:hover {
+  border-color: #cbd5e1;
+}
+
+.tg-con-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.tg-con-student-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tg-con-student-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.tg-con-roll {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  background-color: #e2e8f0;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.tg-con-category-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background-color: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.tg-con-body {
+  font-size: 12px;
+  color: #334155;
+  margin-bottom: 0.6rem;
+  line-height: 1.4;
+}
+
+.tg-con-metrics {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  font-size: 11.5px;
+  color: #475569;
+  padding: 0.45rem 0;
+  border-top: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 0.6rem;
+}
+
+.tg-con-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tg-con-time {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.tg-con-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
